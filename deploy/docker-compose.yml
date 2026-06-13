@@ -1,0 +1,22 @@
+# Finora (metals-trading SPA) — erp.metal-uae.com
+# Additive deployment: attaches to the existing external `traefik` network.
+# Distinct names (metal-erp*) so it never collides with the other `finora` stack.
+services:
+  web:
+    build: .
+    image: metal-erp-web:latest
+    container_name: metal-erp-web
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.metal-erp.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp.rule=Host(`erp.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp.tls=true"
+      - "traefik.http.services.metal-erp.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
