@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 
 export const qk = {
   accounts: ['accounts'] as const,
   account: (id: string) => ['account', id] as const,
+  customers: ['customers'] as const,
+  productNames: ['productNames'] as const,
   contracts: ['contracts'] as const,
   contract: (id: string) => ['contract', id] as const,
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
@@ -59,3 +61,80 @@ export const useProductVolumes = () =>
 export const useStatusBreakdown = () =>
   useQuery({ queryKey: qk.statusBreakdown, queryFn: api.getContractStatusBreakdown });
 export const useAging = () => useQuery({ queryKey: qk.aging, queryFn: api.getAgingBuckets });
+
+export const useCustomers = () => useQuery({ queryKey: qk.customers, queryFn: api.getCustomers });
+export const useProductNames = () =>
+  useQuery({ queryKey: qk.productNames, queryFn: api.getProductNames });
+
+/* ----------------------------- Mutations ---------------------------- */
+/**
+ * Editing a contract or its goods changes contract rows, customer balances and
+ * the dashboard aggregates, so we invalidate every read derived from `db`.
+ * A bare `['contracts']` key prefix-matches the by-customer queries too.
+ */
+function useInvalidateTrade() {
+  const qc = useQueryClient();
+  return (contractId?: string) => {
+    qc.invalidateQueries({ queryKey: qk.contracts });
+    if (contractId) qc.invalidateQueries({ queryKey: qk.contract(contractId) });
+    qc.invalidateQueries({ queryKey: qk.accounts });
+    qc.invalidateQueries({ queryKey: qk.kpis });
+    qc.invalidateQueries({ queryKey: qk.statusBreakdown });
+    qc.invalidateQueries({ queryKey: qk.productVolumes });
+    // A product rename flows into the container `product` column and invoices.
+    qc.invalidateQueries({ queryKey: qk.containers });
+    qc.invalidateQueries({ queryKey: qk.invoices });
+    qc.invalidateQueries({ queryKey: qk.aging });
+  };
+}
+
+export const useCreateContract = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: (input: api.ContractInput) => api.createContract(input),
+    onSuccess: (row) => invalidate(row.id),
+  });
+};
+
+export const useUpdateContract = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ContractInput }) =>
+      api.updateContract(id, input),
+    onSuccess: (row) => invalidate(row.id),
+  });
+};
+
+export const useCreateItem = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: ({ contractId, input }: { contractId: string; input: api.ItemInput }) =>
+      api.createItem(contractId, input),
+    onSuccess: (item) => invalidate(item.contractId),
+  });
+};
+
+export const useUpdateItem = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ItemInput }) => api.updateItem(id, input),
+    onSuccess: (item) => invalidate(item.contractId),
+  });
+};
+
+export const useCreateContainer = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: (input: api.ContainerInput) => api.createContainer(input),
+    onSuccess: (row) => invalidate(row.contractId),
+  });
+};
+
+export const useUpdateContainer = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ContainerInput }) =>
+      api.updateContainer(id, input),
+    onSuccess: (row) => invalidate(row.contractId),
+  });
+};
