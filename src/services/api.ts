@@ -2,24 +2,42 @@ import dayjs from 'dayjs';
 import { db } from '@/mock/data';
 import type {
   Container,
+  ContainerStatus,
   Contract,
+  ContractStatus,
+  Customer,
   CustomerAccount,
   DashboardKpis,
+  Incoterm,
   Invoice,
+  Item,
+  ItemStatus,
   Payment,
   ProductVolume,
   StatusBreakdown,
   TimeSeriesPoint,
 } from '@/types';
-import { contractValue } from '@/utils/calc';
+import { containerInvoice, contractValue, shippedMt } from '@/utils/calc';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
-const customerById = new Map(db.customers.map((c) => [c.id, c]));
-const contractById = new Map(db.contracts.map((c) => [c.id, c]));
-const itemProduct = new Map(
+/**
+ * Lookup indexes over the mock `db`. They are rebuilt by `reindex()` after any
+ * mutation so derived reads (rows, invoices, product columns) stay consistent.
+ */
+let customerById = new Map(db.customers.map((c) => [c.id, c]));
+let contractById = new Map(db.contracts.map((c) => [c.id, c]));
+let itemProduct = new Map(
   db.contracts.flatMap((c) => c.items.map((i) => [i.id, i.product] as const)),
 );
+
+function reindex() {
+  customerById = new Map(db.customers.map((c) => [c.id, c]));
+  contractById = new Map(db.contracts.map((c) => [c.id, c]));
+  itemProduct = new Map(
+    db.contracts.flatMap((c) => c.items.map((i) => [i.id, i.product] as const)),
+  );
+}
 
 function customerOfContract(contractId: string) {
   const contract = contractById.get(contractId);
@@ -283,3 +301,257 @@ function sum<T>(arr: T[], fn: (t: T) => number): number {
 }
 
 export const fxRate = db.fxRate;
+
+/* ----------------------------- Mutations ---------------------------- *
+ * The demo runs on an in-memory dataset, so edits live for the session
+ * only (a reload restores the seeded data). Each mutation writes through
+ * to `db` and calls `reindex()` to refresh the lookup indexes.
+ * ------------------------------------------------------------------- */
+
+export interface ContractInput {
+  customerId: string;
+  /** ISO date string. */
+  date: string;
+  destination: string;
+  status: ContractStatus;
+  notes?: string;
+}
+
+export interface ItemInput {
+  product: string;
+  quantityMt: number;
+  lmePercent: number;
+  lmeFixed: boolean;
+  fixedLmePrice: number;
+  premium: number;
+  incoterm: Incoterm;
+  status: ItemStatus;
+  notes?: string;
+}
+
+export async function getCustomers(): Promise<Customer[]> {
+  await delay(140);
+  return [...db.customers].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Distinct product names seen across the dataset — used to seed the goods form. */
+export async function getProductNames(): Promise<string[]> {
+  await delay(120);
+  const names = new Set<string>();
+  for (const contract of db.contracts) {
+    for (const item of contract.items) if (item.product) names.add(item.product);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+function nextContractId(customerCode: string, dateIso: string): string {
+  const base = `${customerCode}-P-${dayjs(dateIso).format('YYMMDD')}`;
+  const taken = new Set(db.contracts.map((c) => c.id));
+  for (let n = 100; n <= 999; n++) {
+    const candidate = `${base}${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}${db.contracts.length + 1}`;
+}
+
+export async function createContract(input: ContractInput): Promise<ContractRow> {
+  await delay(180);
+  const customer = customerById.get(input.customerId);
+  const contract: Contract = {
+    id: nextContractId(customer?.code ?? 'XX', input.date),
+    customerId: input.customerId,
+    date: input.date,
+    destination: input.destination,
+    status: input.status,
+    notes: input.notes ?? '',
+    items: [],
+  };
+  db.contracts.push(contract);
+  reindex();
+  return buildContractRows().find((c) => c.id === contract.id)!;
+}
+
+export async function updateContract(id: string, input: ContractInput): Promise<ContractRow> {
+  await delay(180);
+  const contract = db.contracts.find((c) => c.id === id);
+  if (!contract) throw new Error(`Contract ${id} not found`);
+  contract.customerId = input.customerId;
+  contract.date = input.date;
+  contract.destination = input.destination;
+  contract.status = input.status;
+  contract.notes = input.notes ?? '';
+  reindex();
+  return buildContractRows().find((c) => c.id === id)!;
+}
+
+function nextItemId(contract: Contract): string {
+  let max = 0;
+  for (const item of contract.items) {
+    const match = /-I(\d+)$/.exec(item.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `${contract.id}-I${max + 1}`;
+}
+
+export async function createItem(contractId: string, input: ItemInput): Promise<Item> {
+  await delay(180);
+  const contract = db.contracts.find((c) => c.id === contractId);
+  if (!contract) throw new Error(`Contract ${contractId} not found`);
+  const item: Item = {
+    id: nextItemId(contract),
+    contractId,
+    product: input.product,
+    quantityMt: input.quantityMt,
+    lmePercent: input.lmePercent,
+    lmeFixed: input.lmeFixed,
+    fixedLmePrice: input.fixedLmePrice,
+    premium: input.premium,
+    incoterm: input.incoterm,
+    status: input.status,
+    notes: input.notes ?? '',
+    // A brand-new line has shipped nothing yet.
+    remainingMt: input.quantityMt,
+  };
+  contract.items.push(item);
+  reindex();
+  return item;
+}
+
+export async function updateItem(itemId: string, input: ItemInput): Promise<Item> {
+  await delay(180);
+  let target: Item | undefined;
+  for (const contract of db.contracts) {
+    const found = contract.items.find((i) => i.id === itemId);
+    if (found) {
+      target = found;
+      break;
+    }
+  }
+  if (!target) throw new Error(`Item ${itemId} not found`);
+  target.product = input.product;
+  target.quantityMt = input.quantityMt;
+  target.lmePercent = input.lmePercent;
+  target.lmeFixed = input.lmeFixed;
+  target.fixedLmePrice = input.fixedLmePrice;
+  target.premium = input.premium;
+  target.incoterm = input.incoterm;
+  target.status = input.status;
+  target.notes = input.notes ?? '';
+  // Remaining respects MT already shipped on existing containers.
+  const shipped = shippedMt(itemId, db.containers);
+  target.remainingMt = Math.round(Math.max(input.quantityMt - shipped, 0) * 1000) / 1000;
+  reindex();
+  return target;
+}
+
+/* ----------------------------- Containers (mutations) --------------- */
+
+export interface ContainerInput {
+  contractId: string;
+  itemId: string;
+  reference: string;
+  quantityMt: number;
+  lmePrice: number;
+  premium: number;
+  /** ISO date string. */
+  shipmentDate: string;
+  /** ISO date string. */
+  arrivalDate?: string;
+  /** ISO date string. */
+  dueDate: string;
+  status: ContainerStatus;
+  blNumber?: string;
+  bookingNumber?: string;
+  sealNumber?: string;
+}
+
+function findItemById(itemId: string): Item | undefined {
+  for (const contract of db.contracts) {
+    const item = contract.items.find((i) => i.id === itemId);
+    if (item) return item;
+  }
+  return undefined;
+}
+
+/** Recompute a parent item's remaining MT from the containers currently shipped against it. */
+function recomputeItemRemaining(itemId: string): void {
+  const item = findItemById(itemId);
+  if (!item) return;
+  const shipped = shippedMt(itemId, db.containers);
+  item.remainingMt = Math.round(Math.max(item.quantityMt - shipped, 0) * 1000) / 1000;
+}
+
+function nextContainerId(contractId: string): string {
+  const prefix = `cnt-${contractId}-`;
+  let max = 0;
+  for (const c of db.containers) {
+    if (c.id.startsWith(prefix)) {
+      const n = Number(c.id.slice(prefix.length));
+      if (Number.isFinite(n)) max = Math.max(max, n);
+    }
+  }
+  return `${prefix}${max + 1}`;
+}
+
+export async function createContainer(input: ContainerInput): Promise<ContainerRow> {
+  await delay(180);
+  const container: Container = {
+    id: nextContainerId(input.contractId),
+    contractId: input.contractId,
+    itemId: input.itemId,
+    reference: input.reference,
+    quantityMt: input.quantityMt,
+    lmePrice: input.lmePrice,
+    premium: input.premium,
+    shipmentDate: input.shipmentDate,
+    arrivalDate: input.arrivalDate,
+    dueDate: input.dueDate,
+    invoiceUSD: round(
+      containerInvoice({
+        quantityMt: input.quantityMt,
+        lmePrice: input.lmePrice,
+        premium: input.premium,
+      }),
+    ),
+    status: input.status,
+    blNumber: input.blNumber,
+    bookingNumber: input.bookingNumber,
+    sealNumber: input.sealNumber,
+  };
+  db.containers.push(container);
+  recomputeItemRemaining(input.itemId);
+  reindex();
+  return buildContainerRows().find((c) => c.id === container.id)!;
+}
+
+export async function updateContainer(id: string, input: ContainerInput): Promise<ContainerRow> {
+  await delay(180);
+  const container = db.containers.find((c) => c.id === id);
+  if (!container) throw new Error(`Container ${id} not found`);
+  const previousItemId = container.itemId;
+  container.contractId = input.contractId;
+  container.itemId = input.itemId;
+  container.reference = input.reference;
+  container.quantityMt = input.quantityMt;
+  container.lmePrice = input.lmePrice;
+  container.premium = input.premium;
+  container.shipmentDate = input.shipmentDate;
+  container.arrivalDate = input.arrivalDate;
+  container.dueDate = input.dueDate;
+  container.invoiceUSD = round(
+    containerInvoice({
+      quantityMt: input.quantityMt,
+      lmePrice: input.lmePrice,
+      premium: input.premium,
+    }),
+  );
+  container.status = input.status;
+  container.blNumber = input.blNumber;
+  container.bookingNumber = input.bookingNumber;
+  container.sealNumber = input.sealNumber;
+  // Moving a container between items frees the old item and draws down the new one.
+  if (previousItemId !== input.itemId) recomputeItemRemaining(previousItemId);
+  recomputeItemRemaining(input.itemId);
+  reindex();
+  return buildContainerRows().find((c) => c.id === id)!;
+}
