@@ -1,7 +1,7 @@
-# Containers (shipments) — create / edit / delete — Design
+# Containers (shipments) — create / edit — Design
 
 - **Date:** 2026-06-13
-- **Status:** Approved (design); pending spec review
+- **Status:** Approved (spec reviewed) — ready for implementation plan
 - **Area:** `finora-alpha` (Vite + React 18 + AntD 5 + TanStack Query, mock data)
 
 ## Context
@@ -15,8 +15,8 @@ small set of real-world shipping-document fields.
 
 ## Goals
 
-- Create, edit, and delete containers from both the global **Containers page** and a
-  **contract's detail page**.
+- Create and edit containers from both the global **Containers page** and a
+  **contract's detail page** (create/edit only, matching the Contracts & Goods forms).
 - Add three real-world shipping-document fields: **Bill of Lading no.**, **booking no.**,
   **seal no.** (chosen from the domain research below).
 - Keep the financial core unchanged — it already matches real metals-trade practice.
@@ -31,6 +31,8 @@ small set of real-world shipping-document fields.
 - Quotational-period (M+1 average) pricing — fixed LME price per container is retained.
 - Auto-creating a `Payment` when a container is marked `PAID`.
 - Quantity tolerance (±%) — quantity is capped at the item's remaining MT.
+- Deleting containers — to match the create/edit-only pattern of Contracts & Goods; a
+  shipment is corrected by editing its quantity.
 
 ## Domain research (summary)
 
@@ -102,7 +104,6 @@ export interface ContainerInput {
 
 createContainer(input): Promise<ContainerRow>
 updateContainer(id, input): Promise<ContainerRow>
-deleteContainer(id): Promise<void>
 ```
 
 Behaviour:
@@ -112,8 +113,8 @@ Behaviour:
   quantityMt, 2)` via `containerInvoice` in `utils/calc`.
 - **Remaining MT recompute:** a helper `recomputeItemRemaining(itemId)` sets the parent
   item's `remainingMt = round(max(item.quantityMt − shippedMt(itemId, db.containers), 0), 3)`.
-  Called after every create/update/delete. On **update where `itemId` changed**, recompute
-  **both** the old and new items. On **delete**, recompute the freed item.
+  Called after every create/update. On **update where `itemId` changed**, recompute
+  **both** the old and new items.
 - **Item status is NOT auto-changed** (the user owns item status via the goods form); only
   `remainingMt` is recomputed. (Decision — avoids surprising overrides.)
 - The modal is passed the existing `ContainerRow` for edit (it already carries all
@@ -121,7 +122,7 @@ Behaviour:
 
 ### 3. Query hooks — `src/services/queries.ts`
 
-`useCreateContainer` / `useUpdateContainer` / `useDeleteContainer`. On success invalidate:
+`useCreateContainer` / `useUpdateContainer`. On success invalidate:
 `containers` (prefix-matches `containersByContract`), `contract(contractId)`, `contracts`,
 `accounts`, `kpis`, `invoices`, `productVolumes`, `aging`. (Reuse the existing
 `useInvalidateTrade` helper, extended with `invoices` + `aging`.)
@@ -155,20 +156,20 @@ Fields:
 ### 5. Wiring
 
 - **`ContainersPage`** — "New container" opens the modal (no fixed contract → contract +
-  item pickers). Add an **Actions** column (Edit · Delete with `Popconfirm`) and an
-  **expandable row** showing B/L · Booking · Seal.
+  item pickers). Add an **Actions** column (Edit) and an **expandable row** showing
+  B/L · Booking · Seal.
 - **`ContractDetailPage`** — "Add container" button on the Containers card `extra` (contract
-  fixed) + per-row Edit/Delete + the same expandable row. Bump the container table `scroll.x`
+  fixed) + per-row Edit + the same expandable row. Bump the container table `scroll.x`
   for the new actions column.
 - Empty doc values render as `—` (reuse `common.none`).
 
 ### 6. i18n — `src/i18n/locales/{en,ar,fa}.json`
 
-Add under `containers`: `editContainer`, `addContainer`, `created`, `updated`, `deleted`,
-`deleteConfirm`, `blNumber`, `bookingNumber`, `sealNumber`, `selectContract`, `goods`
-(item label), `remainingHint` (e.g. "{{mt}} remaining"), `qtyExceedsRemaining`. Reuse
-existing `common.*` (`required`, `saveFailed`, `actions`, `edit`, `delete`, `none`, `save`,
-`cancel`) and `status.*`. All three locales kept in sync; layout RTL-safe.
+Add under `containers`: `editContainer`, `addContainer`, `created`, `updated`, `blNumber`,
+`bookingNumber`, `sealNumber`, `selectContract`, `goods` (item label), `remainingHint`
+(e.g. "{{mt}} remaining"), `qtyExceedsRemaining`. Reuse existing `common.*` (`required`,
+`saveFailed`, `actions`, `edit`, `none`, `save`, `cancel`) and `status.*`. All three locales
+kept in sync; layout RTL-safe.
 
 ### 7. Mock data — `src/mock/data.ts`
 
@@ -180,8 +181,10 @@ PRNG so the dataset stays deterministic.
 ## Edge cases & decisions
 
 - Editing a container's **item** recomputes remaining for both old and new items.
-- **Delete** restores the item's remaining MT (and is the only way to undo an over-ship).
-- `invoiceUSD` is always derived; the field is never user-editable.
+- There is **no delete** (matching Contracts/Goods); a shipment is reduced/corrected by
+  editing its quantity.
+- `invoiceUSD` is always derived (standard fixed-price `(lmePrice + premium) × qty`); the
+  field is never user-editable.
 - A new/edited container automatically appears on the **Invoices** page and **dashboard**
   (both derive from `db.containers`); the cache invalidations cover this.
 - Item `status` is left to the user; only `remainingMt` is recomputed.
@@ -192,7 +195,7 @@ PRNG so the dataset stays deterministic.
 - `npm run typecheck`, `npm run lint`, `npm run build` clean.
 - Live drive (preview): create a container on a contract → item remaining decreases, the
   invoice appears on the Invoices page, dashboard KPIs update; edit qty → remaining
-  recomputes; delete → remaining restored; expandable row shows the docs. Check the modal in
+  recomputes; expandable row shows the docs. Check the modal in
   light/dark and `fa` (RTL).
 - Optional: adversarial multi-agent review of the diff (data-layer correctness, form
   lifecycle, i18n/RTL), as done for the Contract/Goods forms.
@@ -200,8 +203,8 @@ PRNG so the dataset stays deterministic.
 ## Affected files
 
 - `src/types/index.ts` (3 fields)
-- `src/services/api.ts` (`ContainerInput`, 3 mutations, remaining-recompute helper)
-- `src/services/queries.ts` (3 hooks; extend invalidation)
+- `src/services/api.ts` (`ContainerInput`, 2 mutations, remaining-recompute helper)
+- `src/services/queries.ts` (2 hooks; extend invalidation)
 - `src/pages/contracts/ContainerFormModal.tsx` (new)
 - `src/pages/containers/ContainersPage.tsx` (new-button, actions, expandable rows)
 - `src/pages/contracts/ContractDetailPage.tsx` (add-container, actions, expandable rows)
