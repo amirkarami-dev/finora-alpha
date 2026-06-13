@@ -79,6 +79,12 @@ export interface Container {
   dueDate: string;
   invoiceUSD: number;
   status: ContainerStatus;
+  /** Bill of Lading number (transport contract / title document). */
+  blNumber?: string;
+  /** Carrier booking number. */
+  bookingNumber?: string;
+  /** Container seal number (recorded on the B/L). */
+  sealNumber?: string;
 }
 
 export interface Payment {
