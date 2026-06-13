@@ -48,7 +48,9 @@
     "last7Days": "Last 7 days",
     "last30Days": "Last 30 days",
     "last12Months": "Last 12 months",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "required": "Required",
+    "saveFailed": "Couldn't save changes"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -197,7 +199,12 @@
     "progress": "Shipped",
     "detailTitle": "Contract detail",
     "addItem": "Add goods",
-    "noItems": "No goods on this contract yet"
+    "noItems": "No goods on this contract yet",
+    "editContract": "Edit contract",
+    "created": "Contract created",
+    "updated": "Contract updated",
+    "selectCustomer": "Select a customer",
+    "destinationPlaceholder": "e.g. NINGBO"
   },
   "items": {
     "title": "Goods",
@@ -212,7 +219,12 @@
     "notes": "Notes",
     "remainingMt": "Remaining (MT)",
     "unitPrice": "Unit price",
-    "value": "Line value"
+    "value": "Line value",
+    "addTitle": "Add goods",
+    "editTitle": "Edit goods",
+    "created": "Goods added",
+    "updated": "Goods updated",
+    "productPlaceholder": "Select or type a product"
   },
   "containers": {
     "title": "Containers",
@@ -231,7 +243,18 @@
     "status": "Status",
     "daysToDue": "Days to due",
     "overdueBy": "Overdue by {{count}} days",
-    "dueIn": "Due in {{count}} days"
+    "dueIn": "Due in {{count}} days",
+    "editContainer": "Edit container",
+    "addContainer": "Add container",
+    "created": "Container added",
+    "updated": "Container updated",
+    "blNumber": "Bill of Lading no.",
+    "bookingNumber": "Booking no.",
+    "sealNumber": "Seal no.",
+    "selectContract": "Select a contract",
+    "goods": "Goods",
+    "remainingHint": "{{mt}} remaining",
+    "qtyExceedsRemaining": "Exceeds remaining ({{mt}})"
   },
   "invoices": {
     "title": "Invoices",

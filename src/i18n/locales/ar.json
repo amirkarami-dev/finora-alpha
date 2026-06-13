@@ -48,7 +48,9 @@
     "last7Days": "آخر ٧ أيام",
     "last30Days": "آخر ٣٠ يوماً",
     "last12Months": "آخر ١٢ شهراً",
-    "comingSoon": "قريباً"
+    "comingSoon": "قريباً",
+    "required": "مطلوب",
+    "saveFailed": "تعذّر حفظ التغييرات"
   },
   "nav": {
     "dashboard": "لوحة التحكم",
@@ -197,7 +199,12 @@
     "progress": "تم شحنه",
     "detailTitle": "تفاصيل العقد",
     "addItem": "إضافة بضاعة",
-    "noItems": "لا توجد بضائع في هذا العقد بعد"
+    "noItems": "لا توجد بضائع في هذا العقد بعد",
+    "editContract": "تعديل العقد",
+    "created": "تم إنشاء العقد",
+    "updated": "تم تحديث العقد",
+    "selectCustomer": "اختر عميلاً",
+    "destinationPlaceholder": "مثال: نينغبو"
   },
   "items": {
     "title": "البضائع",
@@ -212,7 +219,12 @@
     "notes": "ملاحظات",
     "remainingMt": "المتبقي (طن)",
     "unitPrice": "سعر الوحدة",
-    "value": "قيمة السطر"
+    "value": "قيمة السطر",
+    "addTitle": "إضافة بضاعة",
+    "editTitle": "تعديل البضاعة",
+    "created": "تمت إضافة البضاعة",
+    "updated": "تم تحديث البضاعة",
+    "productPlaceholder": "اختر منتجاً أو اكتبه"
   },
   "containers": {
     "title": "الحاويات",
@@ -231,7 +243,18 @@
     "status": "الحالة",
     "daysToDue": "أيام للاستحقاق",
     "overdueBy": "متأخر بـ {{count}} يوماً",
-    "dueIn": "يستحق خلال {{count}} يوماً"
+    "dueIn": "يستحق خلال {{count}} يوماً",
+    "editContainer": "تعديل الحاوية",
+    "addContainer": "إضافة حاوية",
+    "created": "تمت إضافة الحاوية",
+    "updated": "تم تحديث الحاوية",
+    "blNumber": "رقم بوليصة الشحن",
+    "bookingNumber": "رقم الحجز",
+    "sealNumber": "رقم الرصاص",
+    "selectContract": "اختر عقداً",
+    "goods": "البضائع",
+    "remainingHint": "{{mt}} متبقٍ",
+    "qtyExceedsRemaining": "يتجاوز المتبقي ({{mt}})"
   },
   "invoices": {
     "title": "الفواتير",

@@ -48,7 +48,9 @@
     "last7Days": "۷ روز گذشته",
     "last30Days": "۳۰ روز گذشته",
     "last12Months": "۱۲ ماه گذشته",
-    "comingSoon": "به‌زودی"
+    "comingSoon": "به‌زودی",
+    "required": "الزامی",
+    "saveFailed": "ذخیره تغییرات ممکن نشد"
   },
   "nav": {
     "dashboard": "داشبورد",
@@ -197,7 +199,12 @@
     "progress": "حمل‌شده",
     "detailTitle": "جزئیات قرارداد",
     "addItem": "افزودن کالا",
-    "noItems": "هنوز کالایی در این قرارداد ثبت نشده است"
+    "noItems": "هنوز کالایی در این قرارداد ثبت نشده است",
+    "editContract": "ویرایش قرارداد",
+    "created": "قرارداد ایجاد شد",
+    "updated": "قرارداد به‌روزرسانی شد",
+    "selectCustomer": "یک مشتری انتخاب کنید",
+    "destinationPlaceholder": "مثال: نینگبو"
   },
   "items": {
     "title": "کالاها",
@@ -212,7 +219,12 @@
     "notes": "یادداشت",
     "remainingMt": "باقی‌مانده (تن)",
     "unitPrice": "قیمت واحد",
-    "value": "ارزش ردیف"
+    "value": "ارزش ردیف",
+    "addTitle": "افزودن کالا",
+    "editTitle": "ویرایش کالا",
+    "created": "کالا افزوده شد",
+    "updated": "کالا به‌روزرسانی شد",
+    "productPlaceholder": "محصول را انتخاب یا تایپ کنید"
   },
   "containers": {
     "title": "کانتینرها",
@@ -231,7 +243,18 @@
     "status": "وضعیت",
     "daysToDue": "روز تا سررسید",
     "overdueBy": "{{count}} روز معوق",
-    "dueIn": "سررسید تا {{count}} روز"
+    "dueIn": "سررسید تا {{count}} روز",
+    "editContainer": "ویرایش کانتینر",
+    "addContainer": "افزودن کانتینر",
+    "created": "کانتینر افزوده شد",
+    "updated": "کانتینر به‌روزرسانی شد",
+    "blNumber": "شماره بارنامه",
+    "bookingNumber": "شماره بوکینگ",
+    "sealNumber": "شماره سیل",
+    "selectContract": "یک قرارداد انتخاب کنید",
+    "goods": "کالاها",
+    "remainingHint": "{{mt}} باقی‌مانده",
+    "qtyExceedsRemaining": "بیش از باقی‌مانده ({{mt}})"
   },
   "invoices": {
     "title": "فاکتورها",
