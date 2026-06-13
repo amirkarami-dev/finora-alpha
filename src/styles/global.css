@@ -160,6 +160,17 @@ a {
     linear-gradient(160deg, #06281f 0%, #082b22 40%, #061a26 100%);
   color: #eaf4f0;
 }
+/* The hero gradient is permanently dark — keep ghost buttons (Sign in / See how it
+   works) legible in BOTH themes, instead of inheriting the dark-mode token colors. */
+.landing-hero .ant-btn-background-ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.landing-hero .ant-btn-background-ghost:hover {
+  color: #fff;
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
 .landing-hero::after {
   content: '';
   position: absolute;
