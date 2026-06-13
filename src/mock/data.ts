@@ -193,6 +193,8 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     };
 
     // Ship a portion of each item across 0–3 containers.
+    // Counter spans all of a contract's items so every container id is unique.
+    let containerSeq = 0;
     items.forEach((item) => {
       const price = unitPrice(item);
       const shipments = intBetween(0, 3);
@@ -222,7 +224,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
 
         const reference = makeContainerRef();
         const container: Container = {
-          id: `cnt-${contractId}-${s + 1}`,
+          id: `cnt-${contractId}-${++containerSeq}`,
           contractId,
           itemId: item.id,
           reference,

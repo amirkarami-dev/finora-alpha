@@ -162,7 +162,13 @@ export function ContainerFormModal({ open, onClose, contract, container }: Conta
     <Modal
       open={open}
       width={680}
-      title={isEdit ? t('containers.editContainer') : t('containers.newContainer')}
+      title={
+        isEdit
+          ? t('containers.editContainer')
+          : contract
+            ? t('containers.addContainer')
+            : t('containers.newContainer')
+      }
       okText={t('common.save')}
       cancelText={t('common.cancel')}
       onOk={submit}
