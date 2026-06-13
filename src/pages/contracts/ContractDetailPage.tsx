@@ -217,7 +217,7 @@ export default function ContractDetailPage() {
               <Progress
                 type="dashboard"
                 percent={contract ? Math.round(contract.shippedPct) : 0}
-                strokeColor={{ '0%': '#10a37f', '100%': '#2ee6b6' }}
+                strokeColor={{ '0%': '#b87333', '100%': '#e0a36b' }}
               />
               <Text type="secondary" style={{ marginTop: 8 }}>
                 {formatMt(totalQty - totalRemaining)} / {formatMt(totalQty)}

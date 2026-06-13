@@ -81,7 +81,7 @@ export default function LoginPage() {
             <Space direction="vertical" size={14} style={{ marginTop: 28 }}>
               {valueProps.map((v) => (
                 <Space key={v} size={12}>
-                  <CheckCircleFilled style={{ color: '#2ee6b6', fontSize: 18 }} />
+                  <CheckCircleFilled style={{ color: '#e0a36b', fontSize: 18 }} />
                   <Text style={{ color: '#eaf4f0', fontSize: 15 }}>{v}</Text>
                 </Space>
               ))}
@@ -152,7 +152,7 @@ export default function LoginPage() {
               <Form.Item name="remember" valuePropName="checked" noStyle>
                 <Checkbox>{t('auth.remember')}</Checkbox>
               </Form.Item>
-              <a style={{ color: '#10a37f' }}>{t('auth.forgot')}</a>
+              <a style={{ color: '#b87333' }}>{t('auth.forgot')}</a>
             </div>
 
             <Button type="primary" htmlType="submit" block loading={loading} style={{ height: 46 }}>

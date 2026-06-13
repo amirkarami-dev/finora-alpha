@@ -19,7 +19,7 @@ export function StatCard({
   title,
   value,
   icon,
-  accent = '#10a37f',
+  accent = '#b87333',
   trend,
   trendSuffix,
   footer,

@@ -12,7 +12,7 @@ export function HeroPreview() {
     >
       <div style={{ color: 'rgba(234,244,240,0.65)', fontSize: 12 }}>{label}</div>
       <div style={{ color: '#fff', fontSize: 20, fontWeight: 800, marginTop: 4 }}>{value}</div>
-      <div style={{ color: up ? '#2ee6b6' : '#ff8585', fontSize: 12, marginTop: 2 }}>
+      <div style={{ color: up ? '#e0a36b' : '#ff8585', fontSize: 12, marginTop: 2 }}>
         {up ? '▲' : '▼'} {delta}
       </div>
     </div>
@@ -34,11 +34,11 @@ export function HeroPreview() {
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            color: '#bff3e2',
+            color: '#f3dcc4',
             fontSize: 12,
           }}
         >
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2ee6b6' }} /> live
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e0a36b' }} /> live
         </span>
       </div>
 
@@ -64,7 +64,7 @@ export function HeroPreview() {
                 borderRadius: 4,
                 background:
                   i === bars.length - 1
-                    ? 'linear-gradient(180deg,#2ee6b6,#10a37f)'
+                    ? 'linear-gradient(180deg,#e0a36b,#b87333)'
                     : 'rgba(110,231,255,0.35)',
               }}
             />
@@ -78,7 +78,7 @@ export function HeroPreview() {
             width: 72,
             height: 72,
             borderRadius: '50%',
-            background: 'conic-gradient(#2ee6b6 0 84%, rgba(255,255,255,0.12) 84% 100%)',
+            background: 'conic-gradient(#e0a36b 0 84%, rgba(255,255,255,0.12) 84% 100%)',
             display: 'grid',
             placeItems: 'center',
             flexShrink: 0,

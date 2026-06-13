@@ -104,7 +104,7 @@ export default function LandingPage() {
                   padding: '6px 14px',
                   borderRadius: 999,
                   fontSize: 13,
-                  color: '#bff3e2',
+                  color: '#f3dcc4',
                   marginBottom: 22,
                 }}
               >
@@ -113,8 +113,8 @@ export default function LandingPage() {
                     width: 7,
                     height: 7,
                     borderRadius: '50%',
-                    background: '#2ee6b6',
-                    boxShadow: '0 0 10px #2ee6b6',
+                    background: '#e0a36b',
+                    boxShadow: '0 0 10px #e0a36b',
                   }}
                 />
                 {t('landing.heroBadge')}
@@ -181,7 +181,7 @@ export default function LandingPage() {
         style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '64px 24px' : '96px 24px' }}
       >
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <Text style={{ color: '#10a37f', fontWeight: 700, letterSpacing: 1 }}>
+          <Text style={{ color: '#b87333', fontWeight: 700, letterSpacing: 1 }}>
             {t('landing.navFeatures').toUpperCase()}
           </Text>
           <Title level={2} style={{ fontSize: isMobile ? 30 : 40, fontWeight: 800, margin: '12px 0 10px' }}>
@@ -230,7 +230,7 @@ export default function LandingPage() {
             position: 'relative',
             overflow: 'hidden',
             background:
-              'radial-gradient(800px 400px at 70% -20%, rgba(46,230,182,0.35), transparent 60%), linear-gradient(135deg, #06281f, #0a3f33)',
+              'radial-gradient(800px 400px at 70% -20%, rgba(224,163,107,0.35), transparent 60%), linear-gradient(135deg, #2a160a, #43260f)',
           }}
         >
           <Title style={{ color: '#fff', fontSize: isMobile ? 28 : 42, fontWeight: 800, margin: 0 }}>

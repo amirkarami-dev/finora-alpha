@@ -100,8 +100,8 @@ export const SUPPORTED_LOCALES = Object.keys(LOCALES) as Locale[];
 
 /** Brand palette — shared between AntD theme tokens and charts. */
 export const BRAND = {
-  primary: '#10a37f',
-  primaryDark: '#0b5e4d',
+  primary: '#b87333',
+  primaryDark: '#7a4a26',
   accent: '#f4b740',
   danger: '#e5484d',
   warning: '#f5a623',
@@ -110,7 +110,7 @@ export const BRAND = {
 };
 
 export const CHART_PALETTE = [
-  '#10a37f',
+  '#b87333',
   '#3b82f6',
   '#f4b740',
   '#8b5cf6',

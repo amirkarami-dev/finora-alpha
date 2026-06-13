@@ -39,13 +39,13 @@ export function getThemeConfig(mode: ThemeMode): ThemeConfig {
         darkItemBg: '#0d1626',
         darkSubMenuItemBg: 'transparent',
         darkItemSelectedBg: BRAND.primary,
-        darkItemHoverBg: 'rgba(16,163,127,0.16)',
+        darkItemHoverBg: 'rgba(184,115,51,0.16)',
         // Light sidebar (light mode): white rail, dark text, green selected pill.
         itemBg: 'transparent',
         subMenuItemBg: 'transparent',
         itemSelectedBg: BRAND.primary,
         itemSelectedColor: '#ffffff',
-        itemHoverBg: 'rgba(16,163,127,0.10)',
+        itemHoverBg: 'rgba(184,115,51,0.10)',
         itemBorderRadius: 8,
         itemMarginInline: 8,
       },
@@ -60,7 +60,7 @@ export function getThemeConfig(mode: ThemeMode): ThemeConfig {
         // Opaque hover (the green tint flattened onto the container color). Sticky
         // fixed columns reuse this as their background, so a translucent value would
         // let the scrolling columns bleed through them on hover.
-        rowHoverBg: isDark ? '#112532' : '#f3faf9',
+        rowHoverBg: isDark ? '#1e212c' : '#fbf8f5',
       },
       Statistic: {
         contentFontSize: 26,

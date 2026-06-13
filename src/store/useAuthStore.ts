@@ -36,7 +36,7 @@ export const useAuthStore = create<AuthState>()(
           name,
           email,
           role: 'Finance Manager',
-          avatarColor: '#10a37f',
+          avatarColor: '#b87333',
         };
         set({ user, token: 'demo-token', isAuthenticated: true });
         return user;

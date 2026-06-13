@@ -1,6 +1,6 @@
 :root {
-  --finora-primary: #10a37f;
-  --finora-primary-dark: #0b5e4d;
+  --finora-primary: #b87333;
+  --finora-primary-dark: #7a4a26;
   --finora-accent: #f4b740;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -148,16 +148,16 @@ a {
 
 /* ---------------- Landing page ---------------- */
 .landing {
-  --hero-from: #06281f;
-  --hero-to: #0a3f33;
+  --hero-from: #2a160a;
+  --hero-to: #43260f;
 }
 .landing-hero {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(16, 163, 127, 0.35), transparent 60%),
+    radial-gradient(1200px 600px at 80% -10%, rgba(184, 115, 51, 0.35), transparent 60%),
     radial-gradient(900px 500px at 0% 20%, rgba(59, 130, 246, 0.18), transparent 55%),
-    linear-gradient(160deg, #06281f 0%, #082b22 40%, #061a26 100%);
+    linear-gradient(160deg, #2a160a 0%, #3a2110 40%, #1c0f06 100%);
   color: #eaf4f0;
 }
 /* The hero gradient is permanently dark — keep ghost buttons (Sign in / See how it
@@ -194,7 +194,7 @@ a {
   -webkit-backdrop-filter: blur(14px);
 }
 .gradient-text {
-  background: linear-gradient(120deg, #2ee6b6, #6ee7ff 60%, #f4b740);
+  background: linear-gradient(120deg, #e0a36b, #ffd9a0 60%, #f4b740);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -206,15 +206,15 @@ a {
   place-items: center;
   border-radius: 14px;
   font-size: 24px;
-  background: linear-gradient(135deg, rgba(16, 163, 127, 0.18), rgba(16, 163, 127, 0.05));
+  background: linear-gradient(135deg, rgba(184, 115, 51, 0.18), rgba(184, 115, 51, 0.05));
   color: var(--finora-primary);
 }
 
 /* Auth split layout */
 .auth-aside {
   background:
-    radial-gradient(700px 400px at 20% 10%, rgba(16, 163, 127, 0.4), transparent 60%),
-    linear-gradient(160deg, #06281f, #061a26);
+    radial-gradient(700px 400px at 20% 10%, rgba(184, 115, 51, 0.4), transparent 60%),
+    linear-gradient(160deg, #2a160a, #1c0f06);
   color: #eaf4f0;
   position: relative;
   overflow: hidden;
