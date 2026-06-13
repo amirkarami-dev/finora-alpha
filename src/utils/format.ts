@@ -1,0 +1,71 @@
+import dayjs from 'dayjs';
+import type { Currency } from '@/types';
+
+/** Locale used for Intl formatting; numbers stay in latin digits for finance clarity. */
+const NUMBER_LOCALE = 'en-US';
+
+export function formatCurrency(
+  value: number,
+  currency: Currency = 'USD',
+  options: Intl.NumberFormatOptions = {},
+): string {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+    ...options,
+  }).format(value);
+}
+
+/** Compact money for KPI tiles: $1.92M, $277.2K. */
+export function formatCompactCurrency(value: number, currency: Currency = 'USD'): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  const symbol = currency === 'USD' ? '$' : 'AED ';
+  if (abs >= 1_000_000) return `${sign}${symbol}${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}${symbol}${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}${symbol}${abs.toFixed(0)}`;
+}
+
+export function formatNumber(value: number, fractionDigits = 0): string {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
+/** Metric tonnes with up to 3 decimals (containers ship fractional MT). */
+export function formatMt(value: number): string {
+  return `${new Intl.NumberFormat(NUMBER_LOCALE, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(value)} MT`;
+}
+
+export function formatPercent(value: number, fractionDigits = 1): string {
+  return `${formatNumber(value, fractionDigits)}%`;
+}
+
+export function formatDate(value?: string | null, pattern = 'DD MMM YYYY'): string {
+  if (!value) return '—';
+  const d = dayjs(value);
+  return d.isValid() ? d.format(pattern) : '—';
+}
+
+export function relativeDays(value?: string | null): number | null {
+  if (!value) return null;
+  const d = dayjs(value);
+  if (!d.isValid()) return null;
+  return d.startOf('day').diff(dayjs().startOf('day'), 'day');
+}
+
+/** Initials for avatars, e.g. "Alco Metal Trading" → "AM". */
+export function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('');
+}
