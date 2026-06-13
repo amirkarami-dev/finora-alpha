@@ -17,7 +17,10 @@ export function AppLayout() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const locale = useUiStore((s) => s.locale);
+  const themeMode = useUiStore((s) => s.theme);
   const isRtl = locale === 'ar' || locale === 'fa';
+  // The sidebar follows the theme: white rail in light, dark navy in dark.
+  const siderBg = themeMode === 'dark' ? '#0d1626' : '#ffffff';
 
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -31,8 +34,6 @@ export function AppLayout() {
     else toggleSidebar();
   };
 
-  const siderBg = token.colorBgLayout;
-
   return (
     <Layout style={{ minHeight: '100vh' }}>
       {isMobile ? (
@@ -42,10 +43,10 @@ export function AppLayout() {
           onClose={() => setDrawerOpen(false)}
           width={250}
           closable={false}
-          styles={{ body: { padding: 0, background: '#0b1f1a' } }}
+          styles={{ body: { padding: 0, background: siderBg } }}
           className="finora-drawer"
         >
-          <div style={{ background: '#0b1f1a', height: '100%' }}>
+          <div style={{ background: siderBg, height: '100%' }}>
             <SidebarNav onNavigate={() => setDrawerOpen(false)} />
           </div>
         </Drawer>
@@ -62,7 +63,7 @@ export function AppLayout() {
             height: '100vh',
             overflow: 'auto',
             insetInlineStart: 0,
-            background: siderBg,
+            borderInlineEnd: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
           <SidebarNav collapsed={collapsed} />

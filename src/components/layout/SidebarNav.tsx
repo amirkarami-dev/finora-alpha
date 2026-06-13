@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ROUTES } from '@/config/constants';
 import { Logo } from '@/components/common/Logo';
+import { useUiStore } from '@/store/useUiStore';
 
 interface Props {
   collapsed?: boolean;
@@ -23,6 +24,8 @@ export function SidebarNav({ collapsed = false, onNavigate }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const themeMode = useUiStore((s) => s.theme);
+  const isDark = themeMode === 'dark';
 
   const items: MenuProps['items'] = [
     {
@@ -86,11 +89,11 @@ export function SidebarNav({ collapsed = false, onNavigate }: Props) {
           flexShrink: 0,
         }}
       >
-        <Logo size={30} showText={!collapsed} color="#fff" />
+        <Logo size={30} showText={!collapsed} color={isDark ? '#fff' : undefined} />
       </div>
       <Menu
         mode="inline"
-        theme="dark"
+        theme={isDark ? 'dark' : 'light'}
         items={items}
         selectedKeys={[selectedKey]}
         style={{ border: 'none', background: 'transparent', flex: 1, paddingBottom: 16 }}
