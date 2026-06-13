@@ -116,6 +116,20 @@ function makeContainerRef(): string {
   return `${pick(CONTAINER_PREFIXES)}${intBetween(1000000, 9999999)}`;
 }
 
+const BL_PREFIXES = ['MAEU', 'MSCU', 'COSU', 'HLCU', 'ONEY'];
+const SEAL_PREFIXES = ['SL', 'CN', 'ML'];
+
+/** Deterministic shipping-doc numbers derived from the container reference (no PRNG impact). */
+function docNumbersFor(reference: string) {
+  let h = 0;
+  for (let i = 0; i < reference.length; i++) h = (h * 31 + reference.charCodeAt(i)) >>> 0;
+  return {
+    blNumber: `${BL_PREFIXES[h % BL_PREFIXES.length]}${100000000 + (h % 900000000)}`,
+    bookingNumber: `BK${10000000 + (h % 90000000)}`,
+    sealNumber: `${SEAL_PREFIXES[(h >> 3) % SEAL_PREFIXES.length]}${1000000 + (h % 9000000)}`,
+  };
+}
+
 function contractStatusFromItems(items: Item[]): ContractStatus {
   if (items.every((i) => i.remainingMt <= 0.001)) return 'CLOSED';
   if (items.some((i) => i.status === 'ON HOLD')) return 'ON HOLD';
@@ -206,11 +220,12 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
           status = paidRoll > 0.7 ? 'PAID' : 'OPEN';
         }
 
+        const reference = makeContainerRef();
         const container: Container = {
           id: `cnt-${contractId}-${s + 1}`,
           contractId,
           itemId: item.id,
-          reference: makeContainerRef(),
+          reference,
           quantityMt: qty,
           lmePrice: round(price, 2),
           premium: 0,
@@ -219,6 +234,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
           dueDate: due.toISOString(),
           invoiceUSD: invoice,
           status,
+          ...docNumbersFor(reference),
         };
         containers.push(container);
 
@@ -298,6 +314,9 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     dueDate: dayjs('2025-12-20').toISOString(),
     invoiceUSD: 306736.95,
     status: 'PAID',
+    blNumber: 'MAEU604815097',
+    bookingNumber: 'BK20461185',
+    sealNumber: 'SL3392041',
   };
   const c2: Container = {
     id: `cnt-${contractId}-2`,
@@ -312,6 +331,9 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     dueDate: dayjs('2025-12-20').toISOString(),
     invoiceUSD: 309283.4,
     status: 'PAID',
+    blNumber: 'MSCU518327744',
+    bookingNumber: 'BK20461186',
+    sealNumber: 'CN7741250',
   };
   containers.unshift(c2, c1);
 
