@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Card, Input, Progress, Segmented, Table, Tag, Typography, theme } from 'antd';
+import { Button, Card, Input, Progress, Segmented, Table, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -13,17 +13,18 @@ import type { ContractRow } from '@/services/api';
 import { formatDate, formatMt } from '@/utils/format';
 import { CONTRACT_STATUSES, ROUTES } from '@/config/constants';
 import type { ContractStatus } from '@/types';
+import { ContractFormModal } from './ContractFormModal';
 
 const { Text } = Typography;
 
 export default function ContractsPage() {
   const { t } = useTranslation();
   const { token } = theme.useToken();
-  const { message } = App.useApp();
   const navigate = useNavigate();
   const { data, isLoading } = useContracts();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
+  const [formOpen, setFormOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -116,7 +117,7 @@ export default function ContractsPage() {
         title={t('contracts.title')}
         subtitle={t('contracts.subtitle')}
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => message.info(t('common.comingSoon'))}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
             {t('contracts.newContract')}
           </Button>
         }
@@ -154,6 +155,8 @@ export default function ContractsPage() {
           })}
         />
       </Card>
+
+      <ContractFormModal open={formOpen} onClose={() => setFormOpen(false)} />
     </div>
   );
 }
