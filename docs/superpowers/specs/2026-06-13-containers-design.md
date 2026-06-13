@@ -9,9 +9,9 @@
 The domain model is `Customer 1─* Contract 1─* Item (goods) 1─* Container (shipment)`.
 Create/edit forms already exist for **Contracts** and **Goods**. The **Container**
 ("New container") action on `ContainersPage` is still a `comingSoon` stub, and the
-containers table on `ContractDetailPage` is read-only. This adds full create / edit /
-delete for containers, following the established Contract/Goods modal pattern, plus a
-small set of real-world shipping-document fields.
+containers table on `ContractDetailPage` is read-only. This adds create / edit for
+containers, following the established Contract/Goods modal pattern, plus a small set of
+real-world shipping-document fields.
 
 ## Goals
 
