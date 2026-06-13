@@ -116,6 +116,8 @@ export function ContainerFormModal({ open, onClose, contract, container }: Conta
   const onItemChange = (itemId: string) => {
     const item = items.find((i) => i.id === itemId);
     if (item) form.setFieldValue('lmePrice', round2(unitPrice(item)));
+    // Customer terms are known once an item (hence contract) is chosen — fill the due date.
+    recomputeDue();
   };
 
   const onContractChange = () => {
