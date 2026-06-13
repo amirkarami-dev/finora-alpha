@@ -231,6 +231,8 @@ export default function LandingPage() {
             overflow: 'hidden',
             background:
               'radial-gradient(800px 400px at 70% -20%, rgba(224,163,107,0.35), transparent 60%), linear-gradient(135deg, #2a160a, #43260f)',
+            border: '1px solid rgba(224, 163, 107, 0.22)',
+            boxShadow: '0 40px 90px -40px rgba(184, 115, 51, 0.55)',
           }}
         >
           <Title style={{ color: '#fff', fontSize: isMobile ? 28 : 42, fontWeight: 800, margin: 0 }}>

@@ -150,6 +150,13 @@ a {
 .landing {
   --hero-from: #2a160a;
   --hero-to: #43260f;
+  position: relative;
+  /* Warm copper ambient glow rising from the bottom so the CTA/footer area
+     isn't a flat black void. Subtle in light mode, atmospheric in dark. */
+  background:
+    radial-gradient(1100px 620px at 50% 100%, rgba(184, 115, 51, 0.16), transparent 60%),
+    radial-gradient(820px 520px at 12% 88%, rgba(244, 183, 64, 0.07), transparent 60%);
+  background-repeat: no-repeat;
 }
 .landing-hero {
   position: relative;
