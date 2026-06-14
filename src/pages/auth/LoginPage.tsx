@@ -16,13 +16,14 @@ import {
   LockOutlined,
   MailOutlined,
 } from '@ant-design/icons';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Logo } from '@/components/common/Logo';
 import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
+import { ROLE_HOME, USERS } from '@/config/roles';
 
 const { Title, Paragraph, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -36,25 +37,29 @@ interface LoginForm {
 export default function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const location = useLocation();
+  const [form] = Form.useForm<LoginForm>();
   const screens = useBreakpoint();
   const { message } = App.useApp();
   const login = useAuthStore((s) => s.login);
   const [loading, setLoading] = useState(false);
 
-  const from = (location.state as { from?: Location })?.from?.pathname ?? ROUTES.dashboard;
   const isDesktop = screens.lg;
 
   const onFinish = async (values: LoginForm) => {
     setLoading(true);
     try {
-      const user = await login(values.email);
+      const user = await login(values.email, values.password);
       message.success(`${t('auth.loginSuccess')}, ${user.name}`);
-      navigate(from, { replace: true });
+      navigate(ROLE_HOME[user.role], { replace: true });
+    } catch {
+      message.error(t('auth.invalidCredentials'));
     } finally {
       setLoading(false);
     }
   };
+
+  const fillAccount = (email: string, password: string) =>
+    form.setFieldsValue({ email, password });
 
   const valueProps = [
     t('landing.feature1Title'),
@@ -126,6 +131,7 @@ export default function LoginPage() {
           </Paragraph>
 
           <Form<LoginForm>
+            form={form}
             layout="vertical"
             requiredMark={false}
             initialValues={{ email: 'amir@finora.app', password: 'demo1234', remember: true }}
@@ -161,8 +167,35 @@ export default function LoginPage() {
           </Form>
 
           <Divider plain style={{ color: '#999', fontSize: 12 }}>
-            {t('auth.demoHint')}
+            {t('auth.demoAccounts')}
           </Divider>
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            {USERS.map((u) => (
+              <button
+                key={u.email}
+                type="button"
+                onClick={() => fillAccount(u.email, u.password)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '100%',
+                  gap: 12,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: `1px solid ${'rgba(125,140,160,0.2)'}`,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  font: 'inherit',
+                }}
+              >
+                <Text strong style={{ fontSize: 12.5 }}>{t(`roles.${u.role}`)}</Text>
+                <Text type="secondary" style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                  {u.email} · {u.password}
+                </Text>
+              </button>
+            ))}
+          </Space>
         </div>
       </div>
     </div>
