@@ -19,6 +19,7 @@ export const qk = {
   productVolumes: ['productVolumes'] as const,
   statusBreakdown: ['statusBreakdown'] as const,
   aging: ['aging'] as const,
+  executiveSummary: ['executiveSummary'] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -61,6 +62,8 @@ export const useProductVolumes = () =>
 export const useStatusBreakdown = () =>
   useQuery({ queryKey: qk.statusBreakdown, queryFn: api.getContractStatusBreakdown });
 export const useAging = () => useQuery({ queryKey: qk.aging, queryFn: api.getAgingBuckets });
+export const useExecutiveSummary = () =>
+  useQuery({ queryKey: qk.executiveSummary, queryFn: api.getExecutiveSummary });
 
 export const useCustomers = () => useQuery({ queryKey: qk.customers, queryFn: api.getCustomers });
 export const useProductNames = () =>
@@ -85,6 +88,7 @@ function useInvalidateTrade() {
     qc.invalidateQueries({ queryKey: qk.containers });
     qc.invalidateQueries({ queryKey: qk.invoices });
     qc.invalidateQueries({ queryKey: qk.aging });
+    qc.invalidateQueries({ queryKey: qk.executiveSummary });
   };
 }
 

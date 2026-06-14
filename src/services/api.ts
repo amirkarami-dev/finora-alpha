@@ -302,6 +302,49 @@ function sum<T>(arr: T[], fn: (t: T) => number): number {
 
 export const fxRate = db.fxRate;
 
+/* ----------------------------- Executive ---------------------------- */
+export interface ExecutiveSummary {
+  invoiced: number;
+  collected: number;
+  outstanding: number;
+  overdue: number;
+  collectionRate: number;
+  invoicedGrowthPct: number;
+  collectedGrowthPct: number;
+  activeContracts: number;
+  customers: number;
+}
+
+export async function getExecutiveSummary(): Promise<ExecutiveSummary> {
+  await delay(180);
+  const accounts = computeAccounts();
+  const invoiced = round(sum(accounts, (a) => a.totalInvoiced));
+  const collected = round(sum(accounts, (a) => a.totalPaid));
+  const outstanding = round(sum(accounts, (a) => a.totalOutstanding));
+  const overdue = round(sum(accounts, (a) => a.overdue));
+  const collectionRate = invoiced > 0 ? round((collected / invoiced) * 100) : 0;
+
+  const series = await getCashflowSeries();
+  const growth = (sel: (p: TimeSeriesPoint) => number) => {
+    if (series.length < 2) return 0;
+    const last = sel(series[series.length - 1]);
+    const prev = sel(series[series.length - 2]);
+    return prev > 0 ? round(((last - prev) / prev) * 100) : 0;
+  };
+
+  return {
+    invoiced,
+    collected,
+    outstanding,
+    overdue,
+    collectionRate,
+    invoicedGrowthPct: growth((p) => p.invoiced),
+    collectedGrowthPct: growth((p) => p.collected),
+    activeContracts: db.contracts.filter((c) => c.status === 'ACTIVE').length,
+    customers: db.customers.length,
+  };
+}
+
 /* ----------------------------- Mutations ---------------------------- *
  * The demo runs on an in-memory dataset, so edits live for the session
  * only (a reload restores the seeded data). Each mutation writes through
