@@ -53,6 +53,7 @@
     "saveFailed": "ذخیره تغییرات ممکن نشد"
   },
   "nav": {
+    "executive": "مدیریت اجرایی",
     "dashboard": "داشبورد",
     "customers": "مشتریان",
     "contracts": "قراردادها",
@@ -85,7 +86,9 @@
     "signOut": "خروج",
     "profile": "پروفایل",
     "loginSuccess": "به فینورا خوش آمدید",
-    "secured": "فضای کاری امن"
+    "secured": "فضای کاری امن",
+    "invalidCredentials": "ایمیل یا رمز عبور نادرست است",
+    "demoAccounts": "حساب‌های نمایشی — برای نمایش کلیک کنید"
   },
   "landing": {
     "navFeatures": "امکانات",
@@ -329,6 +332,23 @@
     "OPEN": "باز",
     "PAID": "پرداخت‌شده",
     "OVERDUE": "معوق"
+  },
+  "roles": {
+    "CEO": "مدیرعامل",
+    "Manager": "مدیر مالی",
+    "Staff": "عملیات"
+  },
+  "executive": {
+    "subtitle": "عملکرد شرکت در یک نگاه",
+    "welcome": "خوش آمدید، {{name}}",
+    "kpiInvoiced": "درآمد (فاکتورشده)",
+    "kpiCollected": "وجه نقد وصول‌شده",
+    "kpiOutstanding": "مانده",
+    "kpiCollectionRate": "نرخ وصول",
+    "trendTitle": "درآمد در برابر وصول",
+    "topCustomersTitle": "مشتریان برتر بر اساس درآمد",
+    "productMixTitle": "ترکیب محصول بر اساس حجم",
+    "receivablesTitle": "سن مطالبات"
   },
   "errors": {
     "notFoundTitle": "صفحه یافت نشد",

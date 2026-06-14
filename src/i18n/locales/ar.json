@@ -53,6 +53,7 @@
     "saveFailed": "تعذّر حفظ التغييرات"
   },
   "nav": {
+    "executive": "الإدارة التنفيذية",
     "dashboard": "لوحة التحكم",
     "customers": "العملاء",
     "contracts": "العقود",
@@ -85,7 +86,9 @@
     "signOut": "تسجيل الخروج",
     "profile": "الملف الشخصي",
     "loginSuccess": "مرحباً بك في فينورا",
-    "secured": "مساحة عمل مؤمّنة"
+    "secured": "مساحة عمل مؤمّنة",
+    "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+    "demoAccounts": "حسابات تجريبية — اضغط للعرض"
   },
   "landing": {
     "navFeatures": "المميزات",
@@ -329,6 +332,23 @@
     "OPEN": "مفتوح",
     "PAID": "مدفوع",
     "OVERDUE": "متأخر"
+  },
+  "roles": {
+    "CEO": "الرئيس التنفيذي",
+    "Manager": "مدير مالي",
+    "Staff": "العمليات"
+  },
+  "executive": {
+    "subtitle": "أداء الشركة في لمحة",
+    "welcome": "مرحباً، {{name}}",
+    "kpiInvoiced": "الإيرادات (المفوترة)",
+    "kpiCollected": "النقد المحصّل",
+    "kpiOutstanding": "المستحق",
+    "kpiCollectionRate": "نسبة التحصيل",
+    "trendTitle": "الإيرادات مقابل التحصيل",
+    "topCustomersTitle": "أعلى العملاء بالإيرادات",
+    "productMixTitle": "توزيع المنتجات حسب الحجم",
+    "receivablesTitle": "أعمار المستحقات"
   },
   "errors": {
     "notFoundTitle": "الصفحة غير موجودة",

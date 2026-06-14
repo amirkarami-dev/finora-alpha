@@ -53,6 +53,7 @@
     "saveFailed": "Couldn't save changes"
   },
   "nav": {
+    "executive": "Executive",
     "dashboard": "Dashboard",
     "customers": "Customers",
     "contracts": "Contracts",
@@ -85,7 +86,9 @@
     "signOut": "Sign out",
     "profile": "Profile",
     "loginSuccess": "Welcome to Finora",
-    "secured": "Secured workspace"
+    "secured": "Secured workspace",
+    "invalidCredentials": "Incorrect email or password",
+    "demoAccounts": "Demo accounts — click to view"
   },
   "landing": {
     "navFeatures": "Features",
@@ -329,6 +332,23 @@
     "OPEN": "Open",
     "PAID": "Paid",
     "OVERDUE": "Overdue"
+  },
+  "roles": {
+    "CEO": "Chief Executive",
+    "Manager": "Finance Manager",
+    "Staff": "Operations"
+  },
+  "executive": {
+    "subtitle": "Company performance at a glance",
+    "welcome": "Welcome, {{name}}",
+    "kpiInvoiced": "Revenue (invoiced)",
+    "kpiCollected": "Cash collected",
+    "kpiOutstanding": "Outstanding",
+    "kpiCollectionRate": "Collection rate",
+    "trendTitle": "Revenue vs. collections",
+    "topCustomersTitle": "Top customers by revenue",
+    "productMixTitle": "Product mix by volume",
+    "receivablesTitle": "Receivables aging"
   },
   "errors": {
     "notFoundTitle": "Page not found",
