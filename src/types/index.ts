@@ -159,3 +159,4 @@ export interface StatusBreakdown {
 
 export type Locale = 'en' | 'ar' | 'fa';
 export type ThemeMode = 'light' | 'dark';
+export type Role = 'CEO' | 'Manager' | 'Staff';

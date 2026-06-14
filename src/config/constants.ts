@@ -125,6 +125,7 @@ export const ROUTES = {
   login: '/login',
   app: '/app',
   dashboard: '/app/dashboard',
+  executive: '/app/executive',
   customers: '/app/customers',
   contracts: '/app/contracts',
   containers: '/app/containers',
