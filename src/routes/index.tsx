@@ -2,9 +2,11 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
+import { ROLE_ACCESS, ROLE_HOME, normalizeRole, type RouteKey } from '@/config/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import LandingPage from '@/pages/landing/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
+import ExecutiveDashboardPage from '@/pages/executive/ExecutiveDashboardPage';
 import DashboardPage from '@/pages/dashboard/DashboardPage';
 import CustomersPage from '@/pages/customers/CustomersPage';
 import CustomerDetailPage from '@/pages/customers/CustomerDetailPage';
@@ -26,6 +28,21 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+/** Renders children if the current role may access `routeKey`, else redirects to the role's home. */
+function RoleRoute({ routeKey, children }: { routeKey: RouteKey; children: JSX.Element }) {
+  const role = normalizeRole(useAuthStore((s) => s.user?.role));
+  if (!ROLE_ACCESS[role].includes(routeKey)) {
+    return <Navigate to={ROLE_HOME[role]} replace />;
+  }
+  return children;
+}
+
+/** Redirects /app to the current role's home page. */
+function RoleHome() {
+  const role = normalizeRole(useAuthStore((s) => s.user?.role));
+  return <Navigate to={ROLE_HOME[role]} replace />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -40,17 +57,18 @@ export function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to={ROUTES.dashboard} replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="customers/:id" element={<CustomerDetailPage />} />
-        <Route path="contracts" element={<ContractsPage />} />
-        <Route path="contracts/:id" element={<ContractDetailPage />} />
-        <Route path="containers" element={<ContainersPage />} />
-        <Route path="invoices" element={<InvoicesPage />} />
-        <Route path="payments" element={<PaymentsPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route index element={<RoleHome />} />
+        <Route path="executive" element={<RoleRoute routeKey="executive"><ExecutiveDashboardPage /></RoleRoute>} />
+        <Route path="dashboard" element={<RoleRoute routeKey="dashboard"><DashboardPage /></RoleRoute>} />
+        <Route path="customers" element={<RoleRoute routeKey="customers"><CustomersPage /></RoleRoute>} />
+        <Route path="customers/:id" element={<RoleRoute routeKey="customers"><CustomerDetailPage /></RoleRoute>} />
+        <Route path="contracts" element={<RoleRoute routeKey="contracts"><ContractsPage /></RoleRoute>} />
+        <Route path="contracts/:id" element={<RoleRoute routeKey="contracts"><ContractDetailPage /></RoleRoute>} />
+        <Route path="containers" element={<RoleRoute routeKey="containers"><ContainersPage /></RoleRoute>} />
+        <Route path="invoices" element={<RoleRoute routeKey="invoices"><InvoicesPage /></RoleRoute>} />
+        <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
+        <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
+        <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
