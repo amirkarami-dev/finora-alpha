@@ -50,7 +50,8 @@
     "last12Months": "Last 12 months",
     "comingSoon": "Coming soon",
     "required": "Required",
-    "saveFailed": "Couldn't save changes"
+    "saveFailed": "Couldn't save changes",
+    "days": "days"
   },
   "nav": {
     "executive": "Executive",
@@ -62,6 +63,7 @@
     "payments": "Payments",
     "reports": "Reports",
     "settings": "Settings",
+    "portal": "My Account",
     "main": "Main",
     "operations": "Operations",
     "finance": "Finance",
@@ -336,7 +338,8 @@
   "roles": {
     "CEO": "Chief Executive",
     "Manager": "Finance Manager",
-    "Staff": "Operations"
+    "Staff": "Operations",
+    "Customer": "Customer"
   },
   "executive": {
     "subtitle": "Company performance at a glance",
@@ -349,6 +352,31 @@
     "topCustomersTitle": "Top customers by revenue",
     "productMixTitle": "Product mix by volume",
     "receivablesTitle": "Receivables aging"
+  },
+  "portal": {
+    "subtitle": "Your account summary and balances",
+    "standingGood": "In good standing",
+    "standingAttention": "Action needed",
+    "outstanding": "Outstanding balance",
+    "overdue": "Overdue",
+    "availableCredit": "Available credit",
+    "settlementRate": "Settlement rate",
+    "dso": "Avg. days to settle",
+    "termsDays": "Your terms: {{count}} days",
+    "creditUtilization": "Credit utilization",
+    "creditLimitLabel": "Credit limit",
+    "onTimeShare": "Within terms",
+    "agingTitle": "Receivables aging",
+    "paidVsOutstanding": "Paid vs. outstanding",
+    "invoicedVsCollected": "Invoiced vs. collected",
+    "openInvoices": "Open invoices",
+    "payments": "Payments",
+    "contracts": "Contracts",
+    "daysOverdue": "Days overdue",
+    "dueDate": "Due",
+    "noOpenInvoices": "No open invoices — you're all settled.",
+    "noAccessTitle": "Account unavailable",
+    "noAccess": "No customer account is linked to this login."
   },
   "errors": {
     "notFoundTitle": "Page not found",

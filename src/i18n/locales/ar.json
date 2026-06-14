@@ -50,7 +50,8 @@
     "last12Months": "آخر ١٢ شهراً",
     "comingSoon": "قريباً",
     "required": "مطلوب",
-    "saveFailed": "تعذّر حفظ التغييرات"
+    "saveFailed": "تعذّر حفظ التغييرات",
+    "days": "يوم"
   },
   "nav": {
     "executive": "الإدارة التنفيذية",
@@ -62,6 +63,7 @@
     "payments": "المدفوعات",
     "reports": "التقارير",
     "settings": "الإعدادات",
+    "portal": "حسابي",
     "main": "الرئيسية",
     "operations": "العمليات",
     "finance": "المالية",
@@ -336,7 +338,8 @@
   "roles": {
     "CEO": "الرئيس التنفيذي",
     "Manager": "مدير مالي",
-    "Staff": "العمليات"
+    "Staff": "العمليات",
+    "Customer": "عميل"
   },
   "executive": {
     "subtitle": "أداء الشركة في لمحة",
@@ -349,6 +352,31 @@
     "topCustomersTitle": "أعلى العملاء بالإيرادات",
     "productMixTitle": "توزيع المنتجات حسب الحجم",
     "receivablesTitle": "أعمار المستحقات"
+  },
+  "portal": {
+    "subtitle": "ملخص حسابك وأرصدتك",
+    "standingGood": "بحالة جيدة",
+    "standingAttention": "يتطلب إجراءً",
+    "outstanding": "الرصيد المستحق",
+    "overdue": "متأخر",
+    "availableCredit": "الائتمان المتاح",
+    "settlementRate": "نسبة السداد",
+    "dso": "متوسط أيام السداد",
+    "termsDays": "مدة السداد: {{count}} يوم",
+    "creditUtilization": "استخدام الائتمان",
+    "creditLimitLabel": "حد الائتمان",
+    "onTimeShare": "ضمن المدة",
+    "agingTitle": "أعمار الذمم المدينة",
+    "paidVsOutstanding": "المدفوع مقابل المستحق",
+    "invoicedVsCollected": "المُفوتر مقابل المُحصّل",
+    "openInvoices": "الفواتير المفتوحة",
+    "payments": "المدفوعات",
+    "contracts": "العقود",
+    "daysOverdue": "أيام التأخير",
+    "dueDate": "الاستحقاق",
+    "noOpenInvoices": "لا توجد فواتير مفتوحة — تم السداد بالكامل.",
+    "noAccessTitle": "الحساب غير متاح",
+    "noAccess": "لا يوجد حساب عميل مرتبط بتسجيل الدخول هذا."
   },
   "errors": {
     "notFoundTitle": "الصفحة غير موجودة",

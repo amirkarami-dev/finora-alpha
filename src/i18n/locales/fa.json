@@ -50,7 +50,8 @@
     "last12Months": "۱۲ ماه گذشته",
     "comingSoon": "به‌زودی",
     "required": "الزامی",
-    "saveFailed": "ذخیره تغییرات ممکن نشد"
+    "saveFailed": "ذخیره تغییرات ممکن نشد",
+    "days": "روز"
   },
   "nav": {
     "executive": "مدیریت اجرایی",
@@ -62,6 +63,7 @@
     "payments": "پرداخت‌ها",
     "reports": "گزارش‌ها",
     "settings": "تنظیمات",
+    "portal": "حساب من",
     "main": "اصلی",
     "operations": "عملیات",
     "finance": "مالی",
@@ -336,7 +338,8 @@
   "roles": {
     "CEO": "مدیرعامل",
     "Manager": "مدیر مالی",
-    "Staff": "عملیات"
+    "Staff": "عملیات",
+    "Customer": "مشتری"
   },
   "executive": {
     "subtitle": "عملکرد شرکت در یک نگاه",
@@ -349,6 +352,31 @@
     "topCustomersTitle": "مشتریان برتر بر اساس درآمد",
     "productMixTitle": "ترکیب محصول بر اساس حجم",
     "receivablesTitle": "سن مطالبات"
+  },
+  "portal": {
+    "subtitle": "خلاصه حساب و مانده‌های شما",
+    "standingGood": "وضعیت مطلوب",
+    "standingAttention": "نیازمند اقدام",
+    "outstanding": "مانده بدهی",
+    "overdue": "معوق",
+    "availableCredit": "اعتبار در دسترس",
+    "settlementRate": "نرخ تسویه",
+    "dso": "میانگین روزهای تسویه",
+    "termsDays": "مهلت شما: {{count}} روز",
+    "creditUtilization": "استفاده از اعتبار",
+    "creditLimitLabel": "سقف اعتبار",
+    "onTimeShare": "در محدوده مهلت",
+    "agingTitle": "سن‌بندی مطالبات",
+    "paidVsOutstanding": "پرداخت‌شده در برابر مانده",
+    "invoicedVsCollected": "صورت‌حساب در برابر وصولی",
+    "openInvoices": "فاکتورهای باز",
+    "payments": "پرداخت‌ها",
+    "contracts": "قراردادها",
+    "daysOverdue": "روزهای تأخیر",
+    "dueDate": "سررسید",
+    "noOpenInvoices": "فاکتور بازی وجود ندارد — همه تسویه شده است.",
+    "noAccessTitle": "حساب در دسترس نیست",
+    "noAccess": "هیچ حساب مشتری به این ورود متصل نیست."
   },
   "errors": {
     "notFoundTitle": "صفحه یافت نشد",
