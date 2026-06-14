@@ -10,6 +10,7 @@ import {
   FileTextOutlined,
   SettingOutlined,
   TeamOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,7 @@ interface Props {
 const ICONS: Record<string, ReactNode> = {
   crown: <CrownOutlined />,
   appstore: <AppstoreOutlined />,
+  wallet: <WalletOutlined />,
   team: <TeamOutlined />,
   filetext: <FileTextOutlined />,
   container: <ContainerOutlined />,

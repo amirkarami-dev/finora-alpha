@@ -7,6 +7,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import LandingPage from '@/pages/landing/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
 import ExecutiveDashboardPage from '@/pages/executive/ExecutiveDashboardPage';
+import CustomerPortalPage from '@/pages/portal/CustomerPortalPage';
 import DashboardPage from '@/pages/dashboard/DashboardPage';
 import CustomersPage from '@/pages/customers/CustomersPage';
 import CustomerDetailPage from '@/pages/customers/CustomerDetailPage';
@@ -59,6 +60,7 @@ export function AppRoutes() {
       >
         <Route index element={<RoleHome />} />
         <Route path="executive" element={<RoleRoute routeKey="executive"><ExecutiveDashboardPage /></RoleRoute>} />
+        <Route path="portal" element={<RoleRoute routeKey="portal"><CustomerPortalPage /></RoleRoute>} />
         <Route path="dashboard" element={<RoleRoute routeKey="dashboard"><DashboardPage /></RoleRoute>} />
         <Route path="customers" element={<RoleRoute routeKey="customers"><CustomersPage /></RoleRoute>} />
         <Route path="customers/:id" element={<RoleRoute routeKey="customers"><CustomerDetailPage /></RoleRoute>} />
