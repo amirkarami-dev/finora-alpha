@@ -598,3 +598,121 @@ export async function updateContainer(id: string, input: ContainerInput): Promis
   reindex();
   return buildContainerRows().find((c) => c.id === id)!;
 }
+
+/* ----------------------------- Customer Portal ---------------------- */
+export interface CustomerPortalSummary {
+  customerId: string;
+  name: string;
+  code: string;
+  country: string;
+  defaultCurrency: Customer['defaultCurrency'];
+  paymentTermsDays: number;
+  totalInvoiced: number;
+  totalPaid: number;
+  outstanding: number;
+  overdue: number;
+  /** paid / invoiced * 100 */
+  settlementRatePct: number;
+  /** (outstanding / invoiced) * 365 */
+  dsoDays: number;
+  /** current-bucket / outstanding * 100 */
+  onTimeSharePct: number;
+  creditLimit: number;
+  /** outstanding / creditLimit * 100 */
+  creditUtilizationPct: number;
+  availableCredit: number;
+  aging: AgingBucket[];
+  series: TimeSeriesPoint[];
+  openInvoices: Invoice[];
+  recentPayments: PaymentRow[];
+  contracts: ContractRow[];
+}
+
+export async function getCustomerPortalSummary(
+  customerId: string,
+): Promise<CustomerPortalSummary | undefined> {
+  await delay(200);
+  const account = computeAccounts().find((a) => a.id === customerId);
+  if (!account) return undefined;
+
+  const today = dayjs('2026-06-13');
+
+  const myContracts = buildContractRows().filter((c) => c.customerId === customerId);
+  const contractIds = new Set(myContracts.map((c) => c.id));
+
+  const myInvoices = buildInvoices().filter((inv) => inv.customerId === customerId);
+  const openInvoices = myInvoices
+    .filter((inv) => inv.status !== 'PAID')
+    .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf());
+
+  const recentPayments: PaymentRow[] = db.payments
+    .filter((p) => p.customerId === customerId)
+    .map((p) => ({ ...p, customerName: account.name }))
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+
+  // Aging buckets over this customer's unpaid invoices.
+  const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90p: 0 };
+  for (const inv of openInvoices) {
+    const overdueDays = today.startOf('day').diff(dayjs(inv.dueDate).startOf('day'), 'day');
+    if (overdueDays <= 0) buckets.current += inv.amountUSD;
+    else if (overdueDays <= 30) buckets.d30 += inv.amountUSD;
+    else if (overdueDays <= 60) buckets.d60 += inv.amountUSD;
+    else if (overdueDays <= 90) buckets.d90 += inv.amountUSD;
+    else buckets.d90p += inv.amountUSD;
+  }
+  const aging: AgingBucket[] = [
+    { bucket: 'current', value: round(buckets.current) },
+    { bucket: 'days30', value: round(buckets.d30) },
+    { bucket: 'days60', value: round(buckets.d60) },
+    { bucket: 'days90', value: round(buckets.d90) },
+    { bucket: 'days90plus', value: round(buckets.d90p) },
+  ];
+
+  // 12-month invoiced-vs-collected series, scoped to this customer.
+  const myContainerIds = new Set(
+    db.containers.filter((c) => contractIds.has(c.contractId)).map((c) => c.id),
+  );
+  const series: TimeSeriesPoint[] = [];
+  const start = today.subtract(11, 'month').startOf('month');
+  for (let i = 0; i < 12; i++) {
+    const m = start.add(i, 'month');
+    const key = m.format('YYYY-MM');
+    const invoiced = db.containers
+      .filter((c) => myContainerIds.has(c.id) && dayjs(c.shipmentDate).format('YYYY-MM') === key)
+      .reduce((s, c) => s + c.invoiceUSD, 0);
+    const collected = db.payments
+      .filter((p) => p.customerId === customerId && dayjs(p.date).format('YYYY-MM') === key)
+      .reduce((s, p) => s + p.amountUSD, 0);
+    series.push({ month: m.format('MMM'), invoiced: round(invoiced), collected: round(collected) });
+  }
+
+  const totalInvoiced = account.totalInvoiced;
+  const totalPaid = account.totalPaid;
+  const outstanding = account.totalOutstanding;
+  const overdue = account.overdue;
+  const creditLimit = account.creditLimit;
+
+  return {
+    customerId: account.id,
+    name: account.name,
+    code: account.code,
+    country: account.country ?? '',
+    defaultCurrency: account.defaultCurrency,
+    paymentTermsDays: account.paymentTermsDays,
+    totalInvoiced,
+    totalPaid,
+    outstanding,
+    overdue,
+    settlementRatePct: totalInvoiced > 0 ? round((totalPaid / totalInvoiced) * 100) : 0,
+    dsoDays: totalInvoiced > 0 ? Math.round((outstanding / totalInvoiced) * 365) : 0,
+    onTimeSharePct: outstanding > 0 ? round((buckets.current / outstanding) * 100) : 100,
+    creditLimit,
+    creditUtilizationPct: creditLimit > 0 ? round((outstanding / creditLimit) * 100) : 0,
+    availableCredit: round(Math.max(creditLimit - outstanding, 0)),
+    aging,
+    series,
+    openInvoices,
+    recentPayments,
+    contracts: myContracts,
+  };
+}
