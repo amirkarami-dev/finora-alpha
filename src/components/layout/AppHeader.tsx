@@ -14,6 +14,7 @@ import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
+import { normalizeRole } from '@/config/roles';
 import { initials } from '@/utils/format';
 
 const { Header } = Layout;
@@ -113,7 +114,9 @@ export function AppHeader({ onMenuClick, collapsed, isMobile }: Props) {
             </Avatar>
             <span className="hide-mobile" style={{ lineHeight: 1.2 }}>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{user?.name}</div>
-              <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{user?.role}</div>
+              <div style={{ fontSize: 11, color: token.colorTextTertiary }}>
+                {user ? t(`roles.${normalizeRole(user.role)}`) : ''}
+              </div>
             </span>
           </Space>
         </Dropdown>
