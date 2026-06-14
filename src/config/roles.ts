@@ -18,6 +18,7 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'settings',
   ],
   Staff: ['dashboard', 'customers', 'contracts', 'containers', 'invoices'],
+  Customer: ['portal'],
 };
 
 /** Landing route per role. */
@@ -25,6 +26,7 @@ export const ROLE_HOME: Record<Role, string> = {
   CEO: ROUTES.executive,
   Manager: ROUTES.dashboard,
   Staff: ROUTES.dashboard,
+  Customer: ROUTES.portal,
 };
 
 export interface SeededUser {
@@ -33,6 +35,8 @@ export interface SeededUser {
   role: Role;
   name: string;
   avatarColor: string;
+  /** For Customer-role users: the customer record they may view. */
+  customerId?: string;
 }
 
 /** Seeded demo accounts (mock, non-production). */
@@ -40,11 +44,14 @@ export const USERS: SeededUser[] = [
   { email: 'ceo@finora.app', password: 'Ceo@2026', role: 'CEO', name: 'Khalid Al Mansoori', avatarColor: '#b87333' },
   { email: 'amir@finora.app', password: 'demo1234', role: 'Manager', name: 'Amir Karami', avatarColor: '#b87333' },
   { email: 'staff@finora.app', password: 'Staff@2026', role: 'Staff', name: 'Operations Desk', avatarColor: '#3b82f6' },
+  { email: 'portal@alcometal.ae', password: 'Alco@2026', role: 'Customer', name: 'Alco Metal Trading', avatarColor: '#b87333', customerId: 'cust-am' },
 ];
 
 /** Coerce any persisted/legacy role value to a valid Role (defaults to Manager). */
 export function normalizeRole(value: unknown): Role {
-  return value === 'CEO' || value === 'Manager' || value === 'Staff' ? value : 'Manager';
+  return value === 'CEO' || value === 'Manager' || value === 'Staff' || value === 'Customer'
+    ? value
+    : 'Manager';
 }
 
 export type NavGroup = 'main' | 'operations' | 'finance' | 'system';
@@ -60,6 +67,7 @@ export interface NavItemDef {
 export const NAV_ITEMS: NavItemDef[] = [
   { key: 'executive', route: ROUTES.executive, icon: 'crown', group: 'main' },
   { key: 'dashboard', route: ROUTES.dashboard, icon: 'appstore', group: 'main' },
+  { key: 'portal', route: ROUTES.portal, icon: 'wallet', group: 'main' },
   { key: 'customers', route: ROUTES.customers, icon: 'team', group: 'operations' },
   { key: 'contracts', route: ROUTES.contracts, icon: 'filetext', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },

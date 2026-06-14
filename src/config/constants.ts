@@ -133,4 +133,5 @@ export const ROUTES = {
   payments: '/app/payments',
   reports: '/app/reports',
   settings: '/app/settings',
+  portal: '/app/portal',
 } as const;

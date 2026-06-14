@@ -33,6 +33,8 @@ export interface Customer {
   country?: string;
   /** Day-of-net credit terms. */
   paymentTermsDays: number;
+  /** Approved trading credit line in USD (deterministic mock figure). */
+  creditLimit: number;
   createdAt: string;
 }
 
@@ -159,4 +161,4 @@ export interface StatusBreakdown {
 
 export type Locale = 'en' | 'ar' | 'fa';
 export type ThemeMode = 'light' | 'dark';
-export type Role = 'CEO' | 'Manager' | 'Staff';
+export type Role = 'CEO' | 'Manager' | 'Staff' | 'Customer';

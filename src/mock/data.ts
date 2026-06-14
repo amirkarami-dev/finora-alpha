@@ -148,6 +148,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     phone: `+971 5${intBetween(0, 9)} ${intBetween(100, 999)} ${intBetween(1000, 9999)}`,
     country: seed.country,
     paymentTermsDays: seed.terms,
+    creditLimit: 0,
     createdAt: TODAY.subtract(intBetween(120, 900), 'day').toISOString(),
   };
   customers.push(customer);
@@ -366,6 +367,26 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     },
   );
 })();
+
+/* ------------------------------------------------------------------ *
+ * Credit limits — deterministic, derived from each customer's exposure.
+ * Runs after every container exists; the extra PRNG draws are appended
+ * to the end of the sequence, so earlier seeded values are unchanged.
+ * ------------------------------------------------------------------ */
+const ceilTo = (n: number, step: number) => Math.ceil(n / step) * step;
+customers.forEach((customer) => {
+  const myContractIds = new Set(
+    contracts.filter((c) => c.customerId === customer.id).map((c) => c.id),
+  );
+  const myContainers = containers.filter((c) => myContractIds.has(c.contractId));
+  const invoiced = myContainers.reduce((s, c) => s + c.invoiceUSD, 0);
+  const outstanding = myContainers
+    .filter((c) => c.status !== 'PAID')
+    .reduce((s, c) => s + c.invoiceUSD, 0);
+  const base = Math.max(outstanding, invoiced * 0.4, 100_000);
+  const util = 0.5 + rnd() * 0.35; // target utilization 0.50–0.85
+  customer.creditLimit = ceilTo(base / util, 250_000);
+});
 
 export const db = {
   customers,
