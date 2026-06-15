@@ -184,12 +184,19 @@
     "detailTitle": "Customer overview",
     "ledger": "Ledger",
     "profile": "Profile",
-    "creditUsed": "Credit used"
+    "creditUsed": "Credit used",
+    "type": "Type"
   },
   "contracts": {
     "title": "Contracts",
-    "subtitle": "Sales contracts and their goods",
+    "subtitle": "Sell & purchase contracts and their goods",
     "newContract": "New contract",
+    "typeSell": "Sell",
+    "typePurchase": "Purchase",
+    "newSell": "New sell contract",
+    "newPurchase": "New purchase contract",
+    "sellTab": "Sell contracts",
+    "purchaseTab": "Purchase contracts",
     "contractId": "Contract ID",
     "customer": "Customer",
     "date": "Date",
@@ -217,7 +224,7 @@
     "quantityMt": "Quantity (MT)",
     "lmePercent": "LME %",
     "lmeFixed": "LME fixed",
-    "fixedLmePrice": "Fixed LME price",
+    "fixedLmePrice": "Fixed price",
     "premium": "Premium (USD/MT)",
     "incoterm": "Incoterm",
     "status": "Status",
@@ -229,7 +236,16 @@
     "editTitle": "Edit goods",
     "created": "Goods added",
     "updated": "Goods updated",
-    "productPlaceholder": "Select or type a product"
+    "productPlaceholder": "Select or type a product",
+    "partners": "Partners",
+    "partner": "Partner",
+    "sharePercent": "Share %",
+    "addPartner": "Add partner",
+    "noPartners": "No partners",
+    "ownShare": "Own share: {{percent}}%",
+    "partnerTag": "{{name}} {{percent}}%",
+    "partnerSumError": "Partner shares total {{sum}}% — must not exceed 100%",
+    "partnerDupError": "Each partner can be added only once"
   },
   "containers": {
     "title": "Containers",
@@ -340,6 +356,11 @@
     "Manager": "Finance Manager",
     "Staff": "Operations",
     "Customer": "Customer"
+  },
+  "customerTypes": {
+    "BUYER": "Buyer",
+    "SUPPLIER": "Supplier",
+    "BOTH": "Buyer & supplier"
   },
   "executive": {
     "subtitle": "Company performance at a glance",

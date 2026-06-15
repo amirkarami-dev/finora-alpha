@@ -184,12 +184,19 @@
     "detailTitle": "نظرة عامة على العميل",
     "ledger": "دفتر الأستاذ",
     "profile": "الملف",
-    "creditUsed": "الائتمان المستخدم"
+    "creditUsed": "الائتمان المستخدم",
+    "type": "النوع"
   },
   "contracts": {
     "title": "العقود",
-    "subtitle": "عقود البيع وبضائعها",
+    "subtitle": "عقود البيع والشراء وبضائعها",
     "newContract": "عقد جديد",
+    "typeSell": "بيع",
+    "typePurchase": "شراء",
+    "newSell": "عقد بيع جديد",
+    "newPurchase": "عقد شراء جديد",
+    "sellTab": "عقود البيع",
+    "purchaseTab": "عقود الشراء",
     "contractId": "رقم العقد",
     "customer": "العميل",
     "date": "التاريخ",
@@ -217,7 +224,7 @@
     "quantityMt": "الكمية (طن)",
     "lmePercent": "نسبة البورصة %",
     "lmeFixed": "سعر ثابت",
-    "fixedLmePrice": "سعر البورصة الثابت",
+    "fixedLmePrice": "السعر الثابت",
     "premium": "العلاوة (دولار/طن)",
     "incoterm": "شرط التسليم",
     "status": "الحالة",
@@ -229,7 +236,16 @@
     "editTitle": "تعديل البضاعة",
     "created": "تمت إضافة البضاعة",
     "updated": "تم تحديث البضاعة",
-    "productPlaceholder": "اختر منتجاً أو اكتبه"
+    "productPlaceholder": "اختر منتجاً أو اكتبه",
+    "partners": "الشركاء",
+    "partner": "الشريك",
+    "sharePercent": "الحصة %",
+    "addPartner": "إضافة شريك",
+    "noPartners": "لا شركاء",
+    "ownShare": "حصتنا: {{percent}}%",
+    "partnerTag": "{{name}} {{percent}}%",
+    "partnerSumError": "إجمالي حصص الشركاء {{sum}}% — يجب ألا يتجاوز 100%",
+    "partnerDupError": "لا يمكن إضافة الشريك أكثر من مرة"
   },
   "containers": {
     "title": "الحاويات",
@@ -340,6 +356,11 @@
     "Manager": "مدير مالي",
     "Staff": "العمليات",
     "Customer": "عميل"
+  },
+  "customerTypes": {
+    "BUYER": "مشترٍ",
+    "SUPPLIER": "مورّد",
+    "BOTH": "مشترٍ ومورّد"
   },
   "executive": {
     "subtitle": "أداء الشركة في لمحة",

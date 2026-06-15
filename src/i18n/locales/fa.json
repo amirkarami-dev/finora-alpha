@@ -184,12 +184,19 @@
     "detailTitle": "نمای کلی مشتری",
     "ledger": "دفتر معین",
     "profile": "پروفایل",
-    "creditUsed": "اعتبار مصرف‌شده"
+    "creditUsed": "اعتبار مصرف‌شده",
+    "type": "نوع"
   },
   "contracts": {
     "title": "قراردادها",
-    "subtitle": "قراردادهای فروش و کالاهای آن‌ها",
+    "subtitle": "قراردادهای فروش و خرید و کالاهای آن‌ها",
     "newContract": "قرارداد جدید",
+    "typeSell": "فروش",
+    "typePurchase": "خرید",
+    "newSell": "قرارداد فروش جدید",
+    "newPurchase": "قرارداد خرید جدید",
+    "sellTab": "قراردادهای فروش",
+    "purchaseTab": "قراردادهای خرید",
     "contractId": "شناسه قرارداد",
     "customer": "مشتری",
     "date": "تاریخ",
@@ -217,7 +224,7 @@
     "quantityMt": "مقدار (تن)",
     "lmePercent": "درصد بورس %",
     "lmeFixed": "قیمت ثابت",
-    "fixedLmePrice": "قیمت ثابت بورس",
+    "fixedLmePrice": "قیمت ثابت",
     "premium": "حق‌العمل (دلار/تن)",
     "incoterm": "شرط تحویل",
     "status": "وضعیت",
@@ -229,7 +236,16 @@
     "editTitle": "ویرایش کالا",
     "created": "کالا افزوده شد",
     "updated": "کالا به‌روزرسانی شد",
-    "productPlaceholder": "محصول را انتخاب یا تایپ کنید"
+    "productPlaceholder": "محصول را انتخاب یا تایپ کنید",
+    "partners": "شرکا",
+    "partner": "شریک",
+    "sharePercent": "سهم %",
+    "addPartner": "افزودن شریک",
+    "noPartners": "بدون شریک",
+    "ownShare": "سهم ما: {{percent}}%",
+    "partnerTag": "{{name}} {{percent}}%",
+    "partnerSumError": "مجموع سهم شرکا {{sum}}٪ است — نباید از ۱۰۰٪ بیشتر شود",
+    "partnerDupError": "هر شریک فقط یک‌بار قابل افزودن است"
   },
   "containers": {
     "title": "کانتینرها",
@@ -340,6 +356,11 @@
     "Manager": "مدیر مالی",
     "Staff": "عملیات",
     "Customer": "مشتری"
+  },
+  "customerTypes": {
+    "BUYER": "خریدار",
+    "SUPPLIER": "تأمین‌کننده",
+    "BOTH": "خریدار و تأمین‌کننده"
   },
   "executive": {
     "subtitle": "عملکرد شرکت در یک نگاه",
