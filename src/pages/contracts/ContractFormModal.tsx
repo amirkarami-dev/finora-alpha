@@ -1,11 +1,11 @@
-import { App, DatePicker, Form, Input, Modal, Select } from 'antd';
+import { App, DatePicker, Form, Input, Modal, Select, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useCreateContract, useCustomers, useUpdateContract } from '@/services/queries';
 import { CONTRACT_STATUSES, ROUTES } from '@/config/constants';
 import type { ContractInput } from '@/services/api';
-import type { Contract, ContractStatus, ContractType } from '@/types';
+import type { Contract, ContractStatus, ContractType, CustomerType } from '@/types';
 
 const { TextArea } = Input;
 
@@ -36,7 +36,7 @@ export function ContractFormModal({
   contract,
   defaultCustomerId,
   navigateOnCreate = true,
-  contractType: _contractType,
+  contractType,
 }: ContractFormModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -46,6 +46,17 @@ export function ContractFormModal({
   const createMut = useCreateContract();
   const updateMut = useUpdateContract();
   const isEdit = !!contract;
+  const type: ContractType = contract?.contractType ?? contractType ?? 'SELL';
+  const allowed: CustomerType[] = type === 'SELL' ? ['BUYER', 'BOTH'] : ['SUPPLIER', 'BOTH'];
+  const customerOptions = (() => {
+    const list = (customers ?? []).filter((c) => allowed.includes(c.customerType));
+    // On edit, keep the current customer selectable even if filtered out.
+    if (contract && !list.some((c) => c.id === contract.customerId)) {
+      const cur = (customers ?? []).find((c) => c.id === contract.customerId);
+      if (cur) return [cur, ...list];
+    }
+    return list;
+  })();
 
   // Applied on each open: `destroyOnHidden` remounts the form, so initial values
   // are re-read from the current contract (edit) or the create defaults.
@@ -72,6 +83,7 @@ export function ContractFormModal({
       destination: values.destination.trim(),
       status: values.status,
       notes: values.notes?.trim() || '',
+      contractType: type,
     };
     try {
       if (isEdit && contract) {
@@ -92,7 +104,7 @@ export function ContractFormModal({
   return (
     <Modal
       open={open}
-      title={isEdit ? t('contracts.editContract') : t('contracts.newContract')}
+      title={isEdit ? t('contracts.editContract') : type === 'SELL' ? t('contracts.newSell') : t('contracts.newPurchase')}
       okText={t('common.save')}
       cancelText={t('common.cancel')}
       onOk={submit}
@@ -108,6 +120,12 @@ export function ContractFormModal({
         preserve={false}
         initialValues={initialValues}
       >
+        <Tag
+          color={type === 'SELL' ? 'green' : 'blue'}
+          style={{ marginBottom: 16, borderRadius: 6, fontWeight: 600, padding: '2px 10px' }}
+        >
+          {type === 'SELL' ? t('contracts.typeSell') : t('contracts.typePurchase')}
+        </Tag>
         <Form.Item
           name="customerId"
           label={t('contracts.customer')}
@@ -118,7 +136,7 @@ export function ContractFormModal({
             loading={customersLoading}
             placeholder={t('contracts.selectCustomer')}
             optionFilterProp="label"
-            options={(customers ?? []).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+            options={customerOptions.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
           />
         </Form.Item>
         <Form.Item
