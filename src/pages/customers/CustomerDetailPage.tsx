@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import {
   Avatar,
+  Button,
   Card,
   Col,
   Descriptions,
@@ -17,12 +19,14 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   ContainerOutlined,
   DollarOutlined,
+  EditOutlined,
   FallOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
+import { CustomerFormModal } from './CustomerFormModal';
 import { Money } from '@/components/common/Money';
 import { StatusTag, PaymentMethodTag } from '@/components/common/StatusTag';
 import {
@@ -41,6 +45,7 @@ export default function CustomerDetailPage() {
   const { token } = theme.useToken();
   const navigate = useNavigate();
   const { id = '' } = useParams();
+  const [editOpen, setEditOpen] = useState(false);
   const { data: account, isLoading } = useAccount(id);
   const { data: contracts, isLoading: loadingContracts } = useContractsByCustomer(id);
   const { data: payments, isLoading: loadingPayments } = usePaymentsByCustomer(id);
@@ -80,7 +85,21 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="fade-in">
-      <PageHeader onBack title={account?.name ?? t('common.loading')} subtitle={t('customers.detailTitle')} />
+      <PageHeader
+        onBack
+        title={
+          <Space wrap>
+            <span>{account?.name ?? t('common.loading')}</span>
+            {account && !account.active && <Tag>{t('common.inactive')}</Tag>}
+          </Space>
+        }
+        subtitle={t('customers.detailTitle')}
+        extra={
+          <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!account}>
+            {t('common.edit')}
+          </Button>
+        }
+      />
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
@@ -172,6 +191,9 @@ export default function CustomerDetailPage() {
           ]}
         />
       </Card>
+      {account && (
+        <CustomerFormModal open={editOpen} onClose={() => setEditOpen(false)} customer={account} />
+      )}
     </div>
   );
 }
