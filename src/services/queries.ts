@@ -151,3 +151,70 @@ export const useUpdateContainer = () => {
     onSuccess: (row) => invalidate(row.contractId),
   });
 };
+
+/* -------------------- Customer & Partner mutations ------------------- */
+function useInvalidateCustomers() {
+  const qc = useQueryClient();
+  return (id?: string) => {
+    qc.invalidateQueries({ queryKey: qk.customers });
+    qc.invalidateQueries({ queryKey: qk.accounts });
+    qc.invalidateQueries({ queryKey: qk.kpis });
+    qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    if (id) {
+      qc.invalidateQueries({ queryKey: qk.account(id) });
+      qc.invalidateQueries({ queryKey: qk.customerPortal(id) });
+    }
+  };
+}
+
+export const useCreateCustomer = () => {
+  const invalidate = useInvalidateCustomers();
+  return useMutation({
+    mutationFn: (input: api.CustomerInput) => api.createCustomer(input),
+    onSuccess: (c) => invalidate(c.id),
+  });
+};
+
+export const useUpdateCustomer = () => {
+  const invalidate = useInvalidateCustomers();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.CustomerInput }) =>
+      api.updateCustomer(id, input),
+    onSuccess: (c) => invalidate(c.id),
+  });
+};
+
+export const useSetCustomerActive = () => {
+  const invalidate = useInvalidateCustomers();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setCustomerActive(id, active),
+    onSuccess: (c) => invalidate(c.id),
+  });
+};
+
+function useInvalidatePartners() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: qk.partners });
+}
+
+export const useCreatePartner = () => {
+  const invalidate = useInvalidatePartners();
+  return useMutation({ mutationFn: (input: api.PartnerInput) => api.createPartner(input), onSuccess: invalidate });
+};
+
+export const useUpdatePartner = () => {
+  const invalidate = useInvalidatePartners();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.PartnerInput }) => api.updatePartner(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetPartnerActive = () => {
+  const invalidate = useInvalidatePartners();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setPartnerActive(id, active),
+    onSuccess: invalidate,
+  });
+};

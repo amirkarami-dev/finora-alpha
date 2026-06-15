@@ -6,8 +6,10 @@ import type {
   Contract,
   ContractStatus,
   ContractType,
+  Currency,
   Customer,
   CustomerAccount,
+  CustomerType,
   DashboardKpis,
   Incoterm,
   Invoice,
@@ -610,6 +612,103 @@ export async function updateContainer(id: string, input: ContainerInput): Promis
   recomputeItemRemaining(input.itemId);
   reindex();
   return buildContainerRows().find((c) => c.id === id)!;
+}
+
+/* ----------------------------- Customer CRUD ------------------------ */
+export interface CustomerInput {
+  name: string;
+  code: string;
+  defaultCurrency: Currency;
+  customerType: CustomerType;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  country?: string;
+  paymentTermsDays: number;
+  creditLimit: number;
+}
+
+export async function createCustomer(input: CustomerInput): Promise<Customer> {
+  await delay(200);
+  const code = input.code.trim().toUpperCase();
+  const id = `cust-${code.toLowerCase()}`;
+  if (db.customers.some((c) => c.id === id)) throw new Error('duplicate-code');
+  const customer: Customer = {
+    id,
+    name: input.name.trim(),
+    code,
+    defaultCurrency: input.defaultCurrency,
+    customerType: input.customerType,
+    contactName: input.contactName?.trim() || undefined,
+    email: input.email?.trim() || undefined,
+    phone: input.phone?.trim() || undefined,
+    country: input.country?.trim() || undefined,
+    paymentTermsDays: input.paymentTermsDays,
+    creditLimit: input.creditLimit,
+    active: true,
+    createdAt: dayjs().toISOString(),
+  };
+  db.customers.push(customer);
+  reindex();
+  return customer;
+}
+
+export async function updateCustomer(id: string, input: CustomerInput): Promise<Customer> {
+  await delay(200);
+  const customer = db.customers.find((c) => c.id === id);
+  if (!customer) throw new Error(`Customer ${id} not found`);
+  // id, code, createdAt are immutable — mutate the rest in place.
+  customer.name = input.name.trim();
+  customer.defaultCurrency = input.defaultCurrency;
+  customer.customerType = input.customerType;
+  customer.contactName = input.contactName?.trim() || undefined;
+  customer.email = input.email?.trim() || undefined;
+  customer.phone = input.phone?.trim() || undefined;
+  customer.country = input.country?.trim() || undefined;
+  customer.paymentTermsDays = input.paymentTermsDays;
+  customer.creditLimit = input.creditLimit;
+  reindex();
+  return customer;
+}
+
+export async function setCustomerActive(id: string, active: boolean): Promise<Customer> {
+  await delay(160);
+  const customer = db.customers.find((c) => c.id === id);
+  if (!customer) throw new Error(`Customer ${id} not found`);
+  customer.active = active;
+  return customer;
+}
+
+/* ----------------------------- Partner CRUD ------------------------- */
+export interface PartnerInput {
+  name: string;
+  code: string;
+}
+
+export async function createPartner(input: PartnerInput): Promise<Partner> {
+  await delay(180);
+  const code = input.code.trim().toUpperCase();
+  const id = `ptnr-${code.toLowerCase()}`;
+  if (db.partners.some((p) => p.id === id)) throw new Error('duplicate-code');
+  const partner: Partner = { id, name: input.name.trim(), code, active: true };
+  db.partners.push(partner);
+  return partner; // no reindex — nothing in api.ts indexes partners
+}
+
+export async function updatePartner(id: string, input: PartnerInput): Promise<Partner> {
+  await delay(160);
+  const partner = db.partners.find((p) => p.id === id);
+  if (!partner) throw new Error(`Partner ${id} not found`);
+  partner.name = input.name.trim(); // code immutable
+  return partner;
+}
+
+export async function setPartnerActive(id: string, active: boolean): Promise<Partner> {
+  await delay(140);
+  const partner = db.partners.find((p) => p.id === id);
+  if (!partner) throw new Error(`Partner ${id} not found`);
+  partner.active = active;
+  return partner;
 }
 
 /* ----------------------------- Customer Portal ---------------------- */

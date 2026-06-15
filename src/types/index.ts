@@ -28,6 +28,7 @@ export interface Partner {
   id: string;
   name: string;
   code: string;
+  active: boolean;
 }
 
 /** A partner's profit/cost share of one goods line (purchase contracts). */
@@ -52,6 +53,7 @@ export interface Customer {
   creditLimit: number;
   /** Trading role of this party. */
   customerType: CustomerType;
+  active: boolean;
   createdAt: string;
 }
 

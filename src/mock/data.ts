@@ -90,6 +90,7 @@ const partners: Partner[] = PARTNER_SEEDS.map((p) => ({
   id: `ptnr-${p.code.toLowerCase()}`,
   name: p.name,
   code: p.code,
+  active: true,
 }));
 
 interface CustomerSeed {
@@ -168,6 +169,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     paymentTermsDays: seed.terms,
     creditLimit: 0,
     customerType: seed.type,
+    active: true,
     createdAt: TODAY.subtract(intBetween(120, 900), 'day').toISOString(),
   };
   customers.push(customer);
