@@ -49,7 +49,7 @@ export function ContractFormModal({
   const type: ContractType = contract?.contractType ?? contractType ?? 'SELL';
   const allowed: CustomerType[] = type === 'SELL' ? ['BUYER', 'BOTH'] : ['SUPPLIER', 'BOTH'];
   const customerOptions = (() => {
-    const list = (customers ?? []).filter((c) => allowed.includes(c.customerType));
+    const list = (customers ?? []).filter((c) => allowed.includes(c.customerType) && c.active);
     // On edit, keep the current customer selectable even if filtered out.
     if (contract && !list.some((c) => c.id === contract.customerId)) {
       const cur = (customers ?? []).find((c) => c.id === contract.customerId);

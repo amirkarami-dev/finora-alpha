@@ -281,6 +281,11 @@ export function ItemFormModal({ open, onClose, contractId, item, contractType }:
                             options={(partnerList ?? [])
                               .filter(
                                 (p) =>
+                                  p.active ||
+                                  (item?.partners ?? []).some((ap) => ap.partnerId === p.id),
+                              )
+                              .filter(
+                                (p) =>
                                   !(partnersWatch ?? []).some(
                                     (row, i) => i !== field.name && row?.partnerId === p.id,
                                   ),
