@@ -62,8 +62,12 @@ export default function PartnersPage() {
             okText={t('common.yes')}
             cancelText={t('common.no')}
             onConfirm={async () => {
-              await setActive.mutateAsync({ id: r.id, active: !r.active });
-              message.success(r.active ? t('partners.deactivated') : t('partners.activated'));
+              try {
+                await setActive.mutateAsync({ id: r.id, active: !r.active });
+                message.success(r.active ? t('partners.deactivated') : t('partners.activated'));
+              } catch {
+                message.error(t('common.saveFailed'));
+              }
             }}
           >
             <Button type="link" size="small" danger={r.active}>

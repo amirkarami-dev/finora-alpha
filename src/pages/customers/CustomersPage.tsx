@@ -162,8 +162,12 @@ export default function CustomersPage() {
             okText={t('common.yes')}
             cancelText={t('common.no')}
             onConfirm={async () => {
-              await setActive.mutateAsync({ id: r.id, active: !r.active });
-              message.success(r.active ? t('customers.deactivated') : t('customers.activated'));
+              try {
+                await setActive.mutateAsync({ id: r.id, active: !r.active });
+                message.success(r.active ? t('customers.deactivated') : t('customers.activated'));
+              } catch {
+                message.error(t('common.saveFailed'));
+              }
             }}
           >
             <Button type="link" size="small" danger={r.active}>
