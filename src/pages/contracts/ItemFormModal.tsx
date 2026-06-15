@@ -1,6 +1,7 @@
 import {
   App,
   AutoComplete,
+  Button,
   Col,
   Form,
   Input,
@@ -12,13 +13,14 @@ import {
   Typography,
   theme,
 } from 'antd';
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
-import { useCreateItem, useProductNames, useUpdateItem } from '@/services/queries';
+import { useCreateItem, usePartners, useProductNames, useUpdateItem } from '@/services/queries';
 import { CONTRACT_STATUSES, INCOTERMS } from '@/config/constants';
 import { unitPrice } from '@/utils/calc';
 import type { ItemInput } from '@/services/api';
-import type { ContractType, Incoterm, Item, ItemStatus } from '@/types';
+import type { ContractType, Incoterm, Item, ItemPartner, ItemStatus } from '@/types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -33,6 +35,7 @@ interface ItemFormValues {
   incoterm: Incoterm;
   status: ItemStatus;
   notes?: string;
+  partners: ItemPartner[];
 }
 
 interface ItemFormModalProps {
@@ -45,7 +48,7 @@ interface ItemFormModalProps {
   contractType?: ContractType;
 }
 
-export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModalProps) {
+export function ItemFormModal({ open, onClose, contractId, item, contractType }: ItemFormModalProps) {
   const { t } = useTranslation();
   const { token } = theme.useToken();
   const { message } = App.useApp();
@@ -54,6 +57,8 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
   const createMut = useCreateItem();
   const updateMut = useUpdateItem();
   const isEdit = !!item;
+  const isPurchase = contractType === 'PURCHASE';
+  const { data: partnerList } = usePartners();
 
   // Applied on each open: `destroyOnHidden` remounts the form, so initial values
   // are re-read from the current item (edit) or the create defaults.
@@ -68,8 +73,9 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
         incoterm: item.incoterm,
         status: item.status,
         notes: item.notes ?? '',
+        partners: item.partners ?? [],
       }
-    : { lmeFixed: true, lmePercent: 100, premium: 0, incoterm: 'CIF', status: 'ACTIVE' };
+    : { lmeFixed: true, lmePercent: 100, premium: 0, incoterm: 'CIF', status: 'ACTIVE', partners: [] };
 
   // Live pricing preview, mirroring utils/calc.unitPrice.
   const fixedLmePrice = Form.useWatch('fixedLmePrice', form) ?? 0;
@@ -82,6 +88,8 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
   // Floating (LME not fixed) has no fixed price, so the unit price is undetermined.
   const previewUnit = lmeFixed ? unitPrice({ fixedLmePrice, lmePercent, premium }) : 0;
   const previewValue = previewUnit * quantityMt;
+  const partnersWatch = Form.useWatch('partners', form) as ItemPartner[] | undefined;
+  const partnerSum = (partnersWatch ?? []).reduce((s, p) => s + (Number(p?.percent) || 0), 0);
 
   const submit = async () => {
     let values: ItemFormValues;
@@ -89,6 +97,21 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
       values = await form.validateFields();
     } catch {
       return; // validation errors render inline
+    }
+    const partnerRows = isPurchase
+      ? (values.partners ?? []).filter((p) => p?.partnerId && typeof p.percent === 'number')
+      : [];
+    if (isPurchase) {
+      const ids = partnerRows.map((p) => p.partnerId);
+      if (new Set(ids).size !== ids.length) {
+        message.error(t('items.partnerDupError'));
+        return;
+      }
+      const sum = partnerRows.reduce((s, p) => s + p.percent, 0);
+      if (sum > 100) {
+        message.error(t('items.partnerSumError', { sum }));
+        return;
+      }
     }
     const input: ItemInput = {
       product: values.product.trim(),
@@ -100,6 +123,7 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
       incoterm: values.incoterm,
       status: values.status,
       notes: values.notes?.trim() || '',
+      partners: partnerRows,
     };
     try {
       if (isEdit && item) {
@@ -233,6 +257,56 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
         <Form.Item name="notes" label={t('items.notes')}>
           <TextArea rows={2} maxLength={500} showCount />
         </Form.Item>
+
+        {isPurchase && (
+          <div style={{ marginTop: 4 }}>
+            <Text type="secondary" style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 8 }}>
+              {t('items.partners')}
+            </Text>
+            <Form.List name="partners">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map((field) => (
+                    <Row gutter={8} key={field.key} align="top" style={{ marginBottom: 4 }}>
+                      <Col flex="auto">
+                        <Form.Item
+                          name={[field.name, 'partnerId']}
+                          rules={[{ required: true, message: t('common.required') }]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Select
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder={t('items.partner')}
+                            options={(partnerList ?? []).map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col flex="130px">
+                        <Form.Item
+                          name={[field.name, 'percent']}
+                          rules={[{ required: true, message: t('common.required') }]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <InputNumber min={1} max={100} placeholder={t('items.sharePercent')} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                      <Col flex="32px">
+                        <Button type="text" icon={<MinusCircleOutlined />} onClick={() => remove(field.name)} />
+                      </Col>
+                    </Row>
+                  ))}
+                  <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} block style={{ marginTop: 4 }}>
+                    {t('items.addPartner')}
+                  </Button>
+                </>
+              )}
+            </Form.List>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+              {t('items.ownShare', { percent: Math.max(100 - partnerSum, 0) })}
+            </Text>
+          </div>
+        )}
 
         <div
           style={{
