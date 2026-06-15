@@ -21,6 +21,21 @@ export type ContainerStatus = 'OPEN' | 'PAID' | 'OVERDUE';
 
 export type ItemStatus = ContractStatus;
 
+export type CustomerType = 'BUYER' | 'SUPPLIER' | 'BOTH';
+export type ContractType = 'SELL' | 'PURCHASE';
+
+export interface Partner {
+  id: string;
+  name: string;
+  code: string;
+}
+
+/** A partner's profit/cost share of one goods line (purchase contracts). */
+export interface ItemPartner {
+  partnerId: string;
+  percent: number; // > 0; sum across a line ≤ 100 (company keeps 100 − sum)
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -35,6 +50,8 @@ export interface Customer {
   paymentTermsDays: number;
   /** Approved trading credit line in USD (deterministic mock figure). */
   creditLimit: number;
+  /** Trading role of this party. */
+  customerType: CustomerType;
   createdAt: string;
 }
 
@@ -55,11 +72,14 @@ export interface Item {
   notes?: string;
   /** Derived: quantityMt − shipped MT. Persisted for convenience. */
   remainingMt: number;
+  /** Profit/cost-share partners (purchase contracts only; [] otherwise). */
+  partners: ItemPartner[];
 }
 
 export interface Contract {
   id: string;
   customerId: string;
+  contractType: ContractType;
   date: string;
   destination: string;
   status: ContractStatus;

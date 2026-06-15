@@ -5,13 +5,16 @@ import type {
   ContainerStatus,
   Contract,
   ContractStatus,
+  ContractType,
   Customer,
   CustomerAccount,
   DashboardKpis,
   Incoterm,
   Invoice,
   Item,
+  ItemPartner,
   ItemStatus,
+  Partner,
   Payment,
   ProductVolume,
   StatusBreakdown,
@@ -358,6 +361,7 @@ export interface ContractInput {
   destination: string;
   status: ContractStatus;
   notes?: string;
+  contractType?: ContractType;
 }
 
 export interface ItemInput {
@@ -370,11 +374,17 @@ export interface ItemInput {
   incoterm: Incoterm;
   status: ItemStatus;
   notes?: string;
+  partners?: ItemPartner[];
 }
 
 export async function getCustomers(): Promise<Customer[]> {
   await delay(140);
   return [...db.customers].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getPartners(): Promise<Partner[]> {
+  await delay(120);
+  return [...db.partners];
 }
 
 /** Distinct product names seen across the dataset — used to seed the goods form. */
@@ -403,6 +413,7 @@ export async function createContract(input: ContractInput): Promise<ContractRow>
   const contract: Contract = {
     id: nextContractId(customer?.code ?? 'XX', input.date),
     customerId: input.customerId,
+    contractType: input.contractType ?? 'SELL',
     date: input.date,
     destination: input.destination,
     status: input.status,
@@ -454,6 +465,7 @@ export async function createItem(contractId: string, input: ItemInput): Promise<
     notes: input.notes ?? '',
     // A brand-new line has shipped nothing yet.
     remainingMt: input.quantityMt,
+    partners: input.partners ?? [],
   };
   contract.items.push(item);
   reindex();
@@ -480,6 +492,7 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
   target.incoterm = input.incoterm;
   target.status = input.status;
   target.notes = input.notes ?? '';
+  target.partners = input.partners ?? target.partners ?? [];
   // Remaining respects MT already shipped on existing containers.
   const shipped = shippedMt(itemId, db.containers);
   target.remainingMt = Math.round(Math.max(input.quantityMt - shipped, 0) * 1000) / 1000;

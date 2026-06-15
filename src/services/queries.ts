@@ -21,6 +21,7 @@ export const qk = {
   aging: ['aging'] as const,
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
+  partners: ['partners'] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -73,6 +74,7 @@ export const useCustomerPortal = (id: string) =>
   });
 
 export const useCustomers = () => useQuery({ queryKey: qk.customers, queryFn: api.getCustomers });
+export const usePartners = () => useQuery({ queryKey: qk.partners, queryFn: api.getPartners });
 export const useProductNames = () =>
   useQuery({ queryKey: qk.productNames, queryFn: api.getProductNames });
 

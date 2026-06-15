@@ -4,10 +4,14 @@ import type {
   ContainerStatus,
   Contract,
   ContractStatus,
+  ContractType,
   Currency,
   Customer,
+  CustomerType,
   Incoterm,
   Item,
+  ItemPartner,
+  Partner,
   Payment,
 } from '@/types';
 import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
@@ -75,6 +79,19 @@ const INCOTERMS: Incoterm[] = ['FOB', 'CIF', 'CFR', 'CNF', 'EXW', 'DAP'];
 
 const CONTAINER_PREFIXES = ['MSNU', 'DFSU', 'TGHU', 'CAIU', 'TCNU', 'BMOU', 'FCIU', 'GESU'];
 
+const PARTNER_SEEDS: Array<{ name: string; code: string }> = [
+  { name: 'Crescent Capital Partners', code: 'CC' },
+  { name: 'Gulf Metals JV', code: 'GM' },
+  { name: 'Orion Commodities', code: 'OR' },
+  { name: 'Meridian Trading Co', code: 'MT' },
+  { name: 'Apex Resource Partners', code: 'AX' },
+];
+const partners: Partner[] = PARTNER_SEEDS.map((p) => ({
+  id: `ptnr-${p.code.toLowerCase()}`,
+  name: p.name,
+  code: p.code,
+}));
+
 interface CustomerSeed {
   name: string;
   code: string;
@@ -83,23 +100,24 @@ interface CustomerSeed {
   contact: string;
   terms: number;
   contracts: number;
+  type: CustomerType;
 }
 
 const CUSTOMER_SEEDS: CustomerSeed[] = [
-  { name: 'Alco Metal Trading', code: 'AM', currency: 'AED', country: 'UAE', contact: 'Khalid Nasser', terms: 7, contracts: 4 },
-  { name: 'Million Gen Tr', code: 'MG', currency: 'AED', country: 'UAE', contact: 'Rashid Al Falasi', terms: 15, contracts: 5 },
-  { name: 'Al Jesr Scrap Metal Tr', code: 'AJ', currency: 'AED', country: 'UAE', contact: 'Yousef Karim', terms: 10, contracts: 3 },
-  { name: 'Sun Metals Casting LLC', code: 'SM', currency: 'AED', country: 'UAE', contact: 'Imran Sheikh', terms: 30, contracts: 4 },
-  { name: 'Zurich Metal', code: 'ZM', currency: 'USD', country: 'Switzerland', contact: 'Lukas Meier', terms: 30, contracts: 3 },
-  { name: 'Transmetals Trading DMCC', code: 'TM', currency: 'USD', country: 'UAE', contact: 'Daniel Costa', terms: 21, contracts: 5 },
-  { name: 'Ningbo Goosen International', code: 'NG', currency: 'USD', country: 'China', contact: 'Wei Zhang', terms: 14, contracts: 6 },
-  { name: 'Shar International TL', code: 'SH', currency: 'USD', country: 'Turkey', contact: 'Emre Demir', terms: 21, contracts: 3 },
-  { name: 'Abdul Rahman Lobnani', code: 'AR', currency: 'AED', country: 'Lebanon', contact: 'Abdul Rahman', terms: 7, contracts: 2 },
-  { name: 'The Nile Metals', code: 'NM', currency: 'USD', country: 'Egypt', contact: 'Tarek Fouad', terms: 30, contracts: 3 },
-  { name: 'Quick Sea Freight', code: 'QS', currency: 'USD', country: 'India', contact: 'Anil Mehta', terms: 14, contracts: 2 },
-  { name: 'Advanced Cargo & Shipping', code: 'AC', currency: 'USD', country: 'India', contact: 'Vikram Rao', terms: 14, contracts: 2 },
-  { name: 'Goldline Recyclers FZE', code: 'GL', currency: 'AED', country: 'UAE', contact: 'Sara Haddad', terms: 30, contracts: 3 },
-  { name: 'Eurasia Metals GmbH', code: 'EM', currency: 'USD', country: 'Germany', contact: 'Hannah Vogel', terms: 45, contracts: 3 },
+  { name: 'Alco Metal Trading', code: 'AM', currency: 'AED', country: 'UAE', contact: 'Khalid Nasser', terms: 7, contracts: 4, type: 'BUYER' },
+  { name: 'Million Gen Tr', code: 'MG', currency: 'AED', country: 'UAE', contact: 'Rashid Al Falasi', terms: 15, contracts: 5, type: 'BUYER' },
+  { name: 'Al Jesr Scrap Metal Tr', code: 'AJ', currency: 'AED', country: 'UAE', contact: 'Yousef Karim', terms: 10, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Sun Metals Casting LLC', code: 'SM', currency: 'AED', country: 'UAE', contact: 'Imran Sheikh', terms: 30, contracts: 4, type: 'BOTH' },
+  { name: 'Zurich Metal', code: 'ZM', currency: 'USD', country: 'Switzerland', contact: 'Lukas Meier', terms: 30, contracts: 3, type: 'BUYER' },
+  { name: 'Transmetals Trading DMCC', code: 'TM', currency: 'USD', country: 'UAE', contact: 'Daniel Costa', terms: 21, contracts: 5, type: 'BOTH' },
+  { name: 'Ningbo Goosen International', code: 'NG', currency: 'USD', country: 'China', contact: 'Wei Zhang', terms: 14, contracts: 6, type: 'BUYER' },
+  { name: 'Shar International TL', code: 'SH', currency: 'USD', country: 'Turkey', contact: 'Emre Demir', terms: 21, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Abdul Rahman Lobnani', code: 'AR', currency: 'AED', country: 'Lebanon', contact: 'Abdul Rahman', terms: 7, contracts: 2, type: 'SUPPLIER' },
+  { name: 'The Nile Metals', code: 'NM', currency: 'USD', country: 'Egypt', contact: 'Tarek Fouad', terms: 30, contracts: 3, type: 'BUYER' },
+  { name: 'Quick Sea Freight', code: 'QS', currency: 'USD', country: 'India', contact: 'Anil Mehta', terms: 14, contracts: 2, type: 'BOTH' },
+  { name: 'Advanced Cargo & Shipping', code: 'AC', currency: 'USD', country: 'India', contact: 'Vikram Rao', terms: 14, contracts: 2, type: 'BUYER' },
+  { name: 'Goldline Recyclers FZE', code: 'GL', currency: 'AED', country: 'UAE', contact: 'Sara Haddad', terms: 30, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Eurasia Metals GmbH', code: 'EM', currency: 'USD', country: 'Germany', contact: 'Hannah Vogel', terms: 45, contracts: 3, type: 'BOTH' },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -149,11 +167,20 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     country: seed.country,
     paymentTermsDays: seed.terms,
     creditLimit: 0,
+    customerType: seed.type,
     createdAt: TODAY.subtract(intBetween(120, 900), 'day').toISOString(),
   };
   customers.push(customer);
 
   for (let k = 0; k < seed.contracts; k++) {
+    const contractType: ContractType =
+      seed.type === 'BUYER'
+        ? 'SELL'
+        : seed.type === 'SUPPLIER'
+          ? 'PURCHASE'
+          : k % 2 === 0
+            ? 'SELL'
+            : 'PURCHASE';
     const contractDate = TODAY.subtract(intBetween(5, 420), 'day');
     const contractId = `${seed.code}-P-${contractDate.format('YYMMDD')}${intBetween(100, 999)}`;
     const destination = pick(DESTINATIONS);
@@ -179,6 +206,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
         status: 'ACTIVE',
         notes: '',
         remainingMt: quantityMt,
+        partners: [],
       };
       items.push(item);
     }
@@ -186,6 +214,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     const contract: Contract = {
       id: contractId,
       customerId: customer.id,
+      contractType,
       date: contractDate.toISOString(),
       destination,
       status: 'ACTIVE',
@@ -292,10 +321,12 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     status: 'CLOSED',
     notes: 'Reference contract migrated from the legacy workbook.',
     remainingMt: 0,
+    partners: [],
   };
   const contract: Contract = {
     id: contractId,
     customerId: alco.id,
+    contractType: 'SELL',
     date: dayjs('2025-11-19').toISOString(),
     destination: 'NINGBO',
     status: 'CLOSED',
@@ -388,11 +419,38 @@ customers.forEach((customer) => {
   customer.creditLimit = ceilTo(base / util, 250_000);
 });
 
+/* ------------------------------------------------------------------ *
+ * Partner allocations on purchase-contract goods. Appended AFTER the
+ * credit-limit post-pass so earlier PRNG draws (and seeded credit
+ * limits) stay byte-identical. Iterate the live arrays in declaration
+ * order — no sort/filter-into-new-order — to keep determinism.
+ * ------------------------------------------------------------------ */
+for (const contract of contracts) {
+  if (contract.contractType !== 'PURCHASE') continue;
+  for (const item of contract.items) {
+    if (rnd() < 0.6) {
+      const count = rnd() < 0.5 ? 1 : 2;
+      const pool = [...partners];
+      const chosen: ItemPartner[] = [];
+      let sum = 0;
+      for (let i = 0; i < count && pool.length > 0; i++) {
+        const partner = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+        const percent = 5 * intBetween(3, 8); // 15–40
+        if (sum + percent > 80) break; // company keeps ≥ 20%
+        sum += percent;
+        chosen.push({ partnerId: partner.id, percent });
+      }
+      item.partners = chosen;
+    }
+  }
+}
+
 export const db = {
   customers,
   contracts,
   containers,
   payments,
+  partners,
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
