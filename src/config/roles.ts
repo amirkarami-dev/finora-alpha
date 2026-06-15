@@ -11,13 +11,14 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'dashboard',
     'customers',
     'contracts',
+    'partners',
     'containers',
     'invoices',
     'payments',
     'reports',
     'settings',
   ],
-  Staff: ['dashboard', 'customers', 'contracts', 'containers', 'invoices'],
+  Staff: ['dashboard', 'customers', 'contracts', 'partners', 'containers', 'invoices'],
   Customer: ['portal'],
 };
 
@@ -70,6 +71,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'portal', route: ROUTES.portal, icon: 'wallet', group: 'main' },
   { key: 'customers', route: ROUTES.customers, icon: 'team', group: 'operations' },
   { key: 'contracts', route: ROUTES.contracts, icon: 'filetext', group: 'operations' },
+  { key: 'partners', route: ROUTES.partners, icon: 'apartment', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },
   { key: 'invoices', route: ROUTES.invoices, icon: 'filedone', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },

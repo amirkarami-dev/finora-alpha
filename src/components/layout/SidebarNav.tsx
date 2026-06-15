@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Menu, type MenuProps } from 'antd';
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
   BarChartOutlined,
   ContainerOutlined,
@@ -25,6 +26,7 @@ interface Props {
 }
 
 const ICONS: Record<string, ReactNode> = {
+  apartment: <ApartmentOutlined />,
   crown: <CrownOutlined />,
   appstore: <AppstoreOutlined />,
   wallet: <WalletOutlined />,

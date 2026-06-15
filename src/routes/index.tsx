@@ -18,6 +18,7 @@ import InvoicesPage from '@/pages/invoices/InvoicesPage';
 import PaymentsPage from '@/pages/payments/PaymentsPage';
 import ReportsPage from '@/pages/reports/ReportsPage';
 import SettingsPage from '@/pages/settings/SettingsPage';
+import PartnersPage from '@/pages/partners/PartnersPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -66,6 +67,7 @@ export function AppRoutes() {
         <Route path="customers/:id" element={<RoleRoute routeKey="customers"><CustomerDetailPage /></RoleRoute>} />
         <Route path="contracts" element={<RoleRoute routeKey="contracts"><ContractsPage /></RoleRoute>} />
         <Route path="contracts/:id" element={<RoleRoute routeKey="contracts"><ContractDetailPage /></RoleRoute>} />
+        <Route path="partners" element={<RoleRoute routeKey="partners"><PartnersPage /></RoleRoute>} />
         <Route path="containers" element={<RoleRoute routeKey="containers"><ContainersPage /></RoleRoute>} />
         <Route path="invoices" element={<RoleRoute routeKey="invoices"><InvoicesPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
