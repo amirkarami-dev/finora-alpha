@@ -18,7 +18,7 @@ import { useCreateItem, useProductNames, useUpdateItem } from '@/services/querie
 import { CONTRACT_STATUSES, INCOTERMS } from '@/config/constants';
 import { unitPrice } from '@/utils/calc';
 import type { ItemInput } from '@/services/api';
-import type { Incoterm, Item, ItemStatus } from '@/types';
+import type { ContractType, Incoterm, Item, ItemStatus } from '@/types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -41,6 +41,8 @@ interface ItemFormModalProps {
   contractId: string;
   /** When provided the modal edits this item; otherwise it adds a new one. */
   item?: Item;
+  /** Direction of the parent contract; the partner section shows only for PURCHASE. */
+  contractType?: ContractType;
 }
 
 export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModalProps) {
@@ -67,14 +69,18 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
         status: item.status,
         notes: item.notes ?? '',
       }
-    : { lmeFixed: true, premium: 0, incoterm: 'CIF', status: 'ACTIVE' };
+    : { lmeFixed: true, lmePercent: 100, premium: 0, incoterm: 'CIF', status: 'ACTIVE' };
 
   // Live pricing preview, mirroring utils/calc.unitPrice.
   const fixedLmePrice = Form.useWatch('fixedLmePrice', form) ?? 0;
   const lmePercent = Form.useWatch('lmePercent', form) ?? 0;
   const premium = Form.useWatch('premium', form) ?? 0;
   const quantityMt = Form.useWatch('quantityMt', form) ?? 0;
-  const previewUnit = unitPrice({ fixedLmePrice, lmePercent, premium });
+  // When the price is LME-fixed it's a flat fixed price: LME % is locked at 100
+  // (so unit price = fixed price + premium) and the field is disabled.
+  const lmeFixed = (Form.useWatch('lmeFixed', form) ?? initialValues.lmeFixed) ?? false;
+  // Floating (LME not fixed) has no fixed price, so the unit price is undetermined.
+  const previewUnit = lmeFixed ? unitPrice({ fixedLmePrice, lmePercent, premium }) : 0;
   const previewValue = previewUnit * quantityMt;
 
   const submit = async () => {
@@ -89,7 +95,7 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
       quantityMt: values.quantityMt,
       lmePercent: values.lmePercent,
       lmeFixed: values.lmeFixed,
-      fixedLmePrice: values.fixedLmePrice,
+      fixedLmePrice: values.fixedLmePrice ?? 0,
       premium: values.premium ?? 0,
       incoterm: values.incoterm,
       status: values.status,
@@ -128,6 +134,21 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
         layout="vertical"
         preserve={false}
         initialValues={initialValues}
+        onValuesChange={(changed) => {
+          // Switching mode resets the fixed price — it doesn't carry across modes.
+          if (changed.lmeFixed !== undefined) {
+            form.setFieldValue('fixedLmePrice', undefined);
+            form.setFields([{ name: 'fixedLmePrice', errors: [] }]);
+          }
+          // Fixed price → lock LME % to 100; floating → clear it so the user enters it.
+          // Also clear any stale "required" error on the field that just became disabled.
+          if (changed.lmeFixed === true) {
+            form.setFieldValue('lmePercent', 100);
+            form.setFields([{ name: 'lmePercent', errors: [] }]);
+          } else if (changed.lmeFixed === false) {
+            form.setFieldValue('lmePercent', undefined);
+          }
+        }}
       >
         <Form.Item
           name="product"
@@ -168,18 +189,18 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
             <Form.Item
               name="lmePercent"
               label={t('items.lmePercent')}
-              rules={[{ required: true, message: t('common.required') }]}
+              rules={lmeFixed ? [] : [{ required: true, message: t('common.required') }]}
             >
-              <InputNumber min={0} max={200} step={0.01} style={{ width: '100%' }} />
+              <InputNumber min={0} max={200} step={0.01} style={{ width: '100%' }} disabled={lmeFixed} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
             <Form.Item
               name="fixedLmePrice"
               label={t('items.fixedLmePrice')}
-              rules={[{ required: true, message: t('common.required') }]}
+              rules={lmeFixed ? [{ required: true, message: t('common.required') }] : []}
             >
-              <InputNumber min={0} step={1} style={{ width: '100%' }} />
+              <InputNumber min={0} step={1} style={{ width: '100%' }} disabled={!lmeFixed} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
@@ -225,13 +246,13 @@ export function ItemFormModal({ open, onClose, contractId, item }: ItemFormModal
             <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
               {t('items.unitPrice')}
             </Text>
-            <Money value={previewUnit} strong />
+            {lmeFixed ? <Money value={previewUnit} strong /> : <Text type="secondary" strong>—</Text>}
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
               {t('items.value')}
             </Text>
-            <Money value={previewValue} strong />
+            {lmeFixed ? <Money value={previewValue} strong /> : <Text type="secondary" strong>—</Text>}
           </div>
         </div>
       </Form>

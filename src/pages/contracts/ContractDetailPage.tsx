@@ -7,14 +7,12 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { StatusTag } from '@/components/common/StatusTag';
-import { useContainersByContract, useContract } from '@/services/queries';
-import type { ContainerRow } from '@/services/api';
+import { useContract, usePartners } from '@/services/queries';
 import { unitPrice } from '@/utils/calc';
 import { formatDate, formatMt, formatNumber } from '@/utils/format';
 import type { Item } from '@/types';
 import { ContractFormModal } from './ContractFormModal';
 import { ItemFormModal } from './ItemFormModal';
-import { ContainerFormModal } from './ContainerFormModal';
 
 const { Text } = Typography;
 
@@ -24,16 +22,35 @@ export default function ContractDetailPage() {
   const { id = '' } = useParams();
   const contractId = decodeURIComponent(id);
   const { data: contract, isLoading } = useContract(contractId);
-  const { data: containers } = useContainersByContract(contractId);
+  const { data: partners } = usePartners();
+  const partnerName = (id: string) => partners?.find((p) => p.id === id)?.name ?? id;
+  const isPurchase = contract?.contractType === 'PURCHASE';
   const [contractFormOpen, setContractFormOpen] = useState(false);
   const [itemForm, setItemForm] = useState<{ open: boolean; item?: Item }>({ open: false });
-  const [containerForm, setContainerForm] = useState<{ open: boolean; container?: ContainerRow }>({
-    open: false,
-  });
 
   if (!isLoading && !contract) {
     return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />;
   }
+
+  const partnersColumn = {
+    title: t('items.partners'),
+    key: 'partners',
+    width: 260,
+    render: (_: unknown, r: Item) => {
+      if (!r.partners || r.partners.length === 0) return <Text type="secondary">—</Text>;
+      const sum = r.partners.reduce((s, p) => s + p.percent, 0);
+      return (
+        <Space size={[4, 4]} wrap>
+          {r.partners.map((p) => (
+            <Tag key={p.partnerId} color="blue">
+              {t('items.partnerTag', { name: partnerName(p.partnerId), percent: p.percent })}
+            </Tag>
+          ))}
+          <Tag>{t('items.ownShare', { percent: 100 - sum })}</Tag>
+        </Space>
+      );
+    },
+  };
 
   const itemColumns: ColumnsType<Item> = [
     {
@@ -119,6 +136,7 @@ export default function ContractDetailPage() {
       align: 'center',
       render: (v) => <StatusTag status={v} />,
     },
+    ...(isPurchase ? [partnersColumn] : []),
     {
       title: t('common.actions'),
       key: 'actions',
@@ -138,33 +156,6 @@ export default function ContractDetailPage() {
     },
   ];
 
-  const containerColumns: ColumnsType<ContainerRow> = [
-    { title: t('containers.reference'), dataIndex: 'reference', render: (v) => <Text style={{ fontFamily: 'monospace' }}>{v}</Text> },
-    { title: t('containers.quantityMt'), dataIndex: 'quantityMt', align: 'right', render: (v) => formatMt(v) },
-    { title: t('containers.lmePrice'), dataIndex: 'lmePrice', align: 'right', render: (v) => <Money value={v} /> },
-    { title: t('containers.shipmentDate'), dataIndex: 'shipmentDate', render: (v) => formatDate(v) },
-    { title: t('containers.dueDate'), dataIndex: 'dueDate', render: (v) => formatDate(v) },
-    { title: t('containers.invoice'), dataIndex: 'invoiceUSD', align: 'right', render: (v) => <Money value={v} strong /> },
-    { title: t('containers.status'), dataIndex: 'status', align: 'center', render: (v) => <StatusTag status={v} /> },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      fixed: 'right',
-      width: 90,
-      align: 'center',
-      render: (_, r) => (
-        <Button
-          type="link"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={() => setContainerForm({ open: true, container: r })}
-        >
-          {t('common.edit')}
-        </Button>
-      ),
-    },
-  ];
-
   const totalQty = contract?.items.reduce((s, i) => s + i.quantityMt, 0) ?? 0;
   const totalRemaining = contract?.items.reduce((s, i) => s + i.remainingMt, 0) ?? 0;
 
@@ -176,6 +167,11 @@ export default function ContractDetailPage() {
           <Space wrap>
             <span style={{ fontFamily: 'monospace' }}>{contractId}</span>
             {contract && <StatusTag status={contract.status} />}
+            {contract && (
+              <Tag color={contract.contractType === 'SELL' ? 'green' : 'blue'}>
+                {t(contract.contractType === 'SELL' ? 'contracts.typeSell' : 'contracts.typePurchase')}
+              </Tag>
+            )}
           </Space>
         }
         subtitle={contract ? `${contract.customerName} · ${contract.destination}` : t('common.loading')}
@@ -250,7 +246,7 @@ export default function ContractDetailPage() {
           columns={itemColumns}
           dataSource={contract?.items ?? []}
           pagination={false}
-          scroll={{ x: 1410 }}
+          scroll={{ x: isPurchase ? 1670 : 1410 }}
           expandable={{
             expandedRowRender: (r) =>
               r.notes ? (
@@ -261,52 +257,6 @@ export default function ContractDetailPage() {
             rowExpandable: () => true,
           }}
           locale={{ emptyText: <Empty description={t('contracts.noItems')} /> }}
-        />
-      </Card>
-
-      <Card
-        variant="borderless"
-        title={`${t('containers.title')} · ${containers?.length ?? 0}`}
-        style={{ marginTop: 16 }}
-        styles={{ body: { padding: 12 } }}
-        extra={
-          <Button
-            type="primary"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => setContainerForm({ open: true })}
-            disabled={!contract}
-          >
-            {t('containers.addContainer')}
-          </Button>
-        }
-      >
-        <Table<ContainerRow>
-          rowKey="id"
-          columns={containerColumns}
-          dataSource={containers ?? []}
-          pagination={false}
-          scroll={{ x: 1000 }}
-          locale={{ emptyText: <Empty description={t('common.noData')} /> }}
-          expandable={{
-            rowExpandable: () => true,
-            expandedRowRender: (r) => (
-              <Space size="large" wrap>
-                <span>
-                  <Text type="secondary">{t('containers.blNumber')}: </Text>
-                  {r.blNumber || t('common.none')}
-                </span>
-                <span>
-                  <Text type="secondary">{t('containers.bookingNumber')}: </Text>
-                  {r.bookingNumber || t('common.none')}
-                </span>
-                <span>
-                  <Text type="secondary">{t('containers.sealNumber')}: </Text>
-                  {r.sealNumber || t('common.none')}
-                </span>
-              </Space>
-            ),
-          }}
         />
       </Card>
 
@@ -323,15 +273,8 @@ export default function ContractDetailPage() {
         onClose={() => setItemForm((s) => ({ ...s, open: false }))}
         contractId={contractId}
         item={itemForm.item}
+        contractType={contract?.contractType}
       />
-      {contract && (
-        <ContainerFormModal
-          open={containerForm.open}
-          onClose={() => setContainerForm((s) => ({ ...s, open: false }))}
-          contract={contract}
-          container={containerForm.container}
-        />
-      )}
     </div>
   );
 }
