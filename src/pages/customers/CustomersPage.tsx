@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
-import { App, Avatar, Button, Card, Input, Space, Table, Tag, Typography, theme } from 'antd';
+import { App, Avatar, Button, Card, Input, Popconfirm, Segmented, Space, Table, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
-import { useAccounts } from '@/services/queries';
+import { useAccounts, useSetCustomerActive } from '@/services/queries';
 import { initials } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
 import type { CustomerAccount, CustomerType } from '@/types';
+import { CustomerFormModal } from './CustomerFormModal';
 
 const { Text } = Typography;
 
@@ -20,14 +21,19 @@ export default function CustomersPage() {
   const navigate = useNavigate();
   const { data, isLoading } = useAccounts();
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [formState, setFormState] = useState<{ open: boolean; customer?: CustomerAccount }>({ open: false });
+  const setActive = useSetCustomerActive();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return data ?? [];
-    return (data ?? []).filter(
-      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
-    );
-  }, [data, search]);
+    return (data ?? []).filter((c) => {
+      const matchesStatus =
+        statusFilter === 'all' ? true : statusFilter === 'active' ? c.active : !c.active;
+      const matchesQ = !q || c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+      return matchesStatus && matchesQ;
+    });
+  }, [data, search, statusFilter]);
 
   const columns: ColumnsType<CustomerAccount> = [
     {
@@ -42,7 +48,12 @@ export default function CustomersPage() {
             {initials(r.name)}
           </Avatar>
           <div style={{ lineHeight: 1.3 }}>
-            <div style={{ fontWeight: 600 }}>{r.name}</div>
+            <div style={{ fontWeight: 600 }}>
+              {r.name}
+              {!r.active && (
+                <Tag style={{ marginInlineStart: 8 }}>{t('common.inactive')}</Tag>
+              )}
+            </div>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {r.code} · {r.country}
             </Text>
@@ -126,6 +137,42 @@ export default function CustomersPage() {
       align: 'center',
       sorter: (a, b) => a.contractCount - b.contractCount,
     },
+    {
+      title: t('common.actions'),
+      key: 'actions',
+      fixed: 'right',
+      width: 180,
+      align: 'right',
+      onCell: () => ({ onClick: (e) => e.stopPropagation() }),
+      render: (_, r) => (
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFormState({ open: true, customer: r });
+            }}
+          >
+            {t('common.edit')}
+          </Button>
+          <Popconfirm
+            title={r.active ? t('common.deactivateConfirm') : t('common.activateConfirm')}
+            okText={t('common.yes')}
+            cancelText={t('common.no')}
+            onConfirm={async () => {
+              await setActive.mutateAsync({ id: r.id, active: !r.active });
+              message.success(r.active ? t('customers.deactivated') : t('customers.activated'));
+            }}
+          >
+            <Button type="link" size="small" danger={r.active}>
+              {r.active ? t('common.deactivate') : t('common.activate')}
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
   ];
 
   return (
@@ -134,7 +181,7 @@ export default function CustomersPage() {
         title={t('customers.title')}
         subtitle={t('customers.subtitle')}
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => message.info(t('common.comingSoon'))}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormState({ open: true, customer: undefined })}>
             {t('customers.newCustomer')}
           </Button>
         }
@@ -150,18 +197,34 @@ export default function CustomersPage() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 300 }}
           />
-          <Text type="secondary">{t('customers.totalCustomers', { count: filtered.length })}</Text>
+          <Space wrap>
+            <Segmented
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}
+              options={[
+                { label: t('common.active'), value: 'active' },
+                { label: t('common.inactive'), value: 'inactive' },
+                { label: t('common.all'), value: 'all' },
+              ]}
+            />
+            <Text type="secondary">{t('customers.totalCustomers', { count: filtered.length })}</Text>
+          </Space>
         </div>
         <Table<CustomerAccount>
           rowKey="id"
           loading={isLoading}
           columns={columns}
           dataSource={filtered}
-          scroll={{ x: 1150 }}
+          scroll={{ x: 1330 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
           onRow={(r) => ({ onClick: () => navigate(`${ROUTES.customers}/${r.id}`), className: 'clickable-row' })}
         />
       </Card>
+      <CustomerFormModal
+        open={formState.open}
+        onClose={() => setFormState((s) => ({ ...s, open: false }))}
+        customer={formState.customer}
+      />
     </div>
   );
 }
