@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { useCreateContract, useCustomers, useUpdateContract } from '@/services/queries';
 import { CONTRACT_STATUSES, ROUTES } from '@/config/constants';
 import type { ContractInput } from '@/services/api';
-import type { Contract, ContractStatus } from '@/types';
+import type { Contract, ContractStatus, ContractType } from '@/types';
 
 const { TextArea } = Input;
 
@@ -26,6 +26,8 @@ interface ContractFormModalProps {
   defaultCustomerId?: string;
   /** Open the new contract's detail page after a successful create. Default: true. */
   navigateOnCreate?: boolean;
+  /** Contract direction for a new contract (ignored on edit, which keeps its own). */
+  contractType?: ContractType;
 }
 
 export function ContractFormModal({
@@ -34,6 +36,7 @@ export function ContractFormModal({
   contract,
   defaultCustomerId,
   navigateOnCreate = true,
+  contractType: _contractType,
 }: ContractFormModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();

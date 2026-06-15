@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Input, Progress, Segmented, Table, Tag, Typography, theme } from 'antd';
+import { Button, Card, Input, Progress, Segmented, Table, Tabs, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { useContracts } from '@/services/queries';
 import type { ContractRow } from '@/services/api';
 import { formatDate, formatMt } from '@/utils/format';
 import { CONTRACT_STATUSES, ROUTES } from '@/config/constants';
-import type { ContractStatus } from '@/types';
+import type { ContractStatus, ContractType } from '@/types';
 import { ContractFormModal } from './ContractFormModal';
 
 const { Text } = Typography;
@@ -25,6 +25,10 @@ export default function ContractsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
   const [formOpen, setFormOpen] = useState(false);
+  const [tab, setTab] = useState<ContractType>('SELL');
+
+  const sellCount = (data ?? []).filter((c) => c.contractType === 'SELL').length;
+  const purchaseCount = (data ?? []).filter((c) => c.contractType === 'PURCHASE').length;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -35,9 +39,9 @@ export default function ContractsPage() {
         c.customerName.toLowerCase().includes(q) ||
         c.destination.toLowerCase().includes(q);
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
-      return matchesQ && matchesStatus;
+      return matchesQ && matchesStatus && c.contractType === tab;
     });
-  }, [data, search, statusFilter]);
+  }, [data, search, statusFilter, tab]);
 
   const columns: ColumnsType<ContractRow> = [
     {
@@ -124,6 +128,14 @@ export default function ContractsPage() {
       />
 
       <Card variant="borderless" styles={{ body: { padding: 16 } }}>
+        <Tabs
+          activeKey={tab}
+          onChange={(k) => setTab(k as ContractType)}
+          items={[
+            { key: 'SELL', label: `${t('contracts.sellTab')} (${sellCount})` },
+            { key: 'PURCHASE', label: `${t('contracts.purchaseTab')} (${purchaseCount})` },
+          ]}
+        />
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <Input
             allowClear
@@ -156,7 +168,7 @@ export default function ContractsPage() {
         />
       </Card>
 
-      <ContractFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <ContractFormModal open={formOpen} onClose={() => setFormOpen(false)} contractType={tab} />
     </div>
   );
 }
