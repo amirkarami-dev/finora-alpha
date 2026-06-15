@@ -51,7 +51,13 @@
     "comingSoon": "Coming soon",
     "required": "Required",
     "saveFailed": "Couldn't save changes",
-    "days": "days"
+    "days": "days",
+    "active": "Active",
+    "inactive": "Inactive",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "deactivateConfirm": "Deactivate this record?",
+    "activateConfirm": "Activate this record?"
   },
   "nav": {
     "executive": "Executive",
@@ -64,6 +70,7 @@
     "reports": "Reports",
     "settings": "Settings",
     "portal": "My Account",
+    "partners": "Partners",
     "main": "Main",
     "operations": "Operations",
     "finance": "Finance",
@@ -185,7 +192,25 @@
     "ledger": "Ledger",
     "profile": "Profile",
     "creditUsed": "Credit used",
-    "type": "Type"
+    "type": "Type",
+    "nameLabel": "Name",
+    "termsLabel": "Payment terms (days)",
+    "creditLimit": "Credit limit",
+    "phone": "Phone",
+    "editCustomer": "Edit customer",
+    "created": "Customer created",
+    "updated": "Customer updated",
+    "deactivated": "Customer deactivated",
+    "activated": "Customer activated",
+    "status": "Status",
+    "codeTaken": "This code is already in use",
+    "codeInvalid": "Letters, numbers and hyphens only",
+    "emailInvalid": "Enter a valid email",
+    "namePlaceholder": "e.g. Alco Metal Trading",
+    "codePlaceholder": "e.g. AM",
+    "emailPlaceholder": "name@company.com",
+    "phonePlaceholder": "+971 50 000 0000",
+    "countryPlaceholder": "e.g. UAE"
   },
   "contracts": {
     "title": "Contracts",
@@ -361,6 +386,22 @@
     "BUYER": "Buyer",
     "SUPPLIER": "Supplier",
     "BOTH": "Buyer & supplier"
+  },
+  "partners": {
+    "title": "Partners",
+    "subtitle": "Joint-venture partners for purchase deals",
+    "newPartner": "New partner",
+    "editPartner": "Edit partner",
+    "name": "Name",
+    "code": "Code",
+    "created": "Partner created",
+    "updated": "Partner updated",
+    "deactivated": "Partner deactivated",
+    "activated": "Partner activated",
+    "codeTaken": "This code is already in use",
+    "codeInvalid": "Letters, numbers and hyphens only",
+    "namePlaceholder": "e.g. Crescent Capital Partners",
+    "codePlaceholder": "e.g. CC"
   },
   "executive": {
     "subtitle": "Company performance at a glance",

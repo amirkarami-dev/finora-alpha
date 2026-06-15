@@ -51,7 +51,13 @@
     "comingSoon": "قريباً",
     "required": "مطلوب",
     "saveFailed": "تعذّر حفظ التغييرات",
-    "days": "يوم"
+    "days": "يوم",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "activate": "تفعيل",
+    "deactivate": "إلغاء التفعيل",
+    "deactivateConfirm": "إلغاء تفعيل هذا السجل؟",
+    "activateConfirm": "تفعيل هذا السجل؟"
   },
   "nav": {
     "executive": "الإدارة التنفيذية",
@@ -64,6 +70,7 @@
     "reports": "التقارير",
     "settings": "الإعدادات",
     "portal": "حسابي",
+    "partners": "الشركاء",
     "main": "الرئيسية",
     "operations": "العمليات",
     "finance": "المالية",
@@ -185,7 +192,25 @@
     "ledger": "دفتر الأستاذ",
     "profile": "الملف",
     "creditUsed": "الائتمان المستخدم",
-    "type": "النوع"
+    "type": "النوع",
+    "nameLabel": "الاسم",
+    "termsLabel": "مدة السداد (أيام)",
+    "creditLimit": "حد الائتمان",
+    "phone": "الهاتف",
+    "editCustomer": "تعديل العميل",
+    "created": "تم إنشاء العميل",
+    "updated": "تم تحديث العميل",
+    "deactivated": "تم إلغاء تفعيل العميل",
+    "activated": "تم تفعيل العميل",
+    "status": "الحالة",
+    "codeTaken": "هذا الرمز مستخدم بالفعل",
+    "codeInvalid": "أحرف وأرقام وشرطات فقط",
+    "emailInvalid": "أدخل بريداً إلكترونياً صحيحاً",
+    "namePlaceholder": "مثال: ألكو لتجارة المعادن",
+    "codePlaceholder": "مثال: AM",
+    "emailPlaceholder": "name@company.com",
+    "phonePlaceholder": "+971 50 000 0000",
+    "countryPlaceholder": "مثال: الإمارات"
   },
   "contracts": {
     "title": "العقود",
@@ -361,6 +386,22 @@
     "BUYER": "مشترٍ",
     "SUPPLIER": "مورّد",
     "BOTH": "مشترٍ ومورّد"
+  },
+  "partners": {
+    "title": "الشركاء",
+    "subtitle": "شركاء المشاريع المشتركة لصفقات الشراء",
+    "newPartner": "شريك جديد",
+    "editPartner": "تعديل الشريك",
+    "name": "الاسم",
+    "code": "الرمز",
+    "created": "تم إنشاء الشريك",
+    "updated": "تم تحديث الشريك",
+    "deactivated": "تم إلغاء تفعيل الشريك",
+    "activated": "تم تفعيل الشريك",
+    "codeTaken": "هذا الرمز مستخدم بالفعل",
+    "codeInvalid": "أحرف وأرقام وشرطات فقط",
+    "namePlaceholder": "مثال: كريسنت كابيتال بارتنرز",
+    "codePlaceholder": "مثال: CC"
   },
   "executive": {
     "subtitle": "أداء الشركة في لمحة",

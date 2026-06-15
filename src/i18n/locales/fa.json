@@ -51,7 +51,13 @@
     "comingSoon": "به‌زودی",
     "required": "الزامی",
     "saveFailed": "ذخیره تغییرات ممکن نشد",
-    "days": "روز"
+    "days": "روز",
+    "active": "فعال",
+    "inactive": "غیرفعال",
+    "activate": "فعال‌سازی",
+    "deactivate": "غیرفعال‌سازی",
+    "deactivateConfirm": "این مورد غیرفعال شود؟",
+    "activateConfirm": "این مورد فعال شود؟"
   },
   "nav": {
     "executive": "مدیریت اجرایی",
@@ -64,6 +70,7 @@
     "reports": "گزارش‌ها",
     "settings": "تنظیمات",
     "portal": "حساب من",
+    "partners": "شرکا",
     "main": "اصلی",
     "operations": "عملیات",
     "finance": "مالی",
@@ -185,7 +192,25 @@
     "ledger": "دفتر معین",
     "profile": "پروفایل",
     "creditUsed": "اعتبار مصرف‌شده",
-    "type": "نوع"
+    "type": "نوع",
+    "nameLabel": "نام",
+    "termsLabel": "مهلت پرداخت (روز)",
+    "creditLimit": "سقف اعتبار",
+    "phone": "تلفن",
+    "editCustomer": "ویرایش مشتری",
+    "created": "مشتری ایجاد شد",
+    "updated": "مشتری به‌روزرسانی شد",
+    "deactivated": "مشتری غیرفعال شد",
+    "activated": "مشتری فعال شد",
+    "status": "وضعیت",
+    "codeTaken": "این کد قبلاً استفاده شده است",
+    "codeInvalid": "فقط حروف، اعداد و خط تیره",
+    "emailInvalid": "ایمیل معتبر وارد کنید",
+    "namePlaceholder": "مثال: آلکو متال تریدینگ",
+    "codePlaceholder": "مثال: AM",
+    "emailPlaceholder": "name@company.com",
+    "phonePlaceholder": "+971 50 000 0000",
+    "countryPlaceholder": "مثال: امارات"
   },
   "contracts": {
     "title": "قراردادها",
@@ -361,6 +386,22 @@
     "BUYER": "خریدار",
     "SUPPLIER": "تأمین‌کننده",
     "BOTH": "خریدار و تأمین‌کننده"
+  },
+  "partners": {
+    "title": "شرکا",
+    "subtitle": "شرکای سرمایه‌گذاری مشترک برای معاملات خرید",
+    "newPartner": "شریک جدید",
+    "editPartner": "ویرایش شریک",
+    "name": "نام",
+    "code": "کد",
+    "created": "شریک ایجاد شد",
+    "updated": "شریک به‌روزرسانی شد",
+    "deactivated": "شریک غیرفعال شد",
+    "activated": "شریک فعال شد",
+    "codeTaken": "این کد قبلاً استفاده شده است",
+    "codeInvalid": "فقط حروف، اعداد و خط تیره",
+    "namePlaceholder": "مثال: کرسنت کپیتال پارتنرز",
+    "codePlaceholder": "مثال: CC"
   },
   "executive": {
     "subtitle": "عملکرد شرکت در یک نگاه",
