@@ -278,7 +278,14 @@ export function ItemFormModal({ open, onClose, contractId, item, contractType }:
                             showSearch
                             optionFilterProp="label"
                             placeholder={t('items.partner')}
-                            options={(partnerList ?? []).map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
+                            options={(partnerList ?? [])
+                              .filter(
+                                (p) =>
+                                  !(partnersWatch ?? []).some(
+                                    (row, i) => i !== field.name && row?.partnerId === p.id,
+                                  ),
+                              )
+                              .map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
                           />
                         </Form.Item>
                       </Col>
@@ -288,7 +295,7 @@ export function ItemFormModal({ open, onClose, contractId, item, contractType }:
                           rules={[{ required: true, message: t('common.required') }]}
                           style={{ marginBottom: 0 }}
                         >
-                          <InputNumber min={1} max={100} placeholder={t('items.sharePercent')} style={{ width: '100%' }} />
+                          <InputNumber min={1} max={100} precision={0} placeholder={t('items.sharePercent')} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col flex="32px">

@@ -37,7 +37,7 @@ export default function ContractDetailPage() {
     key: 'partners',
     width: 260,
     render: (_: unknown, r: Item) => {
-      if (!r.partners || r.partners.length === 0) return <Text type="secondary">—</Text>;
+      if (!r.partners || r.partners.length === 0) return <Text type="secondary">{t('items.noPartners')}</Text>;
       const sum = r.partners.reduce((s, p) => s + p.percent, 0);
       return (
         <Space size={[4, 4]} wrap>
@@ -46,7 +46,7 @@ export default function ContractDetailPage() {
               {t('items.partnerTag', { name: partnerName(p.partnerId), percent: p.percent })}
             </Tag>
           ))}
-          <Tag>{t('items.ownShare', { percent: 100 - sum })}</Tag>
+          <Tag>{t('items.ownShare', { percent: Math.max(100 - sum, 0) })}</Tag>
         </Space>
       );
     },

@@ -9,7 +9,7 @@ import { Money } from '@/components/common/Money';
 import { useAccounts } from '@/services/queries';
 import { initials } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
-import type { CustomerAccount } from '@/types';
+import type { CustomerAccount, CustomerType } from '@/types';
 
 const { Text } = Typography;
 
@@ -61,6 +61,22 @@ export default function CustomersPage() {
       ],
       onFilter: (v, r) => r.defaultCurrency === v,
       render: (v) => <Tag>{v}</Tag>,
+    },
+    {
+      title: t('customers.type'),
+      dataIndex: 'customerType',
+      width: 150,
+      align: 'center',
+      filters: [
+        { text: t('customerTypes.BUYER'), value: 'BUYER' },
+        { text: t('customerTypes.SUPPLIER'), value: 'SUPPLIER' },
+        { text: t('customerTypes.BOTH'), value: 'BOTH' },
+      ],
+      onFilter: (v, r) => r.customerType === v,
+      render: (v: CustomerType) => {
+        const color = v === 'BUYER' ? 'green' : v === 'SUPPLIER' ? 'gold' : 'purple';
+        return <Tag color={color}>{t(`customerTypes.${v}`)}</Tag>;
+      },
     },
     {
       title: t('customers.terms'),
@@ -141,7 +157,7 @@ export default function CustomersPage() {
           loading={isLoading}
           columns={columns}
           dataSource={filtered}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1150 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
           onRow={(r) => ({ onClick: () => navigate(`${ROUTES.customers}/${r.id}`), className: 'clickable-row' })}
         />
