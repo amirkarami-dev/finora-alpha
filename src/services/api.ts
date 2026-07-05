@@ -202,12 +202,18 @@ export async function getInvoices(): Promise<ShipmentInvoice[]> {
 /* ----------------------------- Payments ----------------------------- */
 export interface PaymentRow extends Payment {
   customerName: string;
+  /** Number of the trade invoice this payment is recorded against, when linked. */
+  invoiceNumber?: string;
 }
 
 export async function getPayments(): Promise<PaymentRow[]> {
   await delay();
   return db.payments
-    .map((p) => ({ ...p, customerName: customerById.get(p.customerId)?.name ?? '—' }))
+    .map((p) => ({
+      ...p,
+      customerName: customerById.get(p.customerId)?.name ?? '—',
+      invoiceNumber: p.invoiceId ? findInvoice(p.invoiceId)?.invoiceNumber : undefined,
+    }))
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 

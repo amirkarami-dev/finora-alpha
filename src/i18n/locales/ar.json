@@ -415,7 +415,16 @@
     "subtotal": "المجموع الفرعي",
     "grandTotal": "الإجمالي الكلي",
     "preparedBy": "أُعدّ بواسطة",
-    "authorizedBy": "التوقيع المعتمد"
+    "authorizedBy": "التوقيع المعتمد",
+    "recordPayment": "تسجيل دفعة",
+    "recordPaymentContext": "دفعة للمستند {{number}}",
+    "paymentRecorded": "تم تسجيل الدفعة",
+    "payments": "المدفوعات",
+    "noPaymentsYet": "لا توجد مدفوعات مسجلة بعد",
+    "recordedOn": "مسجلة على",
+    "paidToDate": "المدفوع حتى الآن",
+    "remaining": "المتبقي",
+    "overpaidBy": "دفع زائد بمقدار {{amount}}"
   },
   "warehouse": {
     "title": "المستودع",
@@ -463,7 +472,11 @@
     "method": "الطريقة",
     "reference": "المرجع",
     "notes": "ملاحظات",
-    "totalReceived": "إجمالي المستلم"
+    "totalReceived": "إجمالي المستلم",
+    "direction": "الاتجاه",
+    "directionIn": "وارد",
+    "directionOut": "صادر",
+    "invoiceColumn": "الفاتورة"
   },
   "reports": {
     "title": "التقارير",

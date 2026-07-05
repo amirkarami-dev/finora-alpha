@@ -415,7 +415,16 @@
     "subtotal": "جمع جزء",
     "grandTotal": "جمع کل نهایی",
     "preparedBy": "تهیه‌کننده",
-    "authorizedBy": "امضای مجاز"
+    "authorizedBy": "امضای مجاز",
+    "recordPayment": "ثبت پرداخت",
+    "recordPaymentContext": "پرداخت برای {{number}}",
+    "paymentRecorded": "پرداخت ثبت شد",
+    "payments": "پرداخت‌ها",
+    "noPaymentsYet": "هنوز پرداختی ثبت نشده است",
+    "recordedOn": "ثبت‌شده روی",
+    "paidToDate": "پرداخت‌شده تاکنون",
+    "remaining": "باقی‌مانده",
+    "overpaidBy": "اضافه‌پرداخت به مبلغ {{amount}}"
   },
   "warehouse": {
     "title": "انبار",
@@ -463,7 +472,11 @@
     "method": "روش",
     "reference": "مرجع",
     "notes": "یادداشت",
-    "totalReceived": "کل دریافتی"
+    "totalReceived": "کل دریافتی",
+    "direction": "جهت",
+    "directionIn": "دریافتی",
+    "directionOut": "پرداختی",
+    "invoiceColumn": "فاکتور"
   },
   "reports": {
     "title": "گزارش‌ها",

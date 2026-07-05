@@ -10,8 +10,10 @@ import {
   Empty,
   InputNumber,
   Popconfirm,
+  Progress,
   Result,
   Space,
+  Statistic,
   Table,
   Tag,
   Typography,
@@ -23,6 +25,7 @@ import {
   ArrowRightOutlined,
   CheckOutlined,
   CloseOutlined,
+  DollarOutlined,
   EditOutlined,
   LinkOutlined,
   PlusOutlined,
@@ -35,6 +38,7 @@ import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
+import { PaymentMethodTag } from '@/components/common/StatusTag';
 import { InvoiceStatusTag } from './statusColors';
 import {
   useApplyLmePrice,
@@ -47,13 +51,14 @@ import {
   useTradeInvoice,
 } from '@/services/queries';
 import { invoiceItemUnitPrice } from '@/utils/calc';
-import { formatDate, formatMt } from '@/utils/format';
+import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
-import type { InvoiceItem, InvoiceSide, InvoiceType } from '@/types';
+import type { InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
 import { CreateInvoiceModal } from './CreateInvoiceModal';
 import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
 import { EditLineModal } from './EditLineModal';
+import { RecordPaymentModal } from './RecordPaymentModal';
 
 const { Text } = Typography;
 
@@ -74,7 +79,7 @@ const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
   SALE_INVOICE: [],
 };
 
-type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | null;
+type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'payment' | null;
 
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
@@ -117,13 +122,19 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const { invoice, contract, customerName, refInvoice, successor } = data;
+  const { invoice, contract, customerName, refInvoice, successor, chain, payments, paidUSD, remainingUSD } = data;
   const side = invoiceSide(invoice.invoiceType);
   const isDraft = invoice.status === 'DRAFT';
   const isConfirmed = invoice.status === 'CONFIRMED';
   const isSaleFinal = invoice.invoiceType === 'SALE_INVOICE';
   const priced = isPricedType(invoice.invoiceType);
   const canSend = invoice.invoiceType !== 'PURCHASE_ORDER' && invoice.invoiceType !== 'SALE_ORDER';
+  // Payments apply to provisional/final documents only (spec §7) — orders are unpriced.
+  const canRecordPayment = priced;
+  const invoiceNumberById = new Map(chain.map((c) => [c.id, c.invoiceNumber]));
+  const isOverpaid = paidUSD > invoice.totalAmount;
+  const progressPercent =
+    invoice.totalAmount > 0 ? Math.min((paidUSD / invoice.totalAmount) * 100, 100) : 0;
 
   const stockByProduct = new Map<string, number>();
   if (stockLevels) {
@@ -439,6 +450,16 @@ export default function InvoiceDetailPage() {
                     <Button icon={<SendOutlined />}>{t('tradeInvoices.send')}</Button>
                   </Popconfirm>
                 )}
+                {canRecordPayment && (
+                  <Button
+                    type="primary"
+                    ghost
+                    icon={<DollarOutlined />}
+                    onClick={() => setActiveModal('payment')}
+                  >
+                    {t('tradeInvoices.recordPayment')}
+                  </Button>
+                )}
                 <Button
                   icon={<PrinterOutlined />}
                   onClick={() => navigate(`/app/invoices/${encodeURIComponent(invoice.id)}/print`)}
@@ -586,6 +607,83 @@ export default function InvoiceDetailPage() {
         />
       </Card>
 
+      {canRecordPayment && (isConfirmed || payments.length > 0) && (
+        <Card
+          variant="borderless"
+          title={`${t('tradeInvoices.payments')} · ${payments.length}`}
+          style={{ marginTop: 16 }}
+          styles={{ body: { padding: 12 } }}
+        >
+          <Table<Payment>
+            rowKey="id"
+            pagination={false}
+            dataSource={payments}
+            locale={{ emptyText: <Empty description={t('tradeInvoices.noPaymentsYet')} /> }}
+            columns={
+              [
+                {
+                  title: t('tradeInvoices.recordedOn'),
+                  key: 'recordedOn',
+                  width: 150,
+                  render: (_, r) => (
+                    <Text style={{ fontFamily: 'monospace' }}>
+                      {(r.invoiceId && invoiceNumberById.get(r.invoiceId)) || '—'}
+                    </Text>
+                  ),
+                },
+                {
+                  title: t('payments.date'),
+                  dataIndex: 'date',
+                  width: 120,
+                  render: (v) => formatDate(v),
+                },
+                {
+                  title: t('payments.method'),
+                  dataIndex: 'method',
+                  width: 120,
+                  render: (v) => <PaymentMethodTag method={v} />,
+                },
+                {
+                  title: t('payments.amount'),
+                  key: 'amount',
+                  width: 150,
+                  align: 'right',
+                  render: (_, r) => <Money value={r.amount} currency={r.currency} />,
+                },
+                {
+                  title: t('payments.amountUsd'),
+                  dataIndex: 'amountUSD',
+                  width: 150,
+                  align: 'right',
+                  render: (v) => <Money value={v} strong />,
+                },
+                {
+                  title: t('payments.notes'),
+                  dataIndex: 'notes',
+                  ellipsis: true,
+                  render: (v?: string) => v || <Text type="secondary">—</Text>,
+                },
+              ] as ColumnsType<Payment>
+            }
+          />
+          <div style={{ marginTop: 16, display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <Statistic title={t('tradeInvoices.paidToDate')} value={undefined} valueRender={() => <Money value={paidUSD} strong />} />
+            <Statistic title={t('tradeInvoices.remaining')} value={undefined} valueRender={() => <Money value={remainingUSD} strong />} />
+            <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+              <Progress
+                percent={progressPercent}
+                status={remainingUSD === 0 && paidUSD > 0 ? 'success' : 'active'}
+              />
+            </div>
+          </div>
+          {isOverpaid && (
+            <Text type="warning" style={{ display: 'block', marginTop: 8 }}>
+              {t('tradeInvoices.overpaidBy', { amount: formatCurrency(paidUSD - invoice.totalAmount, 'USD') })}
+            </Text>
+          )}
+        </Card>
+      )}
+
       {isDraft && (
         <>
           <CreateInvoiceModal
@@ -621,6 +719,14 @@ export default function InvoiceDetailPage() {
         </>
       )}
 
+      {canRecordPayment && (
+        <RecordPaymentModal
+          open={activeModal === 'payment'}
+          onClose={() => setActiveModal(null)}
+          invoice={invoice}
+          remainingUSD={remainingUSD}
+        />
+      )}
     </div>
   );
 }

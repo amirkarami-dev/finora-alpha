@@ -415,7 +415,16 @@
     "subtotal": "Subtotal",
     "grandTotal": "Grand total",
     "preparedBy": "Prepared by",
-    "authorizedBy": "Authorized signatory"
+    "authorizedBy": "Authorized signatory",
+    "recordPayment": "Record payment",
+    "recordPaymentContext": "Payment for {{number}}",
+    "paymentRecorded": "Payment recorded",
+    "payments": "Payments",
+    "noPaymentsYet": "No payments recorded yet",
+    "recordedOn": "Recorded on",
+    "paidToDate": "Paid to date",
+    "remaining": "Remaining",
+    "overpaidBy": "Overpaid by {{amount}}"
   },
   "warehouse": {
     "title": "Warehouse",
@@ -463,7 +472,11 @@
     "method": "Method",
     "reference": "Reference",
     "notes": "Notes",
-    "totalReceived": "Total received"
+    "totalReceived": "Total received",
+    "direction": "Direction",
+    "directionIn": "In",
+    "directionOut": "Out",
+    "invoiceColumn": "Invoice"
   },
   "reports": {
     "title": "Reports",
