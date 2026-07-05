@@ -411,7 +411,11 @@
     "uninvoicedHint": "{{mt}} uninvoiced",
     "exceedsUninvoiced": "Exceeds uninvoiced quantity ({{mt}})",
     "headerUpdated": "Document header updated",
-    "numberTaken": "This number is already used by another document of this type"
+    "numberTaken": "This number is already used by another document of this type",
+    "subtotal": "Subtotal",
+    "grandTotal": "Grand total",
+    "preparedBy": "Prepared by",
+    "authorizedBy": "Authorized signatory"
   },
   "warehouse": {
     "title": "Warehouse",

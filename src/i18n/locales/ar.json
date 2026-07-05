@@ -411,7 +411,11 @@
     "uninvoicedHint": "{{mt}} غير مفوترة",
     "exceedsUninvoiced": "يتجاوز الكمية غير المفوترة ({{mt}})",
     "headerUpdated": "تم تحديث ترويسة المستند",
-    "numberTaken": "هذا الرقم مستخدم بالفعل لمستند آخر من نفس النوع"
+    "numberTaken": "هذا الرقم مستخدم بالفعل لمستند آخر من نفس النوع",
+    "subtotal": "المجموع الفرعي",
+    "grandTotal": "الإجمالي الكلي",
+    "preparedBy": "أُعدّ بواسطة",
+    "authorizedBy": "التوقيع المعتمد"
   },
   "warehouse": {
     "title": "المستودع",

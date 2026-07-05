@@ -411,7 +411,11 @@
     "uninvoicedHint": "{{mt}} فاکتورنشده",
     "exceedsUninvoiced": "از مقدار فاکتورنشده بیشتر است ({{mt}})",
     "headerUpdated": "سربرگ سند به‌روزرسانی شد",
-    "numberTaken": "این شماره قبلاً برای سند دیگری از همین نوع استفاده شده است"
+    "numberTaken": "این شماره قبلاً برای سند دیگری از همین نوع استفاده شده است",
+    "subtotal": "جمع جزء",
+    "grandTotal": "جمع کل نهایی",
+    "preparedBy": "تهیه‌کننده",
+    "authorizedBy": "امضای مجاز"
   },
   "warehouse": {
     "title": "انبار",
