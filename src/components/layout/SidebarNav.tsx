@@ -9,7 +9,10 @@ import {
   CrownOutlined,
   FileDoneOutlined,
   FileTextOutlined,
+  GoldOutlined,
   SettingOutlined,
+  ShoppingCartOutlined,
+  TagsOutlined,
   TeamOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
@@ -37,6 +40,9 @@ const ICONS: Record<string, ReactNode> = {
   creditcard: <CreditCardOutlined />,
   barchart: <BarChartOutlined />,
   setting: <SettingOutlined />,
+  shoppingcart: <ShoppingCartOutlined />,
+  tags: <TagsOutlined />,
+  gold: <GoldOutlined />,
 };
 
 const GROUP_ORDER: NavGroup[] = ['main', 'operations', 'finance', 'system'];

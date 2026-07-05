@@ -65,7 +65,9 @@
     "customers": "العملاء",
     "contracts": "العقود",
     "containers": "الحاويات",
-    "invoices": "الفواتير",
+    "purchase": "المشتريات",
+    "sale": "المبيعات",
+    "warehouse": "المستودع",
     "payments": "المدفوعات",
     "reports": "التقارير",
     "settings": "الإعدادات",
@@ -303,18 +305,20 @@
     "qtyExceedsRemaining": "يتجاوز المتبقي ({{mt}})"
   },
   "invoices": {
-    "title": "الفواتير",
-    "subtitle": "الفواتير الصادرة لكل حاوية",
-    "number": "رقم الفاتورة",
-    "customer": "العميل",
-    "container": "الحاوية",
     "amount": "المبلغ",
-    "issueDate": "تاريخ الإصدار",
-    "dueDate": "الاستحقاق",
     "status": "الحالة",
     "totalInvoiced": "إجمالي الفواتير",
-    "totalPaid": "إجمالي المدفوع",
-    "totalOutstanding": "المستحق"
+    "totalPaid": "إجمالي المدفوع"
+  },
+  "tradeInvoices": {
+    "purchaseTitle": "المشتريات",
+    "purchaseSubtitle": "أوامر وفواتير الشراء المبدئية والنهائية",
+    "saleTitle": "المبيعات",
+    "saleSubtitle": "أوامر وفواتير البيع المبدئية والنهائية"
+  },
+  "warehouse": {
+    "title": "المستودع",
+    "subtitle": "المستودعات وحركات المخزون"
   },
   "payments": {
     "title": "المدفوعات",

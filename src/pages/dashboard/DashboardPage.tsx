@@ -318,7 +318,7 @@ export default function DashboardPage() {
             title={t('dashboard.recentInvoicesTitle')}
             loading={invoices.isLoading}
             extra={
-              <Button type="link" onClick={() => navigate(ROUTES.invoices)} style={{ padding: 0 }}>
+              <Button type="link" onClick={() => navigate(ROUTES.sale)} style={{ padding: 0 }}>
                 {t('common.viewAll')}
               </Button>
             }

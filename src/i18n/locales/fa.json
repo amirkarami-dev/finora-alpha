@@ -65,7 +65,9 @@
     "customers": "مشتریان",
     "contracts": "قراردادها",
     "containers": "کانتینرها",
-    "invoices": "فاکتورها",
+    "purchase": "خرید",
+    "sale": "فروش",
+    "warehouse": "انبار",
     "payments": "پرداخت‌ها",
     "reports": "گزارش‌ها",
     "settings": "تنظیمات",
@@ -303,18 +305,20 @@
     "qtyExceedsRemaining": "بیش از باقی‌مانده ({{mt}})"
   },
   "invoices": {
-    "title": "فاکتورها",
-    "subtitle": "فاکتورهای صادرشده برای هر کانتینر",
-    "number": "شماره فاکتور",
-    "customer": "مشتری",
-    "container": "کانتینر",
     "amount": "مبلغ",
-    "issueDate": "تاریخ صدور",
-    "dueDate": "سررسید",
     "status": "وضعیت",
     "totalInvoiced": "کل فاکتورشده",
-    "totalPaid": "کل پرداخت‌شده",
-    "totalOutstanding": "مانده"
+    "totalPaid": "کل پرداخت‌شده"
+  },
+  "tradeInvoices": {
+    "purchaseTitle": "خرید",
+    "purchaseSubtitle": "سفارش‌ها، پیش‌فاکتورها و فاکتورهای خرید",
+    "saleTitle": "فروش",
+    "saleSubtitle": "سفارش‌ها، پیش‌فاکتورها و فاکتورهای فروش"
+  },
+  "warehouse": {
+    "title": "انبار",
+    "subtitle": "انبارها و حرکات موجودی"
   },
   "payments": {
     "title": "پرداخت‌ها",

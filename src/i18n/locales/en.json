@@ -65,7 +65,9 @@
     "customers": "Customers",
     "contracts": "Contracts",
     "containers": "Containers",
-    "invoices": "Invoices",
+    "purchase": "Purchase",
+    "sale": "Sale",
+    "warehouse": "Warehouse",
     "payments": "Payments",
     "reports": "Reports",
     "settings": "Settings",
@@ -303,18 +305,20 @@
     "qtyExceedsRemaining": "Exceeds remaining ({{mt}})"
   },
   "invoices": {
-    "title": "Invoices",
-    "subtitle": "Issued invoices per container",
-    "number": "Invoice #",
-    "customer": "Customer",
-    "container": "Container",
     "amount": "Amount",
-    "issueDate": "Issued",
-    "dueDate": "Due",
     "status": "Status",
     "totalInvoiced": "Total invoiced",
-    "totalPaid": "Total paid",
-    "totalOutstanding": "Outstanding"
+    "totalPaid": "Total paid"
+  },
+  "tradeInvoices": {
+    "purchaseTitle": "Purchase",
+    "purchaseSubtitle": "Purchase orders, provisionals and invoices",
+    "saleTitle": "Sale",
+    "saleSubtitle": "Sale orders, provisionals and invoices"
+  },
+  "warehouse": {
+    "title": "Warehouse",
+    "subtitle": "Warehouses and inventory movements"
   },
   "payments": {
     "title": "Payments",
