@@ -12,6 +12,12 @@ import type {
   CustomerType,
   DashboardKpis,
   Incoterm,
+  Invoice,
+  InventoryDocument,
+  InventoryDocType,
+  InvoiceItem,
+  InvoiceSide,
+  InvoiceType,
   Item,
   ItemPartner,
   ItemStatus,
@@ -21,8 +27,15 @@ import type {
   ShipmentInvoice,
   StatusBreakdown,
   TimeSeriesPoint,
+  Warehouse,
 } from '@/types';
-import { containerInvoice, contractValue, shippedMt } from '@/utils/calc';
+import {
+  containerInvoice,
+  contractValue,
+  invoiceItemAmount,
+  invoiceItemUnitPrice,
+  shippedMt,
+} from '@/utils/calc';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,7 +69,10 @@ export function computeAccounts(): CustomerAccount[] {
       db.contracts.filter((c) => c.customerId === customer.id).map((c) => c.id),
     );
     const conts = db.containers.filter((c) => contractIds.has(c.contractId));
-    const pays = db.payments.filter((p) => p.customerId === customer.id);
+    // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
+    const pays = db.payments.filter(
+      (p) => p.customerId === customer.id && (p.direction ?? 'IN') === 'IN',
+    );
 
     const totalInvoiced = conts.reduce((s, c) => s + c.invoiceUSD, 0);
     const totalPaid = pays.reduce((s, p) => s + p.amountUSD, 0);
@@ -239,8 +255,9 @@ export async function getCashflowSeries(): Promise<TimeSeriesPoint[]> {
     const invoiced = db.containers
       .filter((c) => dayjs(c.shipmentDate).format('YYYY-MM') === key)
       .reduce((s, c) => s + c.invoiceUSD, 0);
+    // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
-      .filter((p) => dayjs(p.date).format('YYYY-MM') === key)
+      .filter((p) => dayjs(p.date).format('YYYY-MM') === key && (p.direction ?? 'IN') === 'IN')
       .reduce((s, p) => s + p.amountUSD, 0);
     months.push({ month: m.format('MMM'), invoiced: round(invoiced), collected: round(collected) });
   }
@@ -804,8 +821,14 @@ export async function getCustomerPortalSummary(
     const invoiced = db.containers
       .filter((c) => myContainerIds.has(c.id) && dayjs(c.shipmentDate).format('YYYY-MM') === key)
       .reduce((s, c) => s + c.invoiceUSD, 0);
+    // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
-      .filter((p) => p.customerId === customerId && dayjs(p.date).format('YYYY-MM') === key)
+      .filter(
+        (p) =>
+          p.customerId === customerId &&
+          dayjs(p.date).format('YYYY-MM') === key &&
+          (p.direction ?? 'IN') === 'IN',
+      )
       .reduce((s, p) => s + p.amountUSD, 0);
     series.push({ month: m.format('MMM'), invoiced: round(invoiced), collected: round(collected) });
   }
@@ -839,4 +862,839 @@ export async function getCustomerPortalSummary(
     recentPayments,
     contracts: myContracts,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Trade documents (purchase/sale × order/provisional/invoice) + warehouse
+ * + inventory + multi-payment settlement. See
+ * docs/superpowers/specs/2026-07-05-invoices-warehouse-payments-design.md
+ * (§3 pricing, §4 numbering, §5 lifecycle/chain, §6 warehouse/stock, §7
+ * payments, §8 this function list). All mutations persist via `persistDb()`.
+ * ------------------------------------------------------------------ */
+
+function invoiceSide(type: InvoiceType): InvoiceSide {
+  return type.startsWith('PURCHASE') ? 'PURCHASE' : 'SALE';
+}
+
+/** True when `type` belongs to the requested side. */
+function isSide(type: InvoiceType, side: InvoiceSide): boolean {
+  return invoiceSide(type) === side;
+}
+
+function findInvoice(id: string): Invoice | undefined {
+  return db.invoices.find((inv) => inv.id === id);
+}
+
+function findInvoiceOrThrow(id: string): Invoice {
+  const invoice = findInvoice(id);
+  if (!invoice) throw new Error(`Invoice ${id} not found`);
+  return invoice;
+}
+
+/** Recompute and persist an invoice's totals from its current items (spec §3). */
+function recomputeInvoiceTotals(invoice: Invoice): void {
+  invoice.totalAmount = round(invoice.items.reduce((s, it) => s + it.amount, 0));
+  invoice.totalDiscount = round(
+    invoice.items.reduce((s, it) => {
+      const gross = round((invoiceItemUnitPrice(it) ?? 0) * it.quantityMt);
+      return s + (gross - it.amount);
+    }, 0),
+  );
+  invoice.totalWeightMt = round(invoice.items.reduce((s, it) => s + it.quantityMt, 0));
+}
+
+/** Recompute one item's `amount` from its current pricing fields (spec §3). */
+function recomputeItemAmount(item: InvoiceItem): void {
+  item.amount = round(invoiceItemAmount(item));
+}
+
+const INVOICE_NUMBER_PREFIX: Record<InvoiceType, string> = {
+  PURCHASE_ORDER: 'PO',
+  PURCHASE_PROVISIONAL: 'PP',
+  PURCHASE_INVOICE: 'PI',
+  SALE_ORDER: 'SO',
+  SALE_PROVISIONAL: 'SP',
+  SALE_INVOICE: 'SI',
+};
+
+const INVOICE_ID_PREFIX: Record<InvoiceType, string> = {
+  PURCHASE_ORDER: 'po',
+  PURCHASE_PROVISIONAL: 'pp',
+  PURCHASE_INVOICE: 'pi',
+  SALE_ORDER: 'so',
+  SALE_PROVISIONAL: 'sp',
+  SALE_INVOICE: 'si',
+};
+
+/** `<PFX>-<YYYY>-<NNNN>`, scan-until-unused against existing numbers of that type (spec §4). */
+function nextInvoiceNumber(type: InvoiceType): string {
+  const prefix = INVOICE_NUMBER_PREFIX[type];
+  const year = dayjs('2026-06-13').format('YYYY');
+  const taken = new Set(
+    db.invoices.filter((inv) => inv.invoiceType === type).map((inv) => inv.invoiceNumber),
+  );
+  for (let n = 1; n <= 9999; n++) {
+    const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${prefix}-${year}-${db.invoices.length + 1}`;
+}
+
+/** Preview the next auto-generated number for a type (used by the create-invoice form). */
+export async function previewInvoiceNumber(type: InvoiceType): Promise<string> {
+  await delay(80);
+  return nextInvoiceNumber(type);
+}
+
+function nextInvoiceId(type: InvoiceType): string {
+  const prefix = `inv-${INVOICE_ID_PREFIX[type]}-`;
+  let max = 0;
+  for (const inv of db.invoices) {
+    if (inv.id.startsWith(prefix)) {
+      const n = Number(inv.id.slice(prefix.length));
+      if (Number.isFinite(n)) max = Math.max(max, n);
+    }
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`;
+}
+
+let invoiceItemSeq = db.invoices.reduce(
+  (max, inv) =>
+    inv.items.reduce((m, it) => {
+      const match = /^invitem-(\d+)$/.exec(it.id);
+      return match ? Math.max(m, Number(match[1])) : m;
+    }, max),
+  0,
+);
+function nextInvoiceItemId(): string {
+  invoiceItemSeq += 1;
+  return `invitem-${invoiceItemSeq}`;
+}
+
+function nextInventoryDocId(): string {
+  let max = 0;
+  for (const doc of db.inventoryDocs) {
+    const match = /^idoc-(\d+)$/.exec(doc.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `idoc-${String(max + 1).padStart(4, '0')}`;
+}
+
+function nextInventoryDocNumber(type: 'IN' | 'OUT'): string {
+  const prefix = type === 'IN' ? 'GRN' : 'GDN';
+  const year = dayjs('2026-06-13').format('YYYY');
+  const taken = new Set(db.inventoryDocs.map((d) => d.docNumber));
+  for (let n = 1; n <= 9999; n++) {
+    const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${prefix}-${year}-${db.inventoryDocs.length + 1}`;
+}
+
+/* --------------------------- Chain helpers --------------------------- */
+
+/** Non-cancelled document whose `refInvoiceId` points at `id` (at most one, spec §5 invariant 1). */
+function findSuccessor(id: string): Invoice | undefined {
+  return db.invoices.find((inv) => inv.refInvoiceId === id && inv.status !== 'CANCELLED');
+}
+
+/** Full chain (root ancestor → … → deepest non-cancelled successor), for payment aggregation (spec §7). */
+function invoiceChain(invoice: Invoice): Invoice[] {
+  // Walk to the root via refInvoiceId.
+  let root = invoice;
+  const seen = new Set([invoice.id]);
+  while (root.refInvoiceId) {
+    const parent = findInvoice(root.refInvoiceId);
+    if (!parent || seen.has(parent.id)) break;
+    seen.add(parent.id);
+    root = parent;
+  }
+  // Walk down from the root, following non-cancelled successors only (mirrors §5's chain notion).
+  const chain: Invoice[] = [root];
+  let current = root;
+  for (;;) {
+    const next = findSuccessor(current.id);
+    if (!next || chain.some((c) => c.id === next.id)) break;
+    chain.push(next);
+    current = next;
+  }
+  return chain;
+}
+
+/** Chain-leaf CONFIRMED docs of `side`: CONFIRMED with no non-cancelled successor (spec §5). */
+function chainLeafConfirmedInvoices(side: InvoiceSide): Invoice[] {
+  return db.invoices.filter(
+    (inv) =>
+      isSide(inv.invoiceType, side) && inv.status === 'CONFIRMED' && !findSuccessor(inv.id),
+  );
+}
+
+/* ------------------------------- Selectors ---------------------------- */
+
+export interface TradeInvoiceRow extends Invoice {
+  customerName: string;
+  itemCount: number;
+}
+
+export async function getTradeInvoices(side: InvoiceSide): Promise<TradeInvoiceRow[]> {
+  await delay();
+  return db.invoices
+    .filter((inv) => isSide(inv.invoiceType, side))
+    .map((inv) => ({
+      ...inv,
+      customerName: customerById.get(inv.customerId)?.name ?? '—',
+      itemCount: inv.items.length,
+    }))
+    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
+}
+
+export interface TradeInvoiceDetail {
+  invoice: Invoice;
+  items: InvoiceItem[];
+  contract?: Contract;
+  customerName: string;
+  refInvoice?: Invoice;
+  successor?: Invoice;
+  chain: Invoice[];
+  payments: PaymentRow[];
+  paidUSD: number;
+  remainingUSD: number;
+}
+
+export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | undefined> {
+  await delay(160);
+  const invoice = findInvoice(id);
+  if (!invoice) return undefined;
+  const contract = contractById.get(invoice.contractId);
+  const chain = invoiceChain(invoice);
+  const chainIds = new Set(chain.map((c) => c.id));
+  const payments = db.payments
+    .filter((p) => p.invoiceId && chainIds.has(p.invoiceId))
+    .map((p) => ({ ...p, customerName: customerById.get(p.customerId)?.name ?? '—' }))
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+  // §7: paidUSD is a straight sum over the chain's payments regardless of direction — a
+  // purchase invoice settles via 'OUT' payments and must still show them as paid. The
+  // direction EXCLUSION rule (§7) applies only to the separate receivables aggregations
+  // (computeAccounts/getKpis/getExecutiveSummary/getCustomerPortalSummary), not here.
+  const paidUSD = round(payments.reduce((s, p) => s + p.amountUSD, 0));
+  const remainingUSD = round(Math.max(invoice.totalAmount - paidUSD, 0));
+  return {
+    invoice,
+    items: invoice.items,
+    contract,
+    customerName: customerById.get(invoice.customerId)?.name ?? '—',
+    refInvoice: invoice.refInvoiceId ? findInvoice(invoice.refInvoiceId) : undefined,
+    successor: findSuccessor(invoice.id),
+    chain,
+    payments,
+    paidUSD,
+    remainingUSD,
+  };
+}
+
+export interface ContractRemainingRow {
+  itemId: string;
+  product: string;
+  quantityMt: number;
+  uninvoicedMt: number;
+}
+
+/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side` (spec §5). */
+export async function getContractRemaining(
+  contractId: string,
+  side: InvoiceSide,
+): Promise<ContractRemainingRow[]> {
+  await delay(120);
+  const contract = contractById.get(contractId);
+  if (!contract) return [];
+  const leaves = chainLeafConfirmedInvoices(side).filter((inv) => inv.contractId === contractId);
+  const claimedByItem = new Map<string, number>();
+  for (const inv of leaves) {
+    for (const it of inv.items) {
+      claimedByItem.set(it.contractItemId, (claimedByItem.get(it.contractItemId) ?? 0) + it.quantityMt);
+    }
+  }
+  return contract.items.map((item) => ({
+    itemId: item.id,
+    product: item.product,
+    quantityMt: item.quantityMt,
+    uninvoicedMt: round(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
+  }));
+}
+
+/** Remaining MT for one contract item on `side`, EXCLUDING `excludeInvoiceId`'s own current claim. */
+function itemUninvoicedMt(
+  contractItemId: string,
+  itemQuantityMt: number,
+  side: InvoiceSide,
+  excludeInvoiceId?: string,
+): number {
+  const leaves = chainLeafConfirmedInvoices(side).filter((inv) => inv.id !== excludeInvoiceId);
+  const claimed = leaves.reduce(
+    (s, inv) =>
+      s + inv.items.filter((it) => it.contractItemId === contractItemId).reduce((s2, it) => s2 + it.quantityMt, 0),
+    0,
+  );
+  return round(Math.max(itemQuantityMt - claimed, 0));
+}
+
+export async function getWarehouses(): Promise<Warehouse[]> {
+  await delay(100);
+  return [...db.warehouses];
+}
+
+export async function getInventoryDocuments() {
+  await delay(140);
+  return [...db.inventoryDocs].sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+export interface StockLevelRow {
+  warehouseId: string;
+  /** Normalized key: trim().toLowerCase() (spec §6). */
+  productKey: string;
+  /** First-seen display casing. */
+  product: string;
+  mt: number;
+}
+
+export async function getStockLevels(): Promise<StockLevelRow[]> {
+  await delay(140);
+  const rows = new Map<string, StockLevelRow>();
+  for (const doc of db.inventoryDocs) {
+    if (doc.status !== 'CONFIRMED') continue;
+    const sign = doc.type === 'IN' ? 1 : -1;
+    for (const item of doc.items) {
+      const productKey = item.product.trim().toLowerCase();
+      const key = `${doc.warehouseId}::${productKey}`;
+      const existing = rows.get(key);
+      if (existing) {
+        existing.mt = round(existing.mt + sign * item.quantityMt);
+      } else {
+        rows.set(key, {
+          warehouseId: doc.warehouseId,
+          productKey,
+          product: item.product,
+          mt: round(sign * item.quantityMt),
+        });
+      }
+    }
+  }
+  return [...rows.values()];
+}
+
+/** Current stock of `product` (normalized) at `warehouseId`, in MT. */
+function stockOf(warehouseId: string, product: string, levels: StockLevelRow[]): number {
+  const key = product.trim().toLowerCase();
+  return levels.find((r) => r.warehouseId === warehouseId && r.productKey === key)?.mt ?? 0;
+}
+
+/* -------------------------- Invoice mutations ------------------------- */
+
+export interface InvoiceInput {
+  invoiceType: InvoiceType;
+  contractId: string;
+  invoiceDate: string;
+  invoiceNumber?: string;
+  currency?: Currency;
+  exchangeRate?: number;
+  description?: string;
+}
+
+export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
+  await delay(180);
+  const contract = contractById.get(input.contractId);
+  if (!contract) throw new Error(`Contract ${input.contractId} not found`);
+  const invoice: Invoice = {
+    id: nextInvoiceId(input.invoiceType),
+    invoiceNumber: input.invoiceNumber?.trim() || nextInvoiceNumber(input.invoiceType),
+    invoiceType: input.invoiceType,
+    invoiceDate: input.invoiceDate,
+    contractId: input.contractId,
+    customerId: contract.customerId,
+    status: 'DRAFT',
+    currency: input.currency ?? 'USD',
+    exchangeRate: input.currency === 'AED' ? (input.exchangeRate ?? db.fxRate) : 1,
+    description: input.description?.trim() || undefined,
+    totalAmount: 0,
+    totalDiscount: 0,
+    totalWeightMt: 0,
+    createdAt: dayjs().toISOString(),
+    items: [],
+  };
+  db.invoices.push(invoice);
+  persistDb();
+  return invoice;
+}
+
+export interface InvoiceHeaderPatch {
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  currency?: Currency;
+  exchangeRate?: number;
+  description?: string;
+}
+
+/** DRAFT only. Throws `'duplicate-number'` when the number collides within the same type. */
+export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch): Promise<Invoice> {
+  await delay(160);
+  const invoice = findInvoiceOrThrow(id);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+  if (patch.invoiceNumber !== undefined) {
+    const number = patch.invoiceNumber.trim();
+    const collides = db.invoices.some(
+      (inv) => inv.id !== id && inv.invoiceType === invoice.invoiceType && inv.invoiceNumber === number,
+    );
+    if (collides) throw new Error('duplicate-number');
+    invoice.invoiceNumber = number;
+  }
+  if (patch.invoiceDate !== undefined) invoice.invoiceDate = patch.invoiceDate;
+  if (patch.currency !== undefined) {
+    invoice.currency = patch.currency;
+    invoice.exchangeRate = patch.currency === 'AED' ? (patch.exchangeRate ?? db.fxRate) : 1;
+  } else if (patch.exchangeRate !== undefined) {
+    invoice.exchangeRate = patch.exchangeRate;
+  }
+  if (patch.description !== undefined) invoice.description = patch.description.trim() || undefined;
+  persistDb();
+  return invoice;
+}
+
+export interface InvoiceItemInput {
+  contractItemId: string;
+  quantityMt: number;
+  blNumber?: string;
+  containerNo?: string;
+  description?: string;
+}
+
+function findContractItem(contract: Contract, contractItemId: string): Item | undefined {
+  return contract.items.find((i) => i.id === contractItemId);
+}
+
+/** Copies the pricing snapshot from the contract item and validates remaining qty (spec §2/§5). */
+export async function addInvoiceItems(
+  invoiceId: string,
+  items: InvoiceItemInput[],
+): Promise<Invoice> {
+  await delay(200);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+  const contract = contractById.get(invoice.contractId);
+  if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
+  const side = invoiceSide(invoice.invoiceType);
+
+  for (const input of items) {
+    const contractItem = findContractItem(contract, input.contractItemId);
+    if (!contractItem) throw new Error(`Contract item ${input.contractItemId} not found`);
+    const uninvoicedMt = itemUninvoicedMt(
+      contractItem.id,
+      contractItem.quantityMt,
+      side,
+      invoice.id,
+    );
+    const alreadyOnDoc = invoice.items
+      .filter((it) => it.contractItemId === contractItem.id)
+      .reduce((s, it) => s + it.quantityMt, 0);
+    if (input.quantityMt > uninvoicedMt - alreadyOnDoc + 1e-9) {
+      const err = new Error('qty-exceeds-remaining') as Error & { available?: number };
+      err.available = round(Math.max(uninvoicedMt - alreadyOnDoc, 0));
+      throw err;
+    }
+    const newItem: InvoiceItem = {
+      id: nextInvoiceItemId(),
+      invoiceId: invoice.id,
+      contractItemId: contractItem.id,
+      product: contractItem.product,
+      quantityMt: input.quantityMt,
+      lmePercent: contractItem.lmePercent,
+      lmeFixed: contractItem.lmeFixed,
+      fixedPrice: contractItem.fixedLmePrice,
+      premium: contractItem.premium,
+      blNumber: input.blNumber?.trim() || undefined,
+      containerNo: input.containerNo?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+      amount: 0,
+    };
+    recomputeItemAmount(newItem);
+    invoice.items.push(newItem);
+  }
+  recomputeInvoiceTotals(invoice);
+  persistDb();
+  return invoice;
+}
+
+export interface InvoiceItemPatch {
+  quantityMt?: number;
+  blNumber?: string;
+  containerNo?: string;
+  description?: string;
+  discountPercent?: number;
+}
+
+export async function updateInvoiceItem(
+  invoiceId: string,
+  itemId: string,
+  patch: InvoiceItemPatch,
+): Promise<Invoice> {
+  await delay(180);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+  const item = invoice.items.find((it) => it.id === itemId);
+  if (!item) throw new Error(`Invoice item ${itemId} not found`);
+
+  if (patch.quantityMt !== undefined) {
+    const side = invoiceSide(invoice.invoiceType);
+    const contract = contractById.get(invoice.contractId);
+    const contractItem = contract ? findContractItem(contract, item.contractItemId) : undefined;
+    // itemUninvoicedMt excludes THIS invoice's own claim entirely (excludeInvoiceId), so the
+    // ceiling for this line is that figure plus the qty this line currently holds.
+    const uninvoicedExcludingSelf = itemUninvoicedMt(
+      item.contractItemId,
+      contractItem?.quantityMt ?? item.quantityMt,
+      side,
+      invoice.id,
+    );
+    const max = uninvoicedExcludingSelf + item.quantityMt;
+    if (patch.quantityMt > max + 1e-9) {
+      const err = new Error('qty-exceeds-remaining') as Error & { available?: number };
+      err.available = round(max);
+      throw err;
+    }
+    item.quantityMt = patch.quantityMt;
+  }
+  if (patch.blNumber !== undefined) item.blNumber = patch.blNumber.trim() || undefined;
+  if (patch.containerNo !== undefined) item.containerNo = patch.containerNo.trim() || undefined;
+  if (patch.description !== undefined) item.description = patch.description.trim() || undefined;
+  if (patch.discountPercent !== undefined) item.discountPercent = patch.discountPercent;
+
+  recomputeItemAmount(item);
+  recomputeInvoiceTotals(invoice);
+  persistDb();
+  return invoice;
+}
+
+export async function removeInvoiceItem(invoiceId: string, itemId: string): Promise<Invoice> {
+  await delay(160);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+  invoice.items = invoice.items.filter((it) => it.id !== itemId);
+  recomputeInvoiceTotals(invoice);
+  persistDb();
+  return invoice;
+}
+
+export interface ApplyLmePriceInput {
+  lmeDate: string;
+  lmePrice: number;
+  discountPercent?: number;
+}
+
+/**
+ * Spec §3 EXACTLY: `lmeDate` on ALL items; `lmePrice` on FLOATING (`!lmeFixed`)
+ * items only; `discountPercent`, when provided, overwrites ALL items.
+ */
+export async function applyLmePrice(invoiceId: string, input: ApplyLmePriceInput): Promise<Invoice> {
+  await delay(180);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+  for (const item of invoice.items) {
+    item.lmeDate = input.lmeDate;
+    if (!item.lmeFixed) item.lmePrice = input.lmePrice;
+    if (input.discountPercent !== undefined) item.discountPercent = input.discountPercent;
+    recomputeItemAmount(item);
+  }
+  recomputeInvoiceTotals(invoice);
+  persistDb();
+  return invoice;
+}
+
+function isPricedType(type: InvoiceType): boolean {
+  return type !== 'PURCHASE_ORDER' && type !== 'SALE_ORDER';
+}
+
+function isFinalType(type: InvoiceType): boolean {
+  return type === 'PURCHASE_INVOICE' || type === 'SALE_INVOICE';
+}
+
+export interface ConfirmInvoiceOptions {
+  warehouseId?: string;
+}
+
+/**
+ * Guards IN ORDER (spec §5/§6/§8): 'no-items' → 'missing-lme-price' (provisional/
+ * final with a floating line lacking lmePrice) → 'qty-exceeds-remaining' (re-validate
+ * §5 invariant 3) → for final invoices: warehouseId required + sale-invoice per-product
+ * stock check ('insufficient-stock', err.product/err.available set). On success,
+ * final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
+ */
+export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions = {}): Promise<Invoice> {
+  await delay(200);
+  const invoice = findInvoiceOrThrow(id);
+  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
+
+  if (invoice.items.length === 0) throw new Error('no-items');
+
+  if (isPricedType(invoice.invoiceType)) {
+    const missing = invoice.items.some((it) => !it.lmeFixed && it.lmePrice === undefined);
+    if (missing) throw new Error('missing-lme-price');
+  }
+
+  // Re-validate remaining contract quantity at confirm time (spec §5 invariant 3): two
+  // DRAFTs can each pass edit-time checks; the second one to confirm must fail here.
+  // `itemUninvoicedMt(..., excludeInvoiceId: invoice.id)` excludes THIS doc's own claim,
+  // so the ceiling for this line is that figure plus what this line itself already holds.
+  const side = invoiceSide(invoice.invoiceType);
+  const contract = contractById.get(invoice.contractId);
+  if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
+  for (const item of invoice.items) {
+    const contractItem = findContractItem(contract, item.contractItemId);
+    if (!contractItem) continue;
+    const uninvoicedExcludingSelf = itemUninvoicedMt(
+      item.contractItemId,
+      contractItem.quantityMt,
+      side,
+      invoice.id,
+    );
+    if (item.quantityMt > uninvoicedExcludingSelf + item.quantityMt + 1e-9) {
+      throw new Error('qty-exceeds-remaining');
+    }
+  }
+
+  if (isFinalType(invoice.invoiceType)) {
+    if (!options.warehouseId) throw new Error('warehouse-required');
+    const warehouse = db.warehouses.find((w) => w.id === options.warehouseId && w.active);
+    if (!warehouse) throw new Error('warehouse-required');
+
+    if (invoice.invoiceType === 'SALE_INVOICE') {
+      const levels = await getStockLevels();
+      for (const item of invoice.items) {
+        const available = stockOf(warehouse.id, item.product, levels);
+        if (item.quantityMt > available + 1e-9) {
+          const err = new Error('insufficient-stock') as Error & { product?: string; available?: number };
+          err.product = item.product;
+          err.available = round(Math.max(available, 0));
+          throw err;
+        }
+      }
+    }
+
+    const docType: InventoryDocType = invoice.invoiceType === 'PURCHASE_INVOICE' ? 'IN' : 'OUT';
+    const docId = nextInventoryDocId();
+    const doc: InventoryDocument = {
+      id: docId,
+      docNumber: nextInventoryDocNumber(docType),
+      warehouseId: warehouse.id,
+      invoiceId: invoice.id,
+      type: docType,
+      date: invoice.invoiceDate,
+      status: 'CONFIRMED',
+      items: invoice.items.map((it, idx) => ({
+        id: `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}`,
+        documentId: docId,
+        invoiceItemId: it.id,
+        product: it.product,
+        quantityMt: it.quantityMt,
+      })),
+    };
+    db.inventoryDocs.push(doc);
+  }
+
+  invoice.status = 'CONFIRMED';
+  persistDb();
+  return invoice;
+}
+
+/**
+ * Throws `'cancel-blocked-successor'` when a non-cancelled successor exists (spec §5).
+ * For purchase finals, throws `'cancel-blocked-stock'` when cancelling would drive any
+ * of its products' stock negative (spec §6). Cascades its inventory doc to CANCELLED.
+ */
+export async function cancelInvoice(id: string): Promise<Invoice> {
+  await delay(180);
+  const invoice = findInvoiceOrThrow(id);
+  if (invoice.status === 'CANCELLED') return invoice;
+
+  if (findSuccessor(invoice.id)) {
+    throw new Error('cancel-blocked-successor');
+  }
+
+  const doc = db.inventoryDocs.find((d) => d.invoiceId === invoice.id && d.status === 'CONFIRMED');
+  if (invoice.invoiceType === 'PURCHASE_INVOICE' && doc) {
+    // Simulate reversing this IN doc and check no product would go negative anywhere it's stocked.
+    const levels = await getStockLevels();
+    for (const item of doc.items) {
+      const current = stockOf(doc.warehouseId, item.product, levels);
+      if (current - item.quantityMt < -1e-9) {
+        const err = new Error('cancel-blocked-stock') as Error & { product?: string };
+        err.product = item.product;
+        throw err;
+      }
+    }
+  }
+
+  invoice.status = 'CANCELLED';
+  if (doc) doc.status = 'CANCELLED';
+  persistDb();
+  return invoice;
+}
+
+const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
+  PURCHASE_ORDER: ['PURCHASE_PROVISIONAL', 'PURCHASE_INVOICE'],
+  PURCHASE_PROVISIONAL: ['PURCHASE_INVOICE'],
+  PURCHASE_INVOICE: [],
+  SALE_ORDER: ['SALE_PROVISIONAL', 'SALE_INVOICE'],
+  SALE_PROVISIONAL: ['SALE_INVOICE'],
+  SALE_INVOICE: [],
+};
+
+/**
+ * Creates a new DRAFT of `targetType` copying header + items from `id` (spec §5).
+ * Throws `'has-successor'` when a non-cancelled successor already exists.
+ * PP→PI / SP→SI carry lmePrice/lmeDate/discount; PO/SO→* never carry (orders are unpriced).
+ */
+export async function convertInvoice(id: string, targetType: InvoiceType): Promise<Invoice> {
+  await delay(200);
+  const source = findInvoiceOrThrow(id);
+  if (source.status !== 'CONFIRMED') throw new Error('not-confirmed');
+  if (findSuccessor(source.id)) throw new Error('has-successor');
+  if (!CONVERT_TARGETS[source.invoiceType].includes(targetType)) throw new Error('invalid-target');
+
+  const carryPrices = source.invoiceType === 'PURCHASE_PROVISIONAL' || source.invoiceType === 'SALE_PROVISIONAL';
+
+  const newId = nextInvoiceId(targetType);
+  const newItems: InvoiceItem[] = source.items.map((it) => ({
+    ...it,
+    id: nextInvoiceItemId(),
+    invoiceId: newId,
+    lmePrice: carryPrices ? it.lmePrice : undefined,
+    lmeDate: carryPrices ? it.lmeDate : undefined,
+    discountPercent: carryPrices ? it.discountPercent : undefined,
+  }));
+  newItems.forEach((it) => recomputeItemAmount(it));
+
+  const draft: Invoice = {
+    id: newId,
+    invoiceNumber: nextInvoiceNumber(targetType),
+    invoiceType: targetType,
+    invoiceDate: dayjs('2026-06-13').toISOString(),
+    contractId: source.contractId,
+    customerId: source.customerId,
+    status: 'DRAFT',
+    currency: source.currency,
+    exchangeRate: source.exchangeRate,
+    description: source.description,
+    refInvoiceId: source.id,
+    totalAmount: 0,
+    totalDiscount: 0,
+    totalWeightMt: 0,
+    createdAt: dayjs().toISOString(),
+    items: newItems,
+  };
+  recomputeInvoiceTotals(draft);
+  db.invoices.push(draft);
+  persistDb();
+  return draft;
+}
+
+export async function markInvoiceSent(id: string): Promise<Invoice> {
+  await delay(140);
+  const invoice = findInvoiceOrThrow(id);
+  invoice.sentAt = dayjs().toISOString();
+  persistDb();
+  return invoice;
+}
+
+/* -------------------------- Warehouse mutations ------------------------ */
+
+export interface WarehouseInput {
+  name: string;
+  code: string;
+  location?: string;
+}
+
+export async function createWarehouse(input: WarehouseInput): Promise<Warehouse> {
+  await delay(180);
+  const code = input.code.trim().toUpperCase();
+  const id = `wh-${code.toLowerCase()}`;
+  if (db.warehouses.some((w) => w.id === id)) throw new Error('duplicate-code');
+  const warehouse: Warehouse = {
+    id,
+    name: input.name.trim(),
+    code,
+    location: input.location?.trim() || undefined,
+    active: true,
+  };
+  db.warehouses.push(warehouse);
+  persistDb();
+  return warehouse;
+}
+
+export async function updateWarehouse(id: string, input: WarehouseInput): Promise<Warehouse> {
+  await delay(160);
+  const warehouse = db.warehouses.find((w) => w.id === id);
+  if (!warehouse) throw new Error(`Warehouse ${id} not found`);
+  warehouse.name = input.name.trim(); // code immutable on edit
+  warehouse.location = input.location?.trim() || undefined;
+  persistDb();
+  return warehouse;
+}
+
+export async function setWarehouseActive(id: string, active: boolean): Promise<Warehouse> {
+  await delay(140);
+  const warehouse = db.warehouses.find((w) => w.id === id);
+  if (!warehouse) throw new Error(`Warehouse ${id} not found`);
+  warehouse.active = active;
+  persistDb();
+  return warehouse;
+}
+
+/* --------------------------- Payment mutations ------------------------- */
+
+export interface PaymentInput {
+  customerId: string;
+  date: string;
+  currency: Currency;
+  amount: number;
+  fxRate: number;
+  method: Payment['method'];
+  notes?: string;
+  invoiceId?: string;
+}
+
+function nextPaymentId(): string {
+  let max = 0;
+  for (const p of db.payments) {
+    const match = /^NIZ(\d+)$/.exec(p.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `NIZ${String(max + 1).padStart(3, '0')}`;
+}
+
+/**
+ * Direction is `'OUT'` when the linked invoice is PURCHASE-side, `'IN'` otherwise
+ * (SALE or unlinked). `reference` is set to the invoice number when linked (spec §7).
+ */
+export async function createPayment(input: PaymentInput): Promise<Payment> {
+  await delay(180);
+  const linkedInvoice = input.invoiceId ? findInvoice(input.invoiceId) : undefined;
+  const direction: 'IN' | 'OUT' =
+    linkedInvoice && invoiceSide(linkedInvoice.invoiceType) === 'PURCHASE' ? 'OUT' : 'IN';
+  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
+  const payment: Payment = {
+    id: nextPaymentId(),
+    customerId: input.customerId,
+    date: input.date,
+    currency: input.currency,
+    amount: input.amount,
+    fxRate: input.fxRate,
+    amountUSD,
+    method: input.method,
+    reference: linkedInvoice?.invoiceNumber,
+    notes: input.notes ?? '',
+    invoiceId: input.invoiceId,
+    direction,
+  };
+  db.payments.push(payment);
+  persistDb();
+  return payment;
 }

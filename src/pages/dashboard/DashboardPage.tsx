@@ -36,7 +36,7 @@ import {
   useAccounts,
   useAging,
   useCashflow,
-  useInvoices,
+  useShipmentInvoices,
   useKpis,
   useProductVolumes,
   useStatusBreakdown,
@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const products = useProductVolumes();
   const accounts = useAccounts();
   const aging = useAging();
-  const invoices = useInvoices();
+  const invoices = useShipmentInvoices();
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;

@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { StatusTag } from '@/components/common/StatusTag';
-import { useInvoices } from '@/services/queries';
+import { useShipmentInvoices } from '@/services/queries';
 import { formatDate, formatMt } from '@/utils/format';
 import { CONTAINER_STATUSES, ROUTES } from '@/config/constants';
 import type { ContainerStatus, ShipmentInvoice } from '@/types';
@@ -18,7 +18,7 @@ const { Text } = Typography;
 export default function InvoicesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading } = useInvoices();
+  const { data, isLoading } = useShipmentInvoices();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ContainerStatus | 'ALL'>('ALL');
 
