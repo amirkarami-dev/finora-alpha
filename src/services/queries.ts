@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -11,7 +12,8 @@ export const qk = {
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
   containers: ['containers'] as const,
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
-  invoices: ['invoices'] as const,
+  /** Flattened container-derived view — used by Dashboard + Customer Portal only. */
+  shipmentInvoices: ['shipmentInvoices'] as const,
   payments: ['payments'] as const,
   paymentsByCustomer: (id: string) => ['payments', 'customer', id] as const,
   kpis: ['kpis'] as const,
@@ -22,6 +24,14 @@ export const qk = {
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
   partners: ['partners'] as const,
+  // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
+  tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
+  tradeInvoice: (id: string) => ['tradeInvoice', id] as const,
+  contractRemaining: (contractId: string, side: InvoiceSide) =>
+    ['contractRemaining', contractId, side] as const,
+  warehouses: ['warehouses'] as const,
+  inventory: ['inventory'] as const,
+  stock: ['stock'] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -47,7 +57,8 @@ export const useContainersByContract = (id: string) =>
     enabled: !!id,
   });
 
-export const useInvoices = () => useQuery({ queryKey: qk.invoices, queryFn: api.getInvoices });
+export const useShipmentInvoices = () =>
+  useQuery({ queryKey: qk.shipmentInvoices, queryFn: api.getInvoices });
 
 export const usePayments = () => useQuery({ queryKey: qk.payments, queryFn: api.getPayments });
 export const usePaymentsByCustomer = (id: string) =>
@@ -95,7 +106,7 @@ function useInvalidateTrade() {
     qc.invalidateQueries({ queryKey: qk.productVolumes });
     // A product rename flows into the container `product` column and invoices.
     qc.invalidateQueries({ queryKey: qk.containers });
-    qc.invalidateQueries({ queryKey: qk.invoices });
+    qc.invalidateQueries({ queryKey: qk.shipmentInvoices });
     qc.invalidateQueries({ queryKey: qk.aging });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
   };
@@ -216,5 +227,210 @@ export const useSetPartnerActive = () => {
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setPartnerActive(id, active),
     onSuccess: invalidate,
+  });
+};
+
+/* ---------------- Trade documents + warehouse + inventory (spec §8) --------------- */
+
+export const useTradeInvoices = (side: InvoiceSide) =>
+  useQuery({ queryKey: qk.tradeInvoices(side), queryFn: () => api.getTradeInvoices(side) });
+
+export const useTradeInvoice = (id: string) =>
+  useQuery({
+    queryKey: qk.tradeInvoice(id),
+    queryFn: () => api.getTradeInvoice(id),
+    enabled: !!id,
+  });
+
+export const useContractRemaining = (contractId: string, side: InvoiceSide) =>
+  useQuery({
+    queryKey: qk.contractRemaining(contractId, side),
+    queryFn: () => api.getContractRemaining(contractId, side),
+    enabled: !!contractId,
+  });
+
+export const useWarehouses = () =>
+  useQuery({ queryKey: qk.warehouses, queryFn: api.getWarehouses });
+
+export const useInventoryDocuments = () =>
+  useQuery({ queryKey: qk.inventory, queryFn: api.getInventoryDocuments });
+
+export const useStockLevels = () => useQuery({ queryKey: qk.stock, queryFn: api.getStockLevels });
+
+/**
+ * Trade-document mutations touch the invoice lists/detail, the contract's uninvoiced-qty
+ * figure, and — on confirm/cancel of a final invoice or a payment — inventory/stock and
+ * every receivables aggregate (mirrors `useInvalidateTrade`/`useInvalidateCustomers`).
+ */
+function useInvalidateInvoices() {
+  const qc = useQueryClient();
+  return (opts?: { side?: InvoiceSide; invoiceId?: string; contractId?: string; customerId?: string }) => {
+    if (opts?.side) qc.invalidateQueries({ queryKey: qk.tradeInvoices(opts.side) });
+    else {
+      qc.invalidateQueries({ queryKey: qk.tradeInvoices('PURCHASE') });
+      qc.invalidateQueries({ queryKey: qk.tradeInvoices('SALE') });
+    }
+    if (opts?.invoiceId) qc.invalidateQueries({ queryKey: qk.tradeInvoice(opts.invoiceId) });
+    if (opts?.contractId && opts?.side) {
+      qc.invalidateQueries({ queryKey: qk.contractRemaining(opts.contractId, opts.side) });
+    }
+    qc.invalidateQueries({ queryKey: qk.inventory });
+    qc.invalidateQueries({ queryKey: qk.stock });
+    qc.invalidateQueries({ queryKey: qk.payments });
+    qc.invalidateQueries({ queryKey: qk.accounts });
+    qc.invalidateQueries({ queryKey: qk.kpis });
+    qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    if (opts?.customerId) qc.invalidateQueries({ queryKey: qk.customerPortal(opts.customerId) });
+  };
+}
+
+function invalidateArgsFor(invoice: {
+  id: string;
+  invoiceType: InvoiceType;
+  contractId: string;
+  customerId: string;
+}) {
+  const side: InvoiceSide = invoice.invoiceType.startsWith('PURCHASE') ? 'PURCHASE' : 'SALE';
+  return { side, invoiceId: invoice.id, contractId: invoice.contractId, customerId: invoice.customerId };
+}
+
+export const useCreateInvoice = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (input: api.InvoiceInput) => api.createInvoice(input),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useUpdateInvoiceHeader = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: api.InvoiceHeaderPatch }) =>
+      api.updateInvoiceHeader(id, patch),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useAddInvoiceItems = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ invoiceId, items }: { invoiceId: string; items: api.InvoiceItemInput[] }) =>
+      api.addInvoiceItems(invoiceId, items),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useUpdateInvoiceItem = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({
+      invoiceId,
+      itemId,
+      patch,
+    }: {
+      invoiceId: string;
+      itemId: string;
+      patch: api.InvoiceItemPatch;
+    }) => api.updateInvoiceItem(invoiceId, itemId, patch),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useRemoveInvoiceItem = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ invoiceId, itemId }: { invoiceId: string; itemId: string }) =>
+      api.removeInvoiceItem(invoiceId, itemId),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useApplyLmePrice = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ invoiceId, input }: { invoiceId: string; input: api.ApplyLmePriceInput }) =>
+      api.applyLmePrice(invoiceId, input),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useConfirmInvoice = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ id, options }: { id: string; options?: api.ConfirmInvoiceOptions }) =>
+      api.confirmInvoice(id, options),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useCancelInvoice = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelInvoice(id),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useConvertInvoice = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ id, targetType }: { id: string; targetType: InvoiceType }) =>
+      api.convertInvoice(id, targetType),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useMarkInvoiceSent = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (id: string) => api.markInvoiceSent(id),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+function useInvalidateWarehouses() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: qk.warehouses });
+    qc.invalidateQueries({ queryKey: qk.stock });
+    qc.invalidateQueries({ queryKey: qk.inventory });
+  };
+}
+
+export const useCreateWarehouse = () => {
+  const invalidate = useInvalidateWarehouses();
+  return useMutation({
+    mutationFn: (input: api.WarehouseInput) => api.createWarehouse(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateWarehouse = () => {
+  const invalidate = useInvalidateWarehouses();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.WarehouseInput }) =>
+      api.updateWarehouse(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetWarehouseActive = () => {
+  const invalidate = useInvalidateWarehouses();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setWarehouseActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCreatePayment = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (input: api.PaymentInput) => api.createPayment(input),
+    onSuccess: (payment) =>
+      invalidate({
+        invoiceId: payment.invoiceId,
+        customerId: payment.customerId,
+      }),
   });
 };

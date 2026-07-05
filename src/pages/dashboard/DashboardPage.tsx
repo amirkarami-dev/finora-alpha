@@ -36,7 +36,7 @@ import {
   useAccounts,
   useAging,
   useCashflow,
-  useInvoices,
+  useShipmentInvoices,
   useKpis,
   useProductVolumes,
   useStatusBreakdown,
@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const products = useProductVolumes();
   const accounts = useAccounts();
   const aging = useAging();
-  const invoices = useInvoices();
+  const invoices = useShipmentInvoices();
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
@@ -318,7 +318,7 @@ export default function DashboardPage() {
             title={t('dashboard.recentInvoicesTitle')}
             loading={invoices.isLoading}
             extra={
-              <Button type="link" onClick={() => navigate(ROUTES.invoices)} style={{ padding: 0 }}>
+              <Button type="link" onClick={() => navigate(ROUTES.sale)} style={{ padding: 0 }}>
                 {t('common.viewAll')}
               </Button>
             }

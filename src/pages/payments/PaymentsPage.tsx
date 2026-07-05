@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { App, Button, Card, Col, Input, Row, Statistic, Table, Typography } from 'antd';
+import { useMemo, useState, type MouseEvent } from 'react';
+import { App, Button, Card, Col, Input, Row, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
@@ -16,6 +17,7 @@ const { Text } = Typography;
 export default function PaymentsPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const { data, isLoading } = usePayments();
   const [search, setSearch] = useState('');
 
@@ -35,6 +37,23 @@ export default function PaymentsPage() {
   const columns: ColumnsType<PaymentRow> = [
     { title: t('payments.paymentId'), dataIndex: 'id', fixed: 'left', width: 130, render: (v) => <Text strong style={{ fontFamily: 'monospace' }}>{v}</Text> },
     { title: t('payments.customer'), dataIndex: 'customerName', width: 200, sorter: (a, b) => a.customerName.localeCompare(b.customerName) },
+    {
+      title: t('payments.direction'),
+      key: 'direction',
+      width: 100,
+      align: 'center',
+      filters: [
+        { text: t('payments.directionIn'), value: 'IN' },
+        { text: t('payments.directionOut'), value: 'OUT' },
+      ],
+      onFilter: (val, r) => (r.direction ?? 'IN') === val,
+      render: (_, r) =>
+        (r.direction ?? 'IN') === 'OUT' ? (
+          <Tag color="gold">{t('payments.directionOut')}</Tag>
+        ) : (
+          <Tag color="green">{t('payments.directionIn')}</Tag>
+        ),
+    },
     { title: t('payments.date'), dataIndex: 'date', width: 130, sorter: (a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf(), defaultSortOrder: 'descend', render: (v) => formatDate(v) },
     { title: t('payments.amount'), dataIndex: 'amount', width: 150, align: 'right', render: (v, r) => <Money value={v} currency={r.currency} /> },
     { title: t('payments.fxRate'), dataIndex: 'fxRate', width: 110, align: 'right', render: (v: number) => (v === 1 ? <Text type="secondary">—</Text> : formatNumber(v, 4)) },
@@ -47,6 +66,25 @@ export default function PaymentsPage() {
         { text: 'Credit Note', value: 'Credit Note' },
       ], onFilter: (val, r) => r.method === val, render: (v) => <PaymentMethodTag method={v} /> },
     { title: t('payments.reference'), dataIndex: 'reference', width: 160, render: (v) => <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '—'}</Text> },
+    {
+      title: t('payments.invoiceColumn'),
+      key: 'invoice',
+      width: 150,
+      onCell: () => ({ onClick: (e: MouseEvent) => e.stopPropagation() }),
+      render: (_, r) =>
+        r.invoiceId ? (
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, height: 'auto', fontFamily: 'monospace' }}
+            onClick={() => navigate(`/app/invoices/${encodeURIComponent(r.invoiceId!)}`)}
+          >
+            {r.invoiceNumber ?? r.invoiceId}
+          </Button>
+        ) : (
+          <Text type="secondary">—</Text>
+        ),
+    },
   ];
 
   return (
@@ -90,7 +128,7 @@ export default function PaymentsPage() {
           loading={isLoading}
           columns={columns}
           dataSource={filtered}
-          scroll={{ x: 1160 }}
+          scroll={{ x: 1410 }}
           pagination={{ pageSize: 12, showSizeChanger: false, hideOnSinglePage: true }}
         />
       </Card>

@@ -1,4 +1,4 @@
-import type { Container, Contract, Item } from '@/types';
+import type { Container, Contract, Item, InvoiceItem } from '@/types';
 
 /**
  * Effective unit price per MT.
@@ -52,4 +52,21 @@ export function usdToAed(usd: number, fxRate: number): number {
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+/** USD/MT unit price of a trade-invoice line; null while a floating line lacks lmePrice. */
+export function invoiceItemUnitPrice(item: Pick<InvoiceItem,
+  'lmeFixed' | 'fixedPrice' | 'lmePrice' | 'lmePercent' | 'premium'>): number | null {
+  const base = item.lmeFixed ? item.fixedPrice : item.lmePrice;
+  if (base === undefined || base === null) return null;
+  return base * (item.lmePercent / 100) + item.premium;
+}
+
+/** USD line value after discount; 0 while the price is incomplete (spec §3). */
+export function invoiceItemAmount(item: Pick<InvoiceItem,
+  'lmeFixed' | 'fixedPrice' | 'lmePrice' | 'lmePercent' | 'premium' | 'quantityMt' | 'discountPercent'>): number {
+  const unit = invoiceItemUnitPrice(item);
+  if (unit === null) return 0;
+  const gross = unit * item.quantityMt;
+  return gross * (1 - (item.discountPercent ?? 0) / 100);
 }
