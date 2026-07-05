@@ -232,6 +232,7 @@ export default function WarehousePage() {
             dataSource={warehouses ?? []}
             scroll={{ x: 720 }}
             pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+            locale={{ emptyText: <Empty description={t('common.noData')} /> }}
           />
         )}
 

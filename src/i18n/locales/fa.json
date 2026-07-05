@@ -57,7 +57,8 @@
     "activate": "فعال‌سازی",
     "deactivate": "غیرفعال‌سازی",
     "deactivateConfirm": "این مورد غیرفعال شود؟",
-    "activateConfirm": "این مورد فعال شود؟"
+    "activateConfirm": "این مورد فعال شود؟",
+    "mtUnit": "تن"
   },
   "nav": {
     "executive": "مدیریت اجرایی",
@@ -424,7 +425,8 @@
     "recordedOn": "ثبت‌شده روی",
     "paidToDate": "پرداخت‌شده تاکنون",
     "remaining": "باقی‌مانده",
-    "overpaidBy": "اضافه‌پرداخت به مبلغ {{amount}}"
+    "overpaidBy": "اضافه‌پرداخت به مبلغ {{amount}}",
+    "emptyTab": "هنوز سندی در این برگه وجود ندارد"
   },
   "warehouse": {
     "title": "انبار",

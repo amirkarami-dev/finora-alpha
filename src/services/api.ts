@@ -1210,9 +1210,16 @@ export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
   await delay(180);
   const contract = contractById.get(input.contractId);
   if (!contract) throw new Error(`Contract ${input.contractId} not found`);
+  const trimmedNumber = input.invoiceNumber?.trim();
+  if (trimmedNumber) {
+    const collides = db.invoices.some(
+      (inv) => inv.invoiceType === input.invoiceType && inv.invoiceNumber === trimmedNumber,
+    );
+    if (collides) throw new Error('duplicate-number');
+  }
   const invoice: Invoice = {
     id: nextInvoiceId(input.invoiceType),
-    invoiceNumber: input.invoiceNumber?.trim() || nextInvoiceNumber(input.invoiceType),
+    invoiceNumber: trimmedNumber || nextInvoiceNumber(input.invoiceType),
     invoiceType: input.invoiceType,
     invoiceDate: input.invoiceDate,
     contractId: input.contractId,
@@ -1461,7 +1468,7 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
       side,
       invoice.id,
     );
-    if (item.quantityMt > uninvoicedExcludingSelf + item.quantityMt + 1e-9) {
+    if (item.quantityMt > uninvoicedExcludingSelf + 1e-9) {
       throw new Error('qty-exceeds-remaining');
     }
   }

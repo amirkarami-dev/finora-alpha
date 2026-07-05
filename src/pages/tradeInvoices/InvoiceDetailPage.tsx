@@ -300,7 +300,12 @@ export default function InvoiceDetailPage() {
       dataIndex: 'amount',
       width: 140,
       align: 'right',
-      render: (v) => <Money value={v} strong muteZero />,
+      render: (v, r) =>
+        invoiceItemUnitPrice(r) === null ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Money value={v} strong muteZero />
+        ),
     },
     {
       title: t('containers.blNumber'),

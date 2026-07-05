@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Table, Tag, Typography } from 'antd';
+import { Button, Card, Empty, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -165,6 +165,7 @@ export function InvoiceListTabs({ side, title, subtitle }: InvoiceListTabsProps)
           dataSource={filtered}
           scroll={{ x: 1100 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+          locale={{ emptyText: <Empty description={t('tradeInvoices.emptyTab')} /> }}
           onRow={(r) => ({
             onClick: () => navigate(`/app/invoices/${encodeURIComponent(r.id)}`),
             className: 'clickable-row',

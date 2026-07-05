@@ -294,7 +294,7 @@ export default function InvoicePrintPage() {
                       <td className="invoice-print-num">{unit === null ? '—' : formatCurrency(unit, invoice.currency)}</td>
                       <td className="invoice-print-num">{item.discountPercent ? `${item.discountPercent}%` : '—'}</td>
                       <td className="invoice-print-num" style={{ fontWeight: 600 }}>
-                        {formatCurrency(item.amount, invoice.currency)}
+                        {unit === null ? '—' : formatCurrency(item.amount, invoice.currency)}
                       </td>
                     </tr>
                   );

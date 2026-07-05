@@ -57,7 +57,8 @@
     "activate": "تفعيل",
     "deactivate": "إلغاء التفعيل",
     "deactivateConfirm": "إلغاء تفعيل هذا السجل؟",
-    "activateConfirm": "تفعيل هذا السجل؟"
+    "activateConfirm": "تفعيل هذا السجل؟",
+    "mtUnit": "طن"
   },
   "nav": {
     "executive": "الإدارة التنفيذية",
@@ -424,7 +425,8 @@
     "recordedOn": "مسجلة على",
     "paidToDate": "المدفوع حتى الآن",
     "remaining": "المتبقي",
-    "overpaidBy": "دفع زائد بمقدار {{amount}}"
+    "overpaidBy": "دفع زائد بمقدار {{amount}}",
+    "emptyTab": "لا توجد مستندات في هذا التبويب بعد"
   },
   "warehouse": {
     "title": "المستودع",

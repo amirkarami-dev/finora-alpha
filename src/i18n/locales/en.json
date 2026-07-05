@@ -57,7 +57,8 @@
     "activate": "Activate",
     "deactivate": "Deactivate",
     "deactivateConfirm": "Deactivate this record?",
-    "activateConfirm": "Activate this record?"
+    "activateConfirm": "Activate this record?",
+    "mtUnit": "MT"
   },
   "nav": {
     "executive": "Executive",
@@ -424,7 +425,8 @@
     "recordedOn": "Recorded on",
     "paidToDate": "Paid to date",
     "remaining": "Remaining",
-    "overpaidBy": "Overpaid by {{amount}}"
+    "overpaidBy": "Overpaid by {{amount}}",
+    "emptyTab": "No documents in this tab yet"
   },
   "warehouse": {
     "title": "Warehouse",

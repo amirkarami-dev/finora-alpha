@@ -187,7 +187,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           />
                         </Form.Item>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          MT
+                          {t('common.mtUnit')}
                         </Text>
                       </div>
                     </div>

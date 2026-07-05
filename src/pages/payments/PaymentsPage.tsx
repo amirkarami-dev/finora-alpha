@@ -128,7 +128,7 @@ export default function PaymentsPage() {
           loading={isLoading}
           columns={columns}
           dataSource={filtered}
-          scroll={{ x: 1160 }}
+          scroll={{ x: 1410 }}
           pagination={{ pageSize: 12, showSizeChanger: false, hideOnSinglePage: true }}
         />
       </Card>

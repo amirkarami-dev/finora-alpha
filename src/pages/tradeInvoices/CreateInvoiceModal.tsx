@@ -138,8 +138,12 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
       message.success(t('tradeInvoices.created'));
       onClose();
       navigate(`/app/invoices/${encodeURIComponent(created.id)}`);
-    } catch {
-      message.error(t('common.saveFailed'));
+    } catch (err) {
+      if (err instanceof Error && err.message === 'duplicate-number') {
+        form.setFields([{ name: 'invoiceNumber', errors: [t('tradeInvoices.numberTaken')] }]);
+      } else {
+        message.error(t('common.saveFailed'));
+      }
     }
   };
 
