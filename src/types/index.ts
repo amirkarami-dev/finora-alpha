@@ -124,10 +124,15 @@ export interface Payment {
   /** Container reference / invoice this payment settles. */
   reference?: string;
   notes?: string;
+  /** Provisional or final trade invoice this payment settles. */
+  invoiceId?: string;
+  /** Money direction. 'IN' = received from customer (receivable), 'OUT' = paid to
+   *  supplier. Optional for legacy rows — undefined MUST be treated as 'IN'. */
+  direction?: 'IN' | 'OUT';
 }
 
-/** A flattened invoice view, one per container shipment. */
-export interface Invoice {
+/** A flattened shipment-invoice view, one per container shipment. */
+export interface ShipmentInvoice {
   id: string;
   containerReference: string;
   contractId: string;
@@ -139,6 +144,94 @@ export interface Invoice {
   issueDate: string;
   dueDate: string;
   status: ContainerStatus;
+}
+
+/* ------------------------------------------------------------------ *
+ * Trade documents (purchase/sale × order/provisional/invoice) — see
+ * docs/superpowers/specs/2026-07-05-invoices-warehouse-payments-design.md §2.
+ * ------------------------------------------------------------------ */
+
+export type InvoiceType =
+  | 'PURCHASE_ORDER' | 'PURCHASE_PROVISIONAL' | 'PURCHASE_INVOICE'
+  | 'SALE_ORDER' | 'SALE_PROVISIONAL' | 'SALE_INVOICE';
+export type InvoiceStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+export type InvoiceSide = 'PURCHASE' | 'SALE'; // derived helper union
+
+export interface InvoiceItem {
+  id: string;
+  invoiceId: string;
+  /** Source goods line on the contract. */
+  contractItemId: string;
+  product: string;
+  quantityMt: number;
+  // Copied from the contract item at insertion; read-only in ALL document types:
+  lmePercent: number;
+  lmeFixed: boolean;
+  fixedPrice: number;   // contract Item.fixedLmePrice
+  premium: number;
+  // Set on provisional/final documents (kept per item even when applied to all):
+  lmePrice?: number;    // LME quotation used for floating (lmeFixed=false) lines
+  lmeDate?: string;     // ISO date of that quotation
+  discountPercent?: number; // 0–100
+  /** Line value in invoice currency; 0 when price incomplete (floating line without lmePrice). */
+  amount: number;
+  blNumber?: string;
+  containerNo?: string;
+  description?: string;
+}
+
+export interface Invoice {
+  id: string;               // e.g. 'inv-po-0001' (prefix by type, zero-padded counter)
+  invoiceNumber: string;    // e.g. 'PO-2026-0001' — auto-generated, editable while DRAFT
+  invoiceType: InvoiceType;
+  invoiceDate: string;      // ISO date
+  contractId: string;
+  customerId: string;       // auto-set from contract; immutable
+  status: InvoiceStatus;
+  currency: Currency;       // default 'USD'
+  exchangeRate: number;     // AED per USD; 1 when currency === 'USD'
+  description?: string;
+  /** Document this one was converted FROM (order→provisional→invoice chain). */
+  refInvoiceId?: string;
+  /** Simulated e-mail send timestamp (provisional/final only). */
+  sentAt?: string;
+  // Persisted totals (recomputed on every item mutation):
+  totalAmount: number;      // Σ item.amount
+  totalDiscount: number;    // Σ discount value in currency (pre-discount − post-discount)
+  totalWeightMt: number;    // Σ item.quantityMt
+  createdAt: string;
+  items: InvoiceItem[];
+}
+
+export interface Warehouse {
+  id: string;               // 'wh-mw'
+  name: string;
+  code: string;
+  location?: string;
+  active: boolean;
+}
+
+export type InventoryDocType = 'IN' | 'OUT';
+
+export interface InventoryDocument {
+  id: string;
+  docNumber: string;        // 'GRN-2026-0001' (IN) / 'GDN-2026-0001' (OUT)
+  warehouseId: string;
+  /** Final invoice that produced this movement (undefined for future manual docs). */
+  invoiceId?: string;
+  type: InventoryDocType;
+  date: string;
+  status: 'CONFIRMED' | 'CANCELLED';
+  notes?: string;
+  items: InventoryDocumentItem[];
+}
+
+export interface InventoryDocumentItem {
+  id: string;
+  documentId: string;
+  invoiceItemId?: string;
+  product: string;
+  quantityMt: number;
 }
 
 /** Aggregated, dashboard-ready customer balance. */

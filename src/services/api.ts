@@ -12,13 +12,13 @@ import type {
   CustomerType,
   DashboardKpis,
   Incoterm,
-  Invoice,
   Item,
   ItemPartner,
   ItemStatus,
   Partner,
   Payment,
   ProductVolume,
+  ShipmentInvoice,
   StatusBreakdown,
   TimeSeriesPoint,
 } from '@/types';
@@ -159,7 +159,7 @@ export async function getContainersByContract(contractId: string): Promise<Conta
 }
 
 /* ----------------------------- Invoices ----------------------------- */
-export function buildInvoices(): Invoice[] {
+export function buildInvoices(): ShipmentInvoice[] {
   return db.containers.map((c) => {
     const customer = customerOfContract(c.contractId);
     return {
@@ -178,7 +178,7 @@ export function buildInvoices(): Invoice[] {
   });
 }
 
-export async function getInvoices(): Promise<Invoice[]> {
+export async function getInvoices(): Promise<ShipmentInvoice[]> {
   await delay();
   return buildInvoices().sort((a, b) => dayjs(b.issueDate).valueOf() - dayjs(a.issueDate).valueOf());
 }
@@ -747,7 +747,7 @@ export interface CustomerPortalSummary {
   availableCredit: number;
   aging: AgingBucket[];
   series: TimeSeriesPoint[];
-  openInvoices: Invoice[];
+  openInvoices: ShipmentInvoice[];
   recentPayments: PaymentRow[];
   contracts: ContractRow[];
 }

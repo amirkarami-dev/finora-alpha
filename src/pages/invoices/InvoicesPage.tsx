@@ -11,7 +11,7 @@ import { StatusTag } from '@/components/common/StatusTag';
 import { useInvoices } from '@/services/queries';
 import { formatDate, formatMt } from '@/utils/format';
 import { CONTAINER_STATUSES, ROUTES } from '@/config/constants';
-import type { ContainerStatus, Invoice } from '@/types';
+import type { ContainerStatus, ShipmentInvoice } from '@/types';
 
 const { Text } = Typography;
 
@@ -42,7 +42,7 @@ export default function InvoicesPage() {
     });
   }, [data, search, statusFilter]);
 
-  const columns: ColumnsType<Invoice> = [
+  const columns: ColumnsType<ShipmentInvoice> = [
     { title: t('invoices.number'), dataIndex: 'id', fixed: 'left', width: 180, render: (v) => <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text> },
     { title: t('invoices.customer'), dataIndex: 'customerName', width: 190, sorter: (a, b) => a.customerName.localeCompare(b.customerName) },
     { title: t('containers.product'), dataIndex: 'product', width: 190 },
@@ -98,7 +98,7 @@ export default function InvoicesPage() {
             ]}
           />
         </div>
-        <Table<Invoice>
+        <Table<ShipmentInvoice>
           rowKey="id"
           loading={isLoading}
           columns={columns}

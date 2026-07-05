@@ -9,13 +9,17 @@ import type {
   Customer,
   CustomerType,
   Incoterm,
+  InventoryDocument,
+  Invoice,
+  InvoiceItem,
   Item,
   ItemPartner,
   Partner,
   Payment,
+  Warehouse,
 } from '@/types';
 import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
-import { containerInvoice, unitPrice } from '@/utils/calc';
+import { containerInvoice, invoiceItemAmount, invoiceItemUnitPrice, unitPrice } from '@/utils/calc';
 
 /* ------------------------------------------------------------------ *
  * Deterministic PRNG so the demo dataset is stable across reloads.
@@ -448,18 +452,236 @@ for (const contract of contracts) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Trade documents + warehouse seed (spec §11). ZERO PRNG draws —
+ * appended after all rnd()-consuming post-passes; earlier values
+ * (e.g. cust-am creditLimit 2,750,000) must stay byte-identical.
+ * ------------------------------------------------------------------ */
+const warehouses: Warehouse[] = [
+  { id: 'wh-mw', name: 'Main Warehouse', code: 'MW', location: 'Jebel Ali, Dubai', active: true },
+];
+const invoices: Invoice[] = [];
+const inventoryDocs: InventoryDocument[] = [];
+
+let invoiceItemCounter = 0;
+function nextInvoiceItemId(): string {
+  invoiceItemCounter += 1;
+  return `invitem-${invoiceItemCounter}`;
+}
+
+/** Build one InvoiceItem snapshot from a contract goods line (spec §2/§11). */
+function makeInvoiceItem(
+  invoiceId: string,
+  contractItem: Item,
+  opts: { lmeDate?: string; lmePrice?: number; discountPercent?: number },
+): InvoiceItem {
+  const quantityMt = contractItem.quantityMt;
+  const lmePercent = contractItem.lmePercent;
+  const lmeFixed = contractItem.lmeFixed;
+  const fixedPrice = contractItem.fixedLmePrice;
+  const premium = contractItem.premium;
+  const lmePrice = !lmeFixed ? opts.lmePrice : undefined;
+  const lmeDate = opts.lmeDate;
+  const discountPercent = opts.discountPercent;
+  const amount = round(
+    invoiceItemAmount({ lmeFixed, fixedPrice, lmePrice, lmePercent, premium, quantityMt, discountPercent }),
+    2,
+  );
+  return {
+    id: nextInvoiceItemId(),
+    invoiceId,
+    contractItemId: contractItem.id,
+    product: contractItem.product,
+    quantityMt,
+    lmePercent,
+    lmeFixed,
+    fixedPrice,
+    premium,
+    lmePrice,
+    lmeDate,
+    discountPercent,
+    amount,
+  };
+}
+
+/** Sum item.amount / discount-value / quantityMt for header totals (never hardcoded). */
+function invoiceTotals(items: InvoiceItem[]) {
+  const totalAmount = round(items.reduce((s, it) => s + it.amount, 0), 2);
+  const totalDiscount = round(
+    items.reduce((s, it) => {
+      const gross = round((invoiceItemUnitPrice(it) ?? 0) * it.quantityMt, 2);
+      return s + (gross - it.amount);
+    }, 0),
+    2,
+  );
+  const totalWeightMt = round(items.reduce((s, it) => s + it.quantityMt, 0), 2);
+  return { totalAmount, totalDiscount, totalWeightMt };
+}
+
+const PURCHASE_ORDER_DATE = dayjs('2026-05-10').toISOString();
+const PURCHASE_PROVISIONAL_DATE = dayjs('2026-05-21').toISOString();
+const PURCHASE_INVOICE_DATE = dayjs('2026-05-25').toISOString();
+const SALE_ORDER_DATE = dayjs('2026-06-05').toISOString();
+const LME_QUOTE_DATE = dayjs('2026-05-20').toISOString();
+const LME_QUOTE_PRICE = 2450;
+
+// First PURCHASE contract (array order): full PO → PP → PI chain.
+const firstPurchaseContract = contracts.find((c) => c.contractType === 'PURCHASE');
+if (firstPurchaseContract) {
+  const contract = firstPurchaseContract;
+
+  // PO-2026-0001: unpriced, full qty per item.
+  const poId = 'inv-po-0001';
+  const poItems = contract.items.map((item) => makeInvoiceItem(poId, item, {}));
+  const poTotals = invoiceTotals(poItems);
+  const po: Invoice = {
+    id: poId,
+    invoiceNumber: 'PO-2026-0001',
+    invoiceType: 'PURCHASE_ORDER',
+    invoiceDate: PURCHASE_ORDER_DATE,
+    contractId: contract.id,
+    customerId: contract.customerId,
+    status: 'CONFIRMED',
+    currency: 'USD',
+    exchangeRate: 1,
+    totalAmount: poTotals.totalAmount,
+    totalDiscount: poTotals.totalDiscount,
+    totalWeightMt: poTotals.totalWeightMt,
+    createdAt: PURCHASE_ORDER_DATE,
+    items: poItems,
+  };
+  invoices.push(po);
+
+  // PP-2026-0001: lmeDate on ALL items, lmePrice 2450 on FLOATING items only, discount 0.
+  const ppId = 'inv-pp-0001';
+  const ppItems = contract.items.map((item) =>
+    makeInvoiceItem(ppId, item, { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 }),
+  );
+  const ppTotals = invoiceTotals(ppItems);
+  const pp: Invoice = {
+    id: ppId,
+    invoiceNumber: 'PP-2026-0001',
+    invoiceType: 'PURCHASE_PROVISIONAL',
+    invoiceDate: PURCHASE_PROVISIONAL_DATE,
+    contractId: contract.id,
+    customerId: contract.customerId,
+    status: 'CONFIRMED',
+    currency: 'USD',
+    exchangeRate: 1,
+    refInvoiceId: poId,
+    totalAmount: ppTotals.totalAmount,
+    totalDiscount: ppTotals.totalDiscount,
+    totalWeightMt: ppTotals.totalWeightMt,
+    createdAt: PURCHASE_PROVISIONAL_DATE,
+    items: ppItems,
+  };
+  invoices.push(pp);
+
+  // PI-2026-0001: same prices as PP (ref PP).
+  const piId = 'inv-pi-0001';
+  const piItems = contract.items.map((item) =>
+    makeInvoiceItem(piId, item, { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 }),
+  );
+  const piTotals = invoiceTotals(piItems);
+  const pi: Invoice = {
+    id: piId,
+    invoiceNumber: 'PI-2026-0001',
+    invoiceType: 'PURCHASE_INVOICE',
+    invoiceDate: PURCHASE_INVOICE_DATE,
+    contractId: contract.id,
+    customerId: contract.customerId,
+    status: 'CONFIRMED',
+    currency: 'USD',
+    exchangeRate: 1,
+    refInvoiceId: ppId,
+    totalAmount: piTotals.totalAmount,
+    totalDiscount: piTotals.totalDiscount,
+    totalWeightMt: piTotals.totalWeightMt,
+    createdAt: PURCHASE_INVOICE_DATE,
+    items: piItems,
+  };
+  invoices.push(pi);
+
+  // GRN-2026-0001: CONFIRMED IN inventory doc for the PI into wh-mw.
+  const grnId = 'idoc-0001';
+  const grn: InventoryDocument = {
+    id: grnId,
+    docNumber: 'GRN-2026-0001',
+    warehouseId: 'wh-mw',
+    invoiceId: piId,
+    type: 'IN',
+    date: PURCHASE_INVOICE_DATE,
+    status: 'CONFIRMED',
+    items: piItems.map((it, idx) => ({
+      id: `idocitem-${idx + 1}`,
+      documentId: grnId,
+      invoiceItemId: it.id,
+      product: it.product,
+      quantityMt: it.quantityMt,
+    })),
+  };
+  inventoryDocs.push(grn);
+
+  // One payment: 50% of PI totalAmount, currency USD, fxRate 1, method 'TT',
+  // date 2026-06-01, invoiceId = PI id, direction 'OUT', reference = 'PI-2026-0001'.
+  const paymentAmount = round(pi.totalAmount * 0.5, 2);
+  payments.push({
+    id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
+    customerId: pi.customerId,
+    date: dayjs('2026-06-01').toISOString(),
+    currency: 'USD',
+    amount: paymentAmount,
+    fxRate: 1,
+    amountUSD: paymentAmount,
+    method: 'TT',
+    reference: 'PI-2026-0001',
+    invoiceId: piId,
+    direction: 'OUT',
+    notes: '',
+  });
+}
+
+// First SELL contract (array order): DRAFT SO-2026-0001, first item only, 50% qty.
+const firstSellContract = contracts.find((c) => c.contractType === 'SELL');
+if (firstSellContract && firstSellContract.items.length > 0) {
+  const contract = firstSellContract;
+  const firstItem = contract.items[0];
+  const soId = 'inv-so-0001';
+  const halfQtyItem: Item = { ...firstItem, quantityMt: round(firstItem.quantityMt * 0.5, 2) };
+  const soItems = [makeInvoiceItem(soId, halfQtyItem, {})];
+  const soTotals = invoiceTotals(soItems);
+  const so: Invoice = {
+    id: soId,
+    invoiceNumber: 'SO-2026-0001',
+    invoiceType: 'SALE_ORDER',
+    invoiceDate: SALE_ORDER_DATE,
+    contractId: contract.id,
+    customerId: contract.customerId,
+    status: 'DRAFT',
+    currency: 'USD',
+    exchangeRate: 1,
+    totalAmount: soTotals.totalAmount,
+    totalDiscount: soTotals.totalDiscount,
+    totalWeightMt: soTotals.totalWeightMt,
+    createdAt: SALE_ORDER_DATE,
+    items: soItems,
+  };
+  invoices.push(so);
+}
+
+/* ------------------------------------------------------------------ *
  * Persistence. The generated data above is the SEED. To keep edits
  * across page refreshes we hydrate `db` from localStorage on load and
  * write it back after every mutation (see api.ts `persistDb()` calls).
  *
  * IMPORTANT: bump SCHEMA_VERSION whenever an entity shape changes
  * (add/remove/rename a field on Customer/Contract/Item/Container/
- * Payment/Partner). A new key discards old-shape data and re-seeds, so
- * a persisted db can never crash the app after a schema change. As a
- * safety net, `isCompatible()` also probes representative fields and
- * falls back to the seed when they're missing.
+ * Payment/Partner/Invoice/Warehouse/InventoryDocument). A new key
+ * discards old-shape data and re-seeds, so a persisted db can never
+ * crash the app after a schema change. As a safety net,
+ * `isCompatible()` also probes representative fields and falls back
+ * to the seed when they're missing.
  * ------------------------------------------------------------------ */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
@@ -468,6 +690,9 @@ const seed = {
   containers,
   payments,
   partners,
+  warehouses,
+  invoices,
+  inventoryDocs,
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -475,6 +700,9 @@ function isCompatible(d: unknown): d is typeof seed {
   if (!d || typeof d !== 'object') return false;
   const o = d as Record<string, unknown>;
   if (!Array.isArray(o.customers) || !Array.isArray(o.contracts) || !Array.isArray(o.partners)) {
+    return false;
+  }
+  if (!Array.isArray(o.invoices) || !Array.isArray(o.warehouses) || !Array.isArray(o.inventoryDocs)) {
     return false;
   }
   // Probe representative fields added over time (belt-and-braces vs. SCHEMA_VERSION).
@@ -486,6 +714,10 @@ function isCompatible(d: unknown): d is typeof seed {
   if (ct && ct.contractType === undefined) return false;
   const p = o.partners[0] as Record<string, unknown> | undefined;
   if (p && p.active === undefined) return false;
+  const inv = o.invoices[0] as Record<string, unknown> | undefined;
+  if (inv && inv.invoiceType === undefined) return false;
+  const wh = o.warehouses[0] as Record<string, unknown> | undefined;
+  if (wh && wh.active === undefined) return false;
   return true;
 }
 
