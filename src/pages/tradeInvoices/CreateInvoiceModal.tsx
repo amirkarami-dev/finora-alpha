@@ -3,10 +3,10 @@ import { App, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { useContracts, useCreateInvoice } from '@/services/queries';
+import { useContracts, useCreateInvoice, useUpdateInvoiceHeader } from '@/services/queries';
 import { previewInvoiceNumber } from '@/services/api';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import type { Currency, InvoiceType } from '@/types';
+import type { Currency, Invoice, InvoiceType } from '@/types';
 
 const { TextArea } = Input;
 
@@ -23,6 +23,8 @@ interface CreateInvoiceModalProps {
   open: boolean;
   onClose: () => void;
   invoiceType: InvoiceType;
+  /** When provided the modal edits this invoice's header (contract locked); otherwise it creates. */
+  invoice?: Invoice;
 }
 
 const TYPE_TITLE_KEY: Record<InvoiceType, string> = {
@@ -34,14 +36,16 @@ const TYPE_TITLE_KEY: Record<InvoiceType, string> = {
   SALE_INVOICE: 'tradeInvoices.newInvoice',
 };
 
-export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoiceModalProps) {
+export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: CreateInvoiceModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm<CreateInvoiceFormValues>();
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const createMut = useCreateInvoice();
+  const updateHeaderMut = useUpdateInvoiceHeader();
   const fxRate = useSettingsStore((s) => s.fxRate);
+  const isEdit = !!invoice;
 
   const contractType = invoiceType.startsWith('PURCHASE') ? 'PURCHASE' : 'SELL';
 
@@ -57,15 +61,24 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
     }));
   }, [contracts, contractType]);
 
-  const initialValues: Partial<CreateInvoiceFormValues> = {
-    invoiceDate: dayjs(),
-    currency: 'USD',
-    exchangeRate: 1,
-  };
+  const initialValues: Partial<CreateInvoiceFormValues> = isEdit
+    ? {
+        contractId: invoice.contractId,
+        invoiceDate: dayjs(invoice.invoiceDate),
+        invoiceNumber: invoice.invoiceNumber,
+        currency: invoice.currency,
+        exchangeRate: invoice.exchangeRate,
+        description: invoice.description,
+      }
+    : {
+        invoiceDate: dayjs(),
+        currency: 'USD',
+        exchangeRate: 1,
+      };
 
-  // Prefill the auto-generated number whenever the modal opens for this type.
+  // Prefill the auto-generated number whenever the CREATE modal opens for this type.
   useEffect(() => {
-    if (!open) return;
+    if (!open || isEdit) return;
     let cancelled = false;
     previewInvoiceNumber(invoiceType).then((number) => {
       if (!cancelled) form.setFieldValue('invoiceNumber', number);
@@ -74,7 +87,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, invoiceType]);
+  }, [open, invoiceType, isEdit]);
 
   const selectedContractId = Form.useWatch('contractId', form);
   const selectedCustomerName =
@@ -89,8 +102,31 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
     } catch {
       return; // validation errors render inline
     }
+    if (isEdit && invoice) {
+      try {
+        await updateHeaderMut.mutateAsync({
+          id: invoice.id,
+          patch: {
+            invoiceNumber: values.invoiceNumber,
+            invoiceDate: values.invoiceDate.toISOString(),
+            currency: values.currency,
+            exchangeRate: values.currency === 'AED' ? values.exchangeRate : 1,
+            description: values.description?.trim() || undefined,
+          },
+        });
+        message.success(t('tradeInvoices.headerUpdated'));
+        onClose();
+      } catch (err) {
+        if (err instanceof Error && err.message === 'duplicate-number') {
+          form.setFields([{ name: 'invoiceNumber', errors: [t('tradeInvoices.numberTaken')] }]);
+        } else {
+          message.error(t('common.saveFailed'));
+        }
+      }
+      return;
+    }
     try {
-      const invoice = await createMut.mutateAsync({
+      const created = await createMut.mutateAsync({
         invoiceType,
         contractId: values.contractId,
         invoiceDate: values.invoiceDate.toISOString(),
@@ -101,7 +137,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
       });
       message.success(t('tradeInvoices.created'));
       onClose();
-      navigate(`/app/invoices/${encodeURIComponent(invoice.id)}`);
+      navigate(`/app/invoices/${encodeURIComponent(created.id)}`);
     } catch {
       message.error(t('common.saveFailed'));
     }
@@ -110,17 +146,17 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
   return (
     <Modal
       open={open}
-      title={t(TYPE_TITLE_KEY[invoiceType])}
+      title={t(isEdit ? 'tradeInvoices.editHeader' : TYPE_TITLE_KEY[invoiceType])}
       okText={t('common.save')}
       cancelText={t('common.cancel')}
       onOk={submit}
       onCancel={onClose}
-      confirmLoading={createMut.isPending}
+      confirmLoading={createMut.isPending || updateHeaderMut.isPending}
       destroyOnHidden
       maskClosable={false}
     >
       <Form
-        key={`${invoiceType}-${open}`}
+        key={`${invoiceType}-${invoice?.id ?? 'new'}-${open}`}
         form={form}
         layout="vertical"
         preserve={false}
@@ -133,6 +169,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType }: CreateInvoice
         >
           <Select
             showSearch
+            disabled={isEdit}
             loading={contractsLoading}
             placeholder={t('tradeInvoices.selectContract')}
             optionFilterProp="label"
