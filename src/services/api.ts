@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { db } from '@/mock/data';
+import { db, persistDb } from '@/mock/data';
 import type {
   Container,
   ContainerStatus,
@@ -424,6 +424,7 @@ export async function createContract(input: ContractInput): Promise<ContractRow>
   };
   db.contracts.push(contract);
   reindex();
+  persistDb();
   return buildContractRows().find((c) => c.id === contract.id)!;
 }
 
@@ -437,6 +438,7 @@ export async function updateContract(id: string, input: ContractInput): Promise<
   contract.status = input.status;
   contract.notes = input.notes ?? '';
   reindex();
+  persistDb();
   return buildContractRows().find((c) => c.id === id)!;
 }
 
@@ -471,6 +473,7 @@ export async function createItem(contractId: string, input: ItemInput): Promise<
   };
   contract.items.push(item);
   reindex();
+  persistDb();
   return item;
 }
 
@@ -499,6 +502,7 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
   const shipped = shippedMt(itemId, db.containers);
   target.remainingMt = Math.round(Math.max(input.quantityMt - shipped, 0) * 1000) / 1000;
   reindex();
+  persistDb();
   return target;
 }
 
@@ -579,6 +583,7 @@ export async function createContainer(input: ContainerInput): Promise<ContainerR
   db.containers.push(container);
   recomputeItemRemaining(input.itemId);
   reindex();
+  persistDb();
   return buildContainerRows().find((c) => c.id === container.id)!;
 }
 
@@ -611,6 +616,7 @@ export async function updateContainer(id: string, input: ContainerInput): Promis
   if (previousItemId !== input.itemId) recomputeItemRemaining(previousItemId);
   recomputeItemRemaining(input.itemId);
   reindex();
+  persistDb();
   return buildContainerRows().find((c) => c.id === id)!;
 }
 
@@ -650,6 +656,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
   };
   db.customers.push(customer);
   reindex();
+  persistDb();
   return customer;
 }
 
@@ -668,6 +675,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
   customer.paymentTermsDays = input.paymentTermsDays;
   customer.creditLimit = input.creditLimit;
   reindex();
+  persistDb();
   return customer;
 }
 
@@ -676,6 +684,7 @@ export async function setCustomerActive(id: string, active: boolean): Promise<Cu
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
   customer.active = active;
+  persistDb();
   return customer;
 }
 
@@ -692,6 +701,7 @@ export async function createPartner(input: PartnerInput): Promise<Partner> {
   if (db.partners.some((p) => p.id === id)) throw new Error('duplicate-code');
   const partner: Partner = { id, name: input.name.trim(), code, active: true };
   db.partners.push(partner);
+  persistDb();
   return partner; // no reindex — nothing in api.ts indexes partners
 }
 
@@ -700,6 +710,7 @@ export async function updatePartner(id: string, input: PartnerInput): Promise<Pa
   const partner = db.partners.find((p) => p.id === id);
   if (!partner) throw new Error(`Partner ${id} not found`);
   partner.name = input.name.trim(); // code immutable
+  persistDb();
   return partner;
 }
 
@@ -708,6 +719,7 @@ export async function setPartnerActive(id: string, active: boolean): Promise<Par
   const partner = db.partners.find((p) => p.id === id);
   if (!partner) throw new Error(`Partner ${id} not found`);
   partner.active = active;
+  persistDb();
   return partner;
 }
 

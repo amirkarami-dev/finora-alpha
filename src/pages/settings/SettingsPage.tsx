@@ -14,7 +14,7 @@ import {
   Typography,
 } from 'antd';
 import { BgColorsOutlined, GlobalOutlined, MoonOutlined, SaveOutlined, SunOutlined } from '@ant-design/icons';
-import { useQueryClient } from '@tanstack/react-query';
+import { resetDb } from '@/mock/data';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useUiStore } from '@/store/useUiStore';
@@ -49,7 +49,6 @@ function SettingRow({
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const queryClient = useQueryClient();
 
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
@@ -61,10 +60,8 @@ export default function SettingsPage() {
 
   const save = () => message.success(t('settings.saved'));
 
-  const resetData = () => {
-    queryClient.invalidateQueries();
-    message.success(t('settings.saved'));
-  };
+  // Clears persisted data and reloads → the deterministic seed regenerates.
+  const resetData = () => resetDb();
 
   return (
     <div className="fade-in" style={{ maxWidth: 880, margin: '0 auto' }}>

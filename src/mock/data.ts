@@ -447,7 +447,22 @@ for (const contract of contracts) {
   }
 }
 
-export const db = {
+/* ------------------------------------------------------------------ *
+ * Persistence. The generated data above is the SEED. To keep edits
+ * across page refreshes we hydrate `db` from localStorage on load and
+ * write it back after every mutation (see api.ts `persistDb()` calls).
+ *
+ * IMPORTANT: bump SCHEMA_VERSION whenever an entity shape changes
+ * (add/remove/rename a field on Customer/Contract/Item/Container/
+ * Payment/Partner). A new key discards old-shape data and re-seeds, so
+ * a persisted db can never crash the app after a schema change. As a
+ * safety net, `isCompatible()` also probes representative fields and
+ * falls back to the seed when they're missing.
+ * ------------------------------------------------------------------ */
+const SCHEMA_VERSION = 1;
+const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
+
+const seed = {
   customers,
   contracts,
   containers,
@@ -455,5 +470,57 @@ export const db = {
   partners,
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
+
+function isCompatible(d: unknown): d is typeof seed {
+  if (!d || typeof d !== 'object') return false;
+  const o = d as Record<string, unknown>;
+  if (!Array.isArray(o.customers) || !Array.isArray(o.contracts) || !Array.isArray(o.partners)) {
+    return false;
+  }
+  // Probe representative fields added over time (belt-and-braces vs. SCHEMA_VERSION).
+  const c = o.customers[0] as Record<string, unknown> | undefined;
+  if (c && (c.active === undefined || c.customerType === undefined || c.creditLimit === undefined)) {
+    return false;
+  }
+  const ct = o.contracts[0] as Record<string, unknown> | undefined;
+  if (ct && ct.contractType === undefined) return false;
+  const p = o.partners[0] as Record<string, unknown> | undefined;
+  if (p && p.active === undefined) return false;
+  return true;
+}
+
+function loadDb(): typeof seed {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (isCompatible(parsed)) return parsed;
+    }
+  } catch {
+    /* corrupt or unavailable — fall back to the seed */
+  }
+  return seed;
+}
+
+export const db = loadDb();
+
+/** Serialize the current db to localStorage. Called after every mutation. */
+export function persistDb(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  } catch {
+    /* quota exceeded / serialization issue — ignore in the mock layer */
+  }
+}
+
+/** Clear persisted data and reload so the deterministic seed regenerates. */
+export function resetDb(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  window.location.reload();
+}
 
 export type Db = typeof db;
