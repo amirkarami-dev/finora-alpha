@@ -1,15 +1,14 @@
 import { useTranslation } from 'react-i18next';
-import { PageHeader } from '@/components/common/PageHeader';
+import { InvoiceListTabs } from './InvoiceListTabs';
 
 export default function SalePage() {
   const { t } = useTranslation();
 
   return (
-    <div className="fade-in">
-      <PageHeader
-        title={t('tradeInvoices.saleTitle')}
-        subtitle={t('tradeInvoices.saleSubtitle')}
-      />
-    </div>
+    <InvoiceListTabs
+      side="SALE"
+      title={t('tradeInvoices.saleTitle')}
+      subtitle={t('tradeInvoices.saleSubtitle')}
+    />
   );
 }
