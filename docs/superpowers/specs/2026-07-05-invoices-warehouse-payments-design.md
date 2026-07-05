@@ -107,6 +107,9 @@ export interface InventoryDocumentItem {
 export interface Payment {
   // existing fields unchanged, plus:
   invoiceId?: string;       // provisional or final invoice this payment settles
+  /** Money direction. 'IN' = received from customer (receivable), 'OUT' = paid to
+   *  supplier. Optional for legacy rows — undefined MUST be treated as 'IN'. */
+  direction?: 'IN' | 'OUT';
 }
 ```
 
@@ -137,12 +140,19 @@ amount(item)    = gross * (1 − (item.discountPercent ?? 0) / 100)
 ```
 
 - Floating line without `lmePrice` ⇒ `amount = 0`, UI renders “—” (matches goods-form behavior).
-- Currency: items are priced in USD (LME is USD). If header `currency === 'AED'`,
-  display totals converted via `exchangeRate` **at render time**; stored amounts stay USD.
-  (Header currency/exchangeRate kept for the future backend; default USD/1.)
+- **All stored amounts are USD**, always: `item.amount`, `totalAmount`, `totalDiscount`.
+  `totalAmountUSD ≡ totalAmount` (no second field). If header `currency === 'AED'`,
+  the UI additionally shows the AED equivalent converted via the header's own
+  `exchangeRate` at render time. (Header currency/exchangeRate kept for the future
+  backend; default USD/1.)
 - Totals recomputed and persisted on the header after every item change and on confirm.
-- Reuse `utils/calc.ts` `unitPrice()` where signature fits; add a small
-  `invoiceItemAmount(item)` helper in `utils/calc.ts` (pure, unit-testable).
+- The existing `utils/calc.ts` `unitPrice()` CANNOT be reused — it is hardwired to
+  `fixedLmePrice` with no floating branch. Add a new pure helper
+  `invoiceItemAmount(item)` in `utils/calc.ts` implementing the base-selection above.
+- `applyLmePrice` semantics: sets `lmeDate` on ALL items; sets `lmePrice` on FLOATING
+  items only (fixed lines keep `fixedPrice` as base). When its optional
+  `discountPercent` is provided it overwrites the discount on ALL items (documented,
+  deliberate); when omitted, per-item discounts are untouched.
 
 **Confirm guard**: a provisional/final document cannot be CONFIRMED while any floating
 line lacks `lmePrice` (error toast `tradeInvoices.missingLmePrice`). Orders CAN be
@@ -169,11 +179,25 @@ DRAFT ──confirm──▶ CONFIRMED ──cancel──▶ CANCELLED
 - **Convert** (button on detail page, CONFIRMED docs only):
   PO → PP or PI; PP → PI; SO → SP or SI; SP → SI.
   Creates a new DRAFT of the target type copying header (new number/id/date=TODAY,
-  status DRAFT, `refInvoiceId = source.id`) and all items (fresh item ids; carry
-  lmePrice/lmeDate/discount if already set). A source with a non-cancelled successor
-  hides its Convert button (one active successor per document).
+  status DRAFT, `refInvoiceId = source.id`) and all items (fresh item ids). PP→PI
+  carries lmePrice/lmeDate/discount; PO→PP/PI always starts unpriced (orders never
+  have lmePrice — do not build carry-over logic for that path).
+- **Chain invariants (binding)**:
+  1. At most ONE non-cancelled successor per document — `convertInvoice` throws
+     `'has-successor'` otherwise; UI hides Convert while a non-cancelled successor exists.
+  2. `cancelInvoice` throws `'cancel-blocked-successor'` if the doc has a non-cancelled
+     successor — chains are cancelled leaf-first. (Prevents a second live chain from the
+     same source silently double-counting quantity.)
+  3. `confirmInvoice` RE-VALIDATES remaining contract quantity at confirm time (two
+     drafts can each pass edit-time checks; the second confirm must fail with
+     `'qty-exceeds-remaining'` + toast). Edit-time checks are UX; confirm-time is the guard.
 - **Chain links**: detail page shows "Reference" link to `refInvoiceId` doc and a
   "Converted to" link to any successor (doc whose refInvoiceId = this id, not cancelled).
+- **Relation to `Item.remainingMt`**: that existing field is the SHIPMENT domain
+  (quantity − containers shipped) and is untouched by this feature. The new
+  per-side document remaining (§ above) is a separate figure surfaced only in
+  trade-document UI, labelled "uninvoiced" (`tradeInvoices.uninvoicedMt`) — never
+  rendered as "remaining" next to the shipment figure.
 - **Remaining contract quantity** (per contract item, per side):
   `remaining = contractItem.quantityMt − Σ quantityMt of *chain-leaf* CONFIRMED docs of that side`
   where chain-leaf = CONFIRMED doc with no non-cancelled successor (so a PO fully
@@ -194,6 +218,14 @@ DRAFT ──confirm──▶ CONFIRMED ──cancel──▶ CANCELLED
   (`tradeInvoices.insufficientStock`, interpolated) and NO state change. Success creates
   CONFIRMED `OUT` document.
 - `stock(warehouseId, product) = Σ IN − Σ OUT` over CONFIRMED inventory docs.
+  The stock key is the **normalized** product name (`product.trim().toLowerCase()`);
+  display uses the first-seen original casing. (Accepted mock limitation: product is
+  free text; normalization prevents casing/whitespace fragmenting stock buckets.)
+- DRAFT **sale** final invoices show a live "available MT" column per item (warning
+  color when quantity exceeds current stock) so users aren't surprised at confirm;
+  the authoritative check remains at confirm time.
+- Confirm modal with ZERO active warehouses: show `tradeInvoices.noActiveWarehouse`
+  alert and disable OK (explicit state, not an empty Select).
 - **Cancelling a confirmed final invoice** also sets its inventory document to CANCELLED
   (stock restored implicitly). Cancelling a sale invoice's OUT doc is always safe;
   cancelling a purchase invoice's IN doc is allowed even if it would drive computed stock
@@ -213,13 +245,25 @@ DRAFT ──confirm──▶ CONFIRMED ──cancel──▶ CANCELLED
 
 - `PaymentInput` gains optional `invoiceId`. New api `createPayment(input)` used by a
   **RecordPaymentModal** on CONFIRMED provisional/final detail pages (date default TODAY,
-  currency, fxRate (locked 1 for USD, default settings fx for AED), amount, method, notes).
-  Multiple payments allowed; no overpay block (real desks over/under-settle) but the
-  progress bar caps at 100% and shows the delta.
-- Invoice detail “Payments” card: table of payments for this invoice + `paidUSD`,
-  `remainingUSD = max(totalAmountUSD − paidUSD, 0)` and a Progress bar.
-- Payments recorded this way also appear on the global Payments page (they're the same
-  `db.payments` rows; `customerId` from invoice). `reference` auto-set to invoiceNumber.
+  currency, fxRate (locked 1 for USD; AED default = `useSettingsStore.fxRate`), amount,
+  method, notes). Multiple payments allowed; no overpay block (real desks over/under-
+  settle) but the progress bar caps at 100% and shows the delta.
+- **Direction**: `createPayment` sets `direction: 'OUT'` when the linked invoice is
+  PURCHASE-side, `'IN'` otherwise (SALE or unlinked). **Every receivables aggregation**
+  (`computeAccounts`, `getKpis`, `getExecutiveSummary`, `getCustomerPortalSummary`)
+  must exclude `direction === 'OUT'` rows from totalPaid/collection figures —
+  otherwise supplier payments inflate receivables KPIs. Payments page gains a small
+  direction Tag column (IN green / OUT gold; undefined renders IN).
+- **Chain aggregation**: `paidUSD` for a document = Σ payments whose `invoiceId` is ANY
+  document in the same ref-chain (walk `refInvoiceId` to the root, then successors
+  down). A payment recorded on a provisional therefore still counts on the final
+  invoice after conversion — no double-pay blind spot. The Payments card lists the
+  chain's payments with the document number each was recorded on.
+- `remainingUSD = max(totalAmount − paidUSD, 0)` (both USD, §3) + Progress bar.
+- Payment ids continue the existing `NIZ####` scheme: next = max numeric suffix of
+  existing ids + 1 (scan-based, collision-safe). `reference` auto-set to invoiceNumber.
+- Payments recorded this way also appear on the global Payments page (same
+  `db.payments` rows; `customerId` from invoice).
 
 ## 8. API surface (`src/services/api.ts`)
 
@@ -232,7 +276,9 @@ Functions (all persist via `persistDb()`; throw string codes on rule violations)
 - `getTradeInvoices(side: InvoiceSide)` — headers + counts; `getTradeInvoice(id)` —
   header, items, contract/customer names, chain (ref + successor), payments.
 - `createInvoice(input)` (DRAFT, auto number/id/customer), `updateInvoiceHeader(id, patch)`
-  (DRAFT only), `deleteDraftInvoice`? — **No** (cancel covers it; YAGNI).
+  (DRAFT only; throws `'duplicate-number'` when `invoiceNumber` collides with another
+  document of the same type — surfaced as a field error like `customers.codeTaken`),
+  `deleteDraftInvoice`? — **No** (cancel covers it; YAGNI).
 - `addInvoiceItems(invoiceId, items: InvoiceItemInput[])` (copies pricing snapshot from
   contract item, validates remaining qty), `updateInvoiceItem(invoiceId, itemId, patch)`
   (qty/BL/container/desc/discount), `removeInvoiceItem(invoiceId, itemId)`.
@@ -243,9 +289,16 @@ Functions (all persist via `persistDb()`; throw string codes on rule violations)
   warehouseId required there). `cancelInvoice(id)` — cancels + cascades inventory doc,
   guarded per §6. `convertInvoice(id, targetType)` per §5. `markInvoiceSent(id)`.
 - `getContractRemaining(contractId, side)` — per contract item: quantityMt, remainingMt.
-- `getWarehouses()`, `createWarehouse`, `updateWarehouse`, `setWarehouseActive`,
-  `getInventoryDocuments()`, `getStockLevels()` — `[{ warehouseId, product, mt }]`.
+- `getWarehouses()` (insertion order; confirm-modal default = first ACTIVE),
+  `createWarehouse`, `updateWarehouse`, `setWarehouseActive`,
+  `getInventoryDocuments()`, `getStockLevels()` — `[{ warehouseId, product, mt }]`
+  (product = normalized key + display name, §6).
 - `createPayment(input)`; `getInvoicePayments(invoiceId)` folded into `getTradeInvoice`.
+
+**Naming hygiene**: rename the legacy hook/key `useInvoices`/`qk.invoices` →
+`useShipmentInvoices`/`qk.shipmentInvoices` (consumers: DashboardPage, Portal via
+summary; plus `useInvalidateTrade`'s invalidation list) so they can't be confused
+with the new trade-invoice keys.
 
 **Query hooks** (`queries.ts`): `qk.tradeInvoices(side)`, `qk.tradeInvoice(id)`,
 `qk.contractRemaining(contractId, side)`, `qk.warehouses`, `qk.inventory`, `qk.stock`.
@@ -261,39 +314,50 @@ A shared `useInvalidateInvoices(side, customerId?)` helper mirrors `useInvalidat
 `/app/invoices/:id`, `/app/invoices/:id/print` — static segments win over `:id` in RR6.)
 
 `config/roles.ts`: RouteKey picks the new keys up automatically. ROLE_ACCESS: Manager and
-Staff swap `invoices` → `purchase, sale, warehouse`; CEO/Customer unchanged. NAV_ITEMS:
+Staff swap `invoices` → `purchase, sale, warehouse`; **CEO and Customer arrays must be
+byte-identical after the edit** (all four arrays sit in one literal — copy-paste risk;
+verify explicitly: CEO must NOT see purchase/sale/warehouse, incl. via deep links). NAV_ITEMS:
 `purchase` (finance, icon 'shoppingcart'), `sale` (finance, icon 'tags'), `warehouse`
 (operations, icon 'gold' — AntD `GoldOutlined`, warehouse-ish). Remove `invoices` entry.
 SidebarNav ICONS map gains the three icons. i18n `nav.purchase`, `nav.sale`,
 `nav.warehouse`; old `nav.invoices` key deleted from all three locales.
 
-`routes/index.tsx`: guarded routes — purchase/sale/warehouse pages (Manager+Staff via
-existing RoleRoute mechanism), `invoices/:id` detail + `invoices/:id/print` (print route
-rendered INSIDE RequireAuth but OUTSIDE AppLayout so it has no chrome). Old
-`/app/invoices` list route removed; `src/pages/invoices/InvoicesPage.tsx` deleted.
-Detail/print routes use access key `purchase` OR `sale`? — RoleRoute takes one key; use a
-shared guard allowing any of `purchase|sale` (both roles have both; simplest: guard on
-`purchase`).
+`routes/index.tsx`: guarded routes — purchase/sale/warehouse pages via RoleRoute;
+`invoices/:id` detail + `invoices/:id/print` (print route rendered INSIDE RequireAuth
+but OUTSIDE AppLayout so it has no chrome). Routes stay **flat sibling path strings**
+(`path="invoices/purchase"`, `"invoices/:id"`, …) matching the existing router style —
+RR6 ranks static segments over `:id` automatically, declaration order irrelevant.
+**Extend `RoleRoute` to accept `routeKey: RouteKey | RouteKey[]`** (any-of); guard
+detail + print with `['purchase', 'sale']` — no latent hole if the role matrix ever
+splits sides. Old `/app/invoices` list route removed;
+`src/pages/invoices/InvoicesPage.tsx` deleted. **`DashboardPage.tsx` calls
+`navigate(ROUTES.invoices)` (line ~321)** — repoint to `ROUTES.sale` (receivables
+context) or the compile breaks when the key is removed.
 
 ## 10. Pages & components (new folder `src/pages/tradeInvoices/`)
 
 | File | Responsibility |
 |---|---|
 | `PurchasePage.tsx` / `SalePage.tsx` | thin wrappers → `<InvoiceListTabs side="PURCHASE|SALE" />` |
-| `InvoiceListTabs.tsx` | Tabs order/provisional/invoice with counts; **tab in `?tab=` via useSearchParams (replace:true)** so refresh keeps the tab; per-tab table: number, date, contract id, customer, items count, total (Money), status StatusTag-style Tag, sent Tag; row click → detail; “New …” button per tab → CreateInvoiceModal |
+| `InvoiceListTabs.tsx` | Tabs order/provisional/invoice with counts; tab state via a **shared `useTabParam(validKeys, defaultKey)` hook** (`src/hooks/useTabParam.ts`): reads `?tab=`, validates against the key set (invalid/absent → default AND corrected into the URL via `setSearchParams(..., { replace: true })` on mount) so refresh AND first-load both keep a valid tab; tab switches use replace (no history spam), row-click detail nav uses push (Back returns to the same tab). Per-tab table: number, date, contract id, customer, items count, total (Money), status Tag, sent Tag; row click → detail; “New …” button per tab → CreateInvoiceModal |
 | `CreateInvoiceModal.tsx` | contract Select (side-matching contracts, ACTIVE first, shows id+customer; sets customer read-only field), date (default TODAY), auto number (editable), currency+fx (USD/1 defaults), description → create → navigate to detail |
 | `InvoiceDetailPage.tsx` | header Descriptions + status/type/sent Tags + chain links (ref/successor buttons); actions by state: DRAFT → Edit header, Add items (magic “Insert all from contract” + multi-select modal), edit/remove item rows, Confirm, Cancel; CONFIRMED → Convert menu, Send, Download/Print, Record payment (provisional/final), Cancel; pricing panel (provisional/final, DRAFT): LME date+price + discount% “apply to all” + per-item discount editing; payments card (§7); remaining-qty alert after final-invoice confirm |
-| `AddItemsModal.tsx` | contract goods multi-select table (product, contract qty, remaining MT, already-added disabled), qty editable per row before insert, validation vs remaining |
+| `AddItemsModal.tsx` | contract goods multi-select table (product, contract qty, uninvoiced MT, already-added disabled), qty editable per row before insert, validation vs remaining. **Architecture: ONE `Form` + `Form.List` keyed by stable contract-item id (ItemFormModal partners idiom) — never a Form per row, never array-index keys** |
 | `ConfirmInvoiceModal.tsx` | warehouse Select (final invoices), summary of totals, stock warnings (sale) |
 | `RecordPaymentModal.tsx` | §7 fields, App.useApp messages |
-| `InvoicePrintPage.tsx` | A4 document: brand letterhead (BRAND palette), doc-type title, header grid (number/date/contract/customer/currency/terms), items table (product, qty MT, LME %, price basis, unit price, discount, amount, BL No, container No), totals block (subtotal/discount/total, AED equivalent when fx≠1), signature strip; print CSS `@media print` + a Print button hidden on print; **RTL-safe & theme-independent (always light)** |
-| `src/pages/warehouse/WarehousePage.tsx` | §6 tabs, `?tab=` persisted |
+| `InvoicePrintPage.tsx` | A4 document: brand letterhead (BRAND palette), doc-type title, header grid (number/date/contract/customer/currency/terms), items table (product, qty MT, LME %, price basis, unit price, discount, amount, BL No, container No), totals block (subtotal/discount/total, AED equivalent when fx≠1), signature strip; print CSS `@media print` + `@page { size: A4; margin: 14mm }` + a Print button hidden on print. **Theme**: the app-level `ConfigProvider` sits ABOVE the router, so this page MUST wrap its content in its own nested `<ConfigProvider theme={lightTheme} direction={dir}>` and must not depend on inherited `theme.useToken()` values — otherwise dark mode bleeds into print. **RTL**: set `dir={i18n.dir()}` explicitly on the page's own root div (don't rely on `<html dir>`); fully separate root — no `Layout`/`Sider`/`Content` reuse; tabular numerals |
+| `src/pages/warehouse/WarehousePage.tsx` | §6 tabs, tab state via the SAME shared `useTabParam` hook (keys `warehouses|inventory`) — no independent reimplementation |
 | `src/pages/warehouse/WarehouseFormModal.tsx` | name/code/location, Partners-modal idiom |
 
 Shared idioms (mandatory): `App.useApp()` messages, modal `key`+`initialValues`+
 `destroyOnHidden`+`preserve={false}`, `onCell` stopPropagation for action columns,
 `Money`/`formatDate`/`formatMt`, logical CSS only, i18n keys in en+ar+fa (interpolated,
-never JSX-concatenated), colors via `theme.useToken()`/BRAND.
+never JSX-concatenated), colors via `theme.useToken()`/BRAND. **Detail page opens at
+most ONE action modal at a time** (single `activeModal` state — avoids AntD nested-
+modal focus-trap/scroll-lock bugs). **Status tags**: do NOT extend the shared
+`StatusTag` (its `CANCELLED` is contract-red; invoice CANCELLED is default-dim) — use a
+local `INVOICE_STATUS_COLOR` map in tradeInvoices with new keys
+`tradeInvoices.status.DRAFT|CONFIRMED|CANCELLED` in all three locales.
 
 **UI direction** (frontend-design + ui-ux-pro-max): stays inside Finora's existing AntD
 copper-accent system — no new aesthetic universe for list pages. The **print view** is
@@ -308,13 +372,18 @@ Appended in `mock/data.ts` AFTER the partner-allocation post-pass, **using zero 
 draws** (fixed indices/dates only — existing seeded values must not shift):
 1. `warehouses = [wh-mw]`.
 2. First PURCHASE contract (by array order): full chain — CONFIRMED `PO-2026-0001`
-   (all contract items, full qty), CONFIRMED `PP-2026-0001` (ref PO; lmeDate
-   2026-05-20, lmePrice = each item's fixedPrice or a fixed constant 2450 for floating
-   lines, discount 0), CONFIRMED `PI-2026-0001` (ref PP; same prices) + CONFIRMED
-   `GRN-2026-0001` IN doc to wh-mw. One payment of 50% of PI total (method 'TT',
-   date 2026-06-01, invoiceId set).
+   (all contract items, full qty, unpriced), CONFIRMED `PP-2026-0001` (ref PO;
+   `lmeDate` 2026-05-20 on ALL items; `lmePrice` 2450 on FLOATING items only — fixed
+   lines keep `fixedPrice` as base and get NO lmePrice, matching `applyLmePrice`
+   semantics §3; discount 0), CONFIRMED `PI-2026-0001` (ref PP; same prices) +
+   CONFIRMED `GRN-2026-0001` IN doc to wh-mw. One payment of 50% of PI total
+   (method 'TT', date 2026-06-01, `invoiceId` set, **`direction: 'OUT'`** — must NOT
+   inflate receivables KPIs, §7; id = next `NIZ` number computed programmatically as
+   `payments.length + 1` at seed time, never a hardcoded literal).
 3. First SELL contract: DRAFT `SO-2026-0001` with its first item at 50% qty (rounded 2dp).
 4. Dates fixed literals; all totals computed via the same calc helpers (single source).
+5. The stock-shortfall and cancel-blocked guards are NOT exercised by seed data —
+   Phase D live verification must exercise them manually (confirm an SI, over-sell, cancel PI).
 
 ## 12. i18n
 
@@ -322,8 +391,11 @@ New namespaces `tradeInvoices.*` (~60 keys: tabs, columns, actions, statuses, ty
 confirm/cancel/convert/send flows, validation messages with `{{product}}`/`{{available}}`/
 `{{remaining}}` interpolation, print labels), `warehouse.*` (~25 keys), `nav.purchase`,
 `nav.sale`, `nav.warehouse`. All in en/ar/fa, ar/fa translated (not transliterated).
-Existing `invoices.*` keys kept ONLY where still used by Portal open-invoice table; unused
-keys removed. No table-header key reused as a form label.
+`invoices.*` pruning — **keep exactly these four keys** (verified consumers):
+`invoices.totalPaid`, `invoices.amount`, `invoices.status` (CustomerPortalPage) and
+`invoices.totalInvoiced` (DashboardPage — NOT portal; easy to miss). Re-grep
+`t('invoices.` before deleting anything else. `nav.invoices` deleted from all three
+locales. No table-header key reused as a form label.
 
 ## 13. Out of scope
 
