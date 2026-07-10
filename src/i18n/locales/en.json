@@ -303,7 +303,10 @@
     "selectContract": "Select a contract",
     "goods": "Goods",
     "remainingHint": "{{mt}} remaining",
-    "qtyExceedsRemaining": "Exceeds remaining ({{mt}})"
+    "qtyExceedsRemaining": "Exceeds remaining ({{mt}})",
+    "grossWeight": "Gross weight (kg)",
+    "netWeight": "Net weight (kg)",
+    "totalQty": "Total (MT)"
   },
   "invoices": {
     "amount": "Amount",

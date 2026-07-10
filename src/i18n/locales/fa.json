@@ -303,7 +303,10 @@
     "selectContract": "یک قرارداد انتخاب کنید",
     "goods": "کالاها",
     "remainingHint": "{{mt}} باقی‌مانده",
-    "qtyExceedsRemaining": "بیش از باقی‌مانده ({{mt}})"
+    "qtyExceedsRemaining": "بیش از باقی‌مانده ({{mt}})",
+    "grossWeight": "وزن ناخالص (کیلوگرم)",
+    "netWeight": "وزن خالص (کیلوگرم)",
+    "totalQty": "مجموع (تن)"
   },
   "invoices": {
     "amount": "مبلغ",

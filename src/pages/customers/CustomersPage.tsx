@@ -123,14 +123,6 @@ export default function CustomersPage() {
       render: (v) => <Money value={v} muteZero />,
     },
     {
-      title: t('customers.openContainers'),
-      dataIndex: 'openContainers',
-      width: 120,
-      align: 'center',
-      sorter: (a, b) => a.openContainers - b.openContainers,
-      render: (v: number) => (v > 0 ? <Tag color="processing">{v}</Tag> : <Text type="secondary">0</Text>),
-    },
-    {
       title: t('customers.contracts'),
       dataIndex: 'contractCount',
       width: 110,

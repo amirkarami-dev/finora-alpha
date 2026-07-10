@@ -303,7 +303,10 @@
     "selectContract": "اختر عقداً",
     "goods": "البضائع",
     "remainingHint": "{{mt}} متبقٍ",
-    "qtyExceedsRemaining": "يتجاوز المتبقي ({{mt}})"
+    "qtyExceedsRemaining": "يتجاوز المتبقي ({{mt}})",
+    "grossWeight": "الوزن الإجمالي (كجم)",
+    "netWeight": "الوزن الصافي (كجم)",
+    "totalQty": "الإجمالي (طن)"
   },
   "invoices": {
     "amount": "المبلغ",

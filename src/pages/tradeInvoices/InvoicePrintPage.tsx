@@ -269,19 +269,9 @@ export default function InvoicePrintPage() {
                   return (
                     <tr key={item.id}>
                       <td>{idx + 1}</td>
-                      <td>
-                        {item.product}
-                        {(item.blNumber || item.containerNo) && (
-                          <span className="invoice-print-secondary">
-                            {[
-                              item.blNumber ? `${t('containers.blNumber')}: ${item.blNumber}` : null,
-                              item.containerNo ? `${t('tradeInvoices.containerNo')}: ${item.containerNo}` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        )}
-                      </td>
+                      {/* TEMP Phase A: BL/container line removed here — Phase C (plan Task C2)
+                          re-derives it from the line's linked container. */}
+                      <td>{item.product}</td>
                       <td className="invoice-print-num">{formatMt(item.quantityMt)}</td>
                       <td className="invoice-print-num">{item.lmePercent}%</td>
                       <td>

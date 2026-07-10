@@ -89,20 +89,27 @@ export interface Contract {
   items: Item[];
 }
 
+/** A contract goods line carried by a container, and how much of it it holds. */
+export interface ContainerGood {
+  /** Source goods line on the contract. */
+  contractItemId: string;
+  quantityMt: number;
+}
+
+/**
+ * A pure logistics shipment. Containers carry NO money/payment status — financials live
+ * on trade invoices (see `Invoice`/`InvoiceItem`), linked via `InvoiceItem.containerId`.
+ */
 export interface Container {
   id: string;
-  contractId: string;
-  itemId: string;
   /** Container/booking reference, e.g. "MSNU8018095". */
   reference: string;
-  quantityMt: number;
-  lmePrice: number;
-  premium: number;
+  /** One or more contract goods lines this container carries. */
+  goods: ContainerGood[];
   shipmentDate: string;
   arrivalDate?: string;
-  dueDate: string;
-  invoiceUSD: number;
-  status: ContainerStatus;
+  grossWeightKg?: number;
+  netWeightKg?: number;
   /** Bill of Lading number (transport contract / title document). */
   blNumber?: string;
   /** Carrier booking number. */
@@ -129,21 +136,6 @@ export interface Payment {
   /** Money direction. 'IN' = received from customer (receivable), 'OUT' = paid to
    *  supplier. Optional for legacy rows — undefined MUST be treated as 'IN'. */
   direction?: 'IN' | 'OUT';
-}
-
-/** A flattened shipment-invoice view, one per container shipment. */
-export interface ShipmentInvoice {
-  id: string;
-  containerReference: string;
-  contractId: string;
-  customerId: string;
-  customerName: string;
-  product: string;
-  quantityMt: number;
-  amountUSD: number;
-  issueDate: string;
-  dueDate: string;
-  status: ContainerStatus;
 }
 
 /* ------------------------------------------------------------------ *
@@ -175,8 +167,8 @@ export interface InvoiceItem {
   discountPercent?: number; // 0–100
   /** Line value in invoice currency; 0 when price incomplete (floating line without lmePrice). */
   amount: number;
-  blNumber?: string;
-  containerNo?: string;
+  /** Container this line's goods were shipped in (optional while drafting). */
+  containerId?: string;
   description?: string;
 }
 
@@ -240,7 +232,6 @@ export interface CustomerAccount extends Customer {
   overdue: number;
   totalPaid: number;
   totalInvoiced: number;
-  openContainers: number;
   contractCount: number;
 }
 
@@ -250,9 +241,7 @@ export interface DashboardKpis {
   totalPaid: number;
   totalInvoiced: number;
   activeContracts: number;
-  openContainers: number;
   customers: number;
-  totalVolumeMt: number;
   collectionRate: number;
 }
 

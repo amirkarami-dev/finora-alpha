@@ -12,8 +12,6 @@ export const qk = {
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
   containers: ['containers'] as const,
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
-  /** Flattened container-derived view — used by Dashboard + Customer Portal only. */
-  shipmentInvoices: ['shipmentInvoices'] as const,
   payments: ['payments'] as const,
   paymentsByCustomer: (id: string) => ['payments', 'customer', id] as const,
   kpis: ['kpis'] as const,
@@ -56,9 +54,6 @@ export const useContainersByContract = (id: string) =>
     queryFn: () => api.getContainersByContract(id),
     enabled: !!id,
   });
-
-export const useShipmentInvoices = () =>
-  useQuery({ queryKey: qk.shipmentInvoices, queryFn: api.getInvoices });
 
 export const usePayments = () => useQuery({ queryKey: qk.payments, queryFn: api.getPayments });
 export const usePaymentsByCustomer = (id: string) =>
@@ -106,7 +101,6 @@ function useInvalidateTrade() {
     qc.invalidateQueries({ queryKey: qk.productVolumes });
     // A product rename flows into the container `product` column and invoices.
     qc.invalidateQueries({ queryKey: qk.containers });
-    qc.invalidateQueries({ queryKey: qk.shipmentInvoices });
     qc.invalidateQueries({ queryKey: qk.aging });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
   };
@@ -150,7 +144,8 @@ export const useCreateContainer = () => {
   const invalidate = useInvalidateTrade();
   return useMutation({
     mutationFn: (input: api.ContainerInput) => api.createContainer(input),
-    onSuccess: (row) => invalidate(row.contractId),
+    // A container is no longer tied to a single contract (spec §2) — invalidate broadly.
+    onSuccess: () => invalidate(),
   });
 };
 
@@ -159,7 +154,7 @@ export const useUpdateContainer = () => {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: api.ContainerInput }) =>
       api.updateContainer(id, input),
-    onSuccess: (row) => invalidate(row.contractId),
+    onSuccess: () => invalidate(),
   });
 };
 

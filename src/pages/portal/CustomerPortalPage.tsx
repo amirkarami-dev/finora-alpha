@@ -32,8 +32,7 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { CashflowChart } from '@/components/charts/CashflowChart';
 import { useCustomerPortal } from '@/services/queries';
 import { useAuthStore } from '@/store/useAuthStore';
-import type { ShipmentInvoice } from '@/types';
-import type { ContractRow, PaymentRow } from '@/services/api';
+import type { ContractRow, OpenInvoiceRow, PaymentRow } from '@/services/api';
 import { formatCompactCurrency, formatDate, formatMt, formatPercent } from '@/utils/format';
 import { BRAND } from '@/config/constants';
 
@@ -93,10 +92,10 @@ export default function CustomerPortalPage() {
     { name: t('portal.outstanding'), value: data?.outstanding ?? 0 },
   ];
 
-  const invoiceColumns: ColumnsType<ShipmentInvoice> = [
+  const invoiceColumns: ColumnsType<OpenInvoiceRow> = [
     {
-      title: t('containers.reference'),
-      dataIndex: 'containerReference',
+      title: t('tradeInvoices.number'),
+      dataIndex: 'invoiceNumber',
       render: (v) => <Text style={{ fontFamily: 'monospace' }}>{v}</Text>,
     },
     {
@@ -333,7 +332,7 @@ export default function CustomerPortalPage() {
               key: 'invoices',
               label: `${t('portal.openInvoices')} (${data?.openInvoices.length ?? 0})`,
               children: (
-                <Table<ShipmentInvoice>
+                <Table<OpenInvoiceRow>
                   rowKey="id"
                   loading={isLoading}
                   columns={invoiceColumns}

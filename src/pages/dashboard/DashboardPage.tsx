@@ -1,20 +1,6 @@
 import { useMemo } from 'react';
+import { Button, Card, Col, Row, Segmented, Skeleton, Statistic, Typography, theme } from 'antd';
 import {
-  Avatar,
-  Button,
-  Card,
-  Col,
-  List,
-  Row,
-  Segmented,
-  Skeleton,
-  Statistic,
-  Tag,
-  Typography,
-  theme,
-} from 'antd';
-import {
-  ContainerOutlined,
   DollarOutlined,
   DownloadOutlined,
   FallOutlined,
@@ -28,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { Money } from '@/components/common/Money';
-import { StatusTag } from '@/components/common/StatusTag';
 import { CashflowChart } from '@/components/charts/CashflowChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -36,13 +21,12 @@ import {
   useAccounts,
   useAging,
   useCashflow,
-  useShipmentInvoices,
   useKpis,
   useProductVolumes,
   useStatusBreakdown,
 } from '@/services/queries';
 import { useAuthStore } from '@/store/useAuthStore';
-import { formatCompactCurrency, formatMt, formatPercent, initials, relativeDays } from '@/utils/format';
+import { formatCompactCurrency, formatMt, formatPercent } from '@/utils/format';
 import { BRAND, CHART_PALETTE, ROUTES } from '@/config/constants';
 
 const { Text } = Typography;
@@ -93,7 +77,6 @@ export default function DashboardPage() {
   const products = useProductVolumes();
   const accounts = useAccounts();
   const aging = useAging();
-  const invoices = useShipmentInvoices();
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
@@ -129,16 +112,6 @@ export default function DashboardPage() {
   const agingData = useMemo(
     () => (aging.data ?? []).map((a) => ({ name: t(`reports.${a.bucket}`), value: a.value })),
     [aging.data, t],
-  );
-
-  const recentInvoices = useMemo(() => (invoices.data ?? []).slice(0, 6), [invoices.data]);
-  const upcoming = useMemo(
-    () =>
-      (invoices.data ?? [])
-        .filter((i) => i.status !== 'PAID')
-        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-        .slice(0, 6),
-    [invoices.data],
   );
 
   const k = kpis.data;
@@ -221,14 +194,14 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Secondary stat strip */}
+      {/* Secondary stat strip. TEMP Phase A: the "Open containers" / "Volume" tiles are
+          dropped here — containers carry no status and DashboardKpis.totalVolumeMt is
+          removed (spec §6). Phase D (plan Task D2) may add invoice-based replacements. */}
       <Card variant="borderless" className="soft-card" style={{ marginTop: 16 }} styles={{ body: { padding: 18 } }}>
         <Row gutter={[16, 16]}>
           {[
             { icon: <FileTextOutlined />, label: t('dashboard.kpiContracts'), value: k?.activeContracts, color: BRAND.primary },
-            { icon: <ContainerOutlined />, label: t('dashboard.kpiContainers'), value: k?.openContainers, color: BRAND.info },
             { icon: <TeamOutlined />, label: t('dashboard.kpiCustomers'), value: k?.customers, color: BRAND.accent },
-            { icon: <DollarOutlined />, label: t('dashboard.kpiVolume'), value: k ? formatMt(k.totalVolumeMt) : '—', color: BRAND.success },
           ].map((s, i) => (
             <Col xs={12} lg={6} key={i}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -247,9 +220,8 @@ export default function DashboardPage() {
                   {s.icon}
                 </span>
                 <Statistic
-                  value={typeof s.value === 'number' ? s.value : undefined}
+                  value={s.value}
                   title={s.label}
-                  formatter={typeof s.value === 'string' ? () => s.value as string : undefined}
                   loading={kpis.isLoading}
                   valueStyle={{ fontSize: 20, fontWeight: 700 }}
                 />
@@ -311,70 +283,25 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Recent invoices + upcoming */}
+      {/* Recent invoices + upcoming. TEMP Phase A: the container-derived shipment-invoice
+          feed is gone (spec §2) — Phase D (plan Task D2) re-derives both lists from
+          `useReceivableInvoices` (chain-leaf sale invoices, derived due dates). */}
       <Row gutter={[16, 16]} style={{ marginTop: 16, marginBottom: 8 }}>
         <Col xs={24} lg={14}>
           <ChartCard
             title={t('dashboard.recentInvoicesTitle')}
-            loading={invoices.isLoading}
             extra={
               <Button type="link" onClick={() => navigate(ROUTES.sale)} style={{ padding: 0 }}>
                 {t('common.viewAll')}
               </Button>
             }
           >
-            <List
-              dataSource={recentInvoices}
-              renderItem={(inv) => (
-                <List.Item
-                  style={{ paddingInline: 0 }}
-                  actions={[<Money key="amt" value={inv.amountUSD} strong />, <StatusTag key="st" status={inv.status} />]}
-                >
-                  <List.Item.Meta
-                    avatar={
-                      <Avatar style={{ background: token.colorFillSecondary, color: token.colorText }}>
-                        {initials(inv.customerName)}
-                      </Avatar>
-                    }
-                    title={<span style={{ fontWeight: 600 }}>{inv.customerName}</span>}
-                    description={
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {inv.containerReference} · {inv.product}
-                      </Text>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
+            <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
           </ChartCard>
         </Col>
         <Col xs={24} lg={10}>
-          <ChartCard title={t('dashboard.upcomingDueTitle')} loading={invoices.isLoading}>
-            {upcoming.length === 0 ? (
-              <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
-            ) : (
-              <List
-                dataSource={upcoming}
-                renderItem={(inv) => {
-                  const days = relativeDays(inv.dueDate) ?? 0;
-                  const overdue = days < 0;
-                  return (
-                    <List.Item style={{ paddingInline: 0 }} actions={[<Money key="amt" value={inv.amountUSD} strong />]}>
-                      <List.Item.Meta
-                        title={<span style={{ fontWeight: 600 }}>{inv.customerName}</span>}
-                        description={
-                          <Tag color={overdue ? 'error' : days <= 7 ? 'warning' : 'default'} style={{ marginInlineStart: 0 }}>
-                            {overdue
-                              ? t('containers.overdueBy', { count: Math.abs(days) })
-                              : t('containers.dueIn', { count: days })}
-                          </Tag>
-                        }
-                      />
-                    </List.Item>
-                  );
-                }}
-              />
-            )}
+          <ChartCard title={t('dashboard.upcomingDueTitle')}>
+            <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
           </ChartCard>
         </Col>
       </Row>

@@ -8,8 +8,6 @@ const { TextArea } = Input;
 interface EditLineFormValues {
   quantityMt: number;
   discountPercent?: number;
-  blNumber?: string;
-  containerNo?: string;
   description?: string;
 }
 
@@ -41,8 +39,6 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
     discountPercent: item.discountPercent,
-    blNumber: item.blNumber,
-    containerNo: item.containerNo,
     description: item.description,
   };
 
@@ -60,8 +56,6 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         patch: {
           quantityMt: values.quantityMt,
           discountPercent: values.discountPercent,
-          blNumber: values.blNumber?.trim() || undefined,
-          containerNo: values.containerNo?.trim() || undefined,
           description: values.description?.trim() || undefined,
         },
       });
@@ -97,12 +91,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         <Form.Item name="discountPercent" label={t('tradeInvoices.discountPercent')}>
           <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="blNumber" label={t('containers.blNumber')}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="containerNo" label={t('tradeInvoices.containerNo')}>
-          <Input />
-        </Form.Item>
+        {/* TEMP Phase A: BL/container fields removed here — Phase C (plan Task C2) adds a
+            single container Select in their place, wired to InvoiceItem.containerId. */}
         <Form.Item name="description" label={t('tradeInvoices.description')}>
           <TextArea rows={2} maxLength={300} showCount />
         </Form.Item>

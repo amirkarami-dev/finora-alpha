@@ -307,18 +307,8 @@ export default function InvoiceDetailPage() {
           <Money value={v} strong muteZero />
         ),
     },
-    {
-      title: t('containers.blNumber'),
-      dataIndex: 'blNumber',
-      width: 130,
-      render: (v?: string) => v ?? <Text type="secondary">—</Text>,
-    },
-    {
-      title: t('tradeInvoices.containerNo'),
-      dataIndex: 'containerNo',
-      width: 130,
-      render: (v?: string) => v ?? <Text type="secondary">—</Text>,
-    },
+    // TEMP Phase A: BL No / Container No columns removed here — Phase C (plan Task C2)
+    // re-adds them derived from the line's linked container (containerId → container.reference/blNumber).
     {
       title: t('tradeInvoices.description'),
       dataIndex: 'description',

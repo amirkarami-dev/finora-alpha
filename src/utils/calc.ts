@@ -1,4 +1,4 @@
-import type { Container, Contract, Item, InvoiceItem } from '@/types';
+import type { Contract, Item, InvoiceItem } from '@/types';
 
 /**
  * Effective unit price per MT.
@@ -28,16 +28,13 @@ export function contractRemainingMt(contract: Contract): number {
   return contract.items.reduce((sum, it) => sum + it.remainingMt, 0);
 }
 
-/** Shipped MT for an item, computed from its containers. */
-export function shippedMt(itemId: string, containers: Container[]): number {
-  return containers
-    .filter((c) => c.itemId === itemId)
-    .reduce((sum, c) => sum + c.quantityMt, 0);
-}
-
-/** Container invoice value: lmePrice already net of % in the workbook + premium. */
+/**
+ * Historical shipment-invoice value: lmePrice already net of % in the workbook + premium.
+ * Used only by the seed's `RawContainerSeed` pass (`src/mock/data.ts`) — containers
+ * themselves carry no money since the schema-v3 logistics reshape (see spec §2/§3).
+ */
 export function containerInvoice(
-  container: Pick<Container, 'quantityMt' | 'lmePrice' | 'premium'>,
+  container: { quantityMt: number; lmePrice: number; premium: number },
 ): number {
   return (container.lmePrice + container.premium) * container.quantityMt;
 }
