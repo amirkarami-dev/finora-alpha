@@ -22,6 +22,7 @@ export const qk = {
   aging: ['aging'] as const,
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
+  receivableInvoices: (customerId?: string) => ['receivableInvoices', customerId ?? 'all'] as const,
   partners: ['partners'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
   tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
@@ -80,6 +81,12 @@ export const useCustomerPortal = (id: string) =>
     queryKey: qk.customerPortal(id),
     queryFn: () => api.getCustomerPortalSummary(id),
     enabled: !!id,
+  });
+
+export const useReceivableInvoices = (customerId?: string) =>
+  useQuery({
+    queryKey: qk.receivableInvoices(customerId),
+    queryFn: () => api.getReceivableInvoices(customerId),
   });
 
 export const useCustomers = () => useQuery({ queryKey: qk.customers, queryFn: api.getCustomers });
@@ -296,6 +303,12 @@ function useInvalidateInvoices() {
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    // Every receivables view is invoice-derived (spec §6) — invalidate them together. A bare
+    // ['receivableInvoices'] prefix matches every customerId-scoped variant too.
+    qc.invalidateQueries({ queryKey: ['receivableInvoices'] });
+    qc.invalidateQueries({ queryKey: qk.productVolumes });
+    qc.invalidateQueries({ queryKey: qk.aging });
+    qc.invalidateQueries({ queryKey: qk.cashflow });
     if (opts?.customerId) qc.invalidateQueries({ queryKey: qk.customerPortal(opts.customerId) });
   };
 }
