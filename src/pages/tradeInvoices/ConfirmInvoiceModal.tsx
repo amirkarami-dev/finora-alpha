@@ -47,11 +47,13 @@ export function ConfirmInvoiceModal({ open, onClose, invoice, onConfirmed }: Con
       onClose();
       if (isFinal) onConfirmed?.();
     } catch (err) {
-      const error = err as Error & { product?: string; available?: number };
+      const error = err as Error & { product?: string; available?: number; products?: string[] };
       const code = error.message;
       if (code === 'no-items') message.error(t('tradeInvoices.noItems'));
       else if (code === 'missing-lme-price') message.error(t('tradeInvoices.missingLmePrice'));
-      else if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
+      else if (code === 'missing-container') {
+        message.error(t('tradeInvoices.missingContainer', { products: (error.products ?? []).join(', ') }));
+      } else if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
       else if (code === 'insufficient-stock') {
         message.error(
           t('tradeInvoices.insufficientStock', {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
-import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Space, Typography, theme } from 'antd';
+import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Typography, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { useContractRemaining, useAddInvoiceItems } from '@/services/queries';
+import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import type { InvoiceItemInput } from '@/services/api';
 import { formatMt } from '@/utils/format';
 import type { Invoice, InvoiceSide } from '@/types';
@@ -14,6 +14,7 @@ interface AddItemsFormRow {
   uninvoicedMt: number;
   include: boolean;
   quantityMt?: number;
+  containerId?: string;
 }
 
 interface AddItemsFormValues {
@@ -36,24 +37,33 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [form] = Form.useForm<AddItemsFormValues>();
-  const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side);
+  // excludeInvoiceId (this invoice) means `remaining` already reflects what's truly available
+  // to claim — no client-side "alreadyOnDoc" re-subtraction needed (spec §5 cap reconciliation).
+  const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side, invoice.id);
+  const { data: containerOptions } = useContainerOptions();
   const addMut = useAddInvoiceItems();
 
+  const containerSelectOptions = useMemo(
+    () =>
+      (containerOptions ?? []).map((c) => ({
+        value: c.id,
+        label: `${c.reference} · ${c.blNumber || '—'}`,
+      })),
+    [containerOptions],
+  );
+
   const rows: AddItemsFormRow[] = useMemo(() => {
-    const alreadyOnDoc = new Map<string, number>();
-    for (const it of invoice.items) {
-      alreadyOnDoc.set(it.contractItemId, (alreadyOnDoc.get(it.contractItemId) ?? 0) + it.quantityMt);
-    }
     return (remaining ?? [])
       .map((r) => ({
         contractItemId: r.itemId,
         product: r.product,
-        uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
+        uninvoicedMt: r.uninvoicedMt,
         include: false,
         quantityMt: undefined,
+        containerId: undefined,
       }))
       .filter((r) => r.uninvoicedMt > 1e-9);
-  }, [remaining, invoice.items]);
+  }, [remaining]);
 
   useEffect(() => {
     if (open) form.setFieldsValue({ rows });
@@ -78,7 +88,11 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     const items: InvoiceItemInput[] = values.rows
       .map((r, i) => ({ ...r, contractItemId: rows[i]?.contractItemId ?? r.contractItemId }))
       .filter((r) => r.include)
-      .map((r) => ({ contractItemId: r.contractItemId, quantityMt: r.quantityMt ?? 0 }));
+      .map((r) => ({
+        contractItemId: r.contractItemId,
+        quantityMt: r.quantityMt ?? 0,
+        containerId: r.containerId,
+      }));
     if (items.length === 0) {
       message.error(t('tradeInvoices.selectAtLeastOne'));
       return;
@@ -97,7 +111,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   return (
     <Modal
       open={open}
-      width={640}
+      width={720}
       title={t('tradeInvoices.addItems')}
       okText={t('tradeInvoices.insertSelected')}
       cancelText={t('common.cancel')}
@@ -134,6 +148,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                       style={{
                         display: 'flex',
                         alignItems: 'center',
+                        flexWrap: 'wrap',
                         gap: 12,
                         padding: '8px 12px',
                         border: `1px solid ${token.colorBorderSecondary}`,
@@ -147,7 +162,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                       >
                         <Checkbox />
                       </Form.Item>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                         <Text strong>{row.product}</Text>
                         <div>
                           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -190,6 +205,20 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           {t('common.mtUnit')}
                         </Text>
                       </div>
+                      <Form.Item
+                        name={[field.name, 'containerId']}
+                        style={{ marginBottom: 0, width: 200 }}
+                      >
+                        <Select
+                          allowClear
+                          showSearch
+                          optionFilterProp="label"
+                          size="small"
+                          placeholder={t('tradeInvoices.container')}
+                          options={containerSelectOptions}
+                          disabled={!included}
+                        />
+                      </Form.Item>
                     </div>
                   );
                 })}

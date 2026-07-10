@@ -4,7 +4,7 @@ import { ConfigProvider, Result, Button } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
 import { getThemeConfig } from '@/theme/tokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { useTradeInvoice } from '@/services/queries';
+import { useContainerOptions, useTradeInvoice } from '@/services/queries';
 import { invoiceItemUnitPrice } from '@/utils/calc';
 import { formatDate, formatCurrency, formatMt } from '@/utils/format';
 import { BRAND, APP_TAGLINE } from '@/config/constants';
@@ -24,6 +24,8 @@ export default function InvoicePrintPage() {
   const companyName = useSettingsStore((s) => s.companyName);
 
   const { data, isLoading } = useTradeInvoice(invoiceId);
+  const { data: containerOptions } = useContainerOptions();
+  const containerById = new Map((containerOptions ?? []).map((c) => [c.id, c]));
   const dir = i18n.dir();
 
   if (!isLoading && !data) {
@@ -255,6 +257,7 @@ export default function InvoicePrintPage() {
                 <tr>
                   <th style={{ width: 28 }}>#</th>
                   <th>{t('items.product')}</th>
+                  <th>{t('tradeInvoices.containerNo')}</th>
                   <th className="invoice-print-num">{t('items.quantityMt')}</th>
                   <th className="invoice-print-num">{t('items.lmePercent')}</th>
                   <th>{t('tradeInvoices.priceBasis')}</th>
@@ -266,12 +269,25 @@ export default function InvoicePrintPage() {
               <tbody>
                 {invoice.items.map((item: InvoiceItem, idx: number) => {
                   const unit = invoiceItemUnitPrice(item);
+                  const container = item.containerId ? containerById.get(item.containerId) : undefined;
                   return (
                     <tr key={item.id}>
                       <td>{idx + 1}</td>
-                      {/* TEMP Phase A: BL/container line removed here — Phase C (plan Task C2)
-                          re-derives it from the line's linked container. */}
                       <td>{item.product}</td>
+                      <td>
+                        {container ? (
+                          <>
+                            {container.reference}
+                            {container.blNumber && (
+                              <span className="invoice-print-secondary">
+                                {t('tradeInvoices.blNo')}: {container.blNumber}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="invoice-print-num">{formatMt(item.quantityMt)}</td>
                       <td className="invoice-print-num">{item.lmePercent}%</td>
                       <td>

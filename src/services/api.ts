@@ -1167,15 +1167,17 @@ export interface ContractRemainingRow {
   uninvoicedMt: number;
 }
 
-/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side` (spec §5). */
+/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side`, optionally
+ *  excluding one invoice's own claim (the doc currently being edited) (spec §5/§8). */
 export async function getContractRemaining(
   contractId: string,
   side: InvoiceSide,
+  excludeInvoiceId?: string,
 ): Promise<ContractRemainingRow[]> {
   await delay(120);
   const contract = contractById.get(contractId);
   if (!contract) return [];
-  const leaves = chainLeafDocs(side).filter((inv) => inv.contractId === contractId);
+  const leaves = chainLeafDocs(side, { excludeInvoiceId }).filter((inv) => inv.contractId === contractId);
   const claimedByItem = new Map<string, number>();
   for (const inv of leaves) {
     for (const it of inv.items) {
@@ -1496,11 +1498,12 @@ export interface ConfirmInvoiceOptions {
 }
 
 /**
- * Guards IN ORDER (spec §5/§6/§8): 'no-items' → 'missing-lme-price' (provisional/
- * final with a floating line lacking lmePrice) → 'qty-exceeds-remaining' (re-validate
- * §5 invariant 3) → for final invoices: warehouseId required + sale-invoice per-product
- * stock check ('insufficient-stock', err.product/err.available set). On success,
- * final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
+ * Guards IN ORDER (spec §5/§6/§7/§8): 'no-items' → 'missing-lme-price' (provisional/
+ * final with a floating line lacking lmePrice) → 'missing-container' (provisional/final:
+ * every line must carry a containerId; orders are exempt) → 'qty-exceeds-remaining'
+ * (re-validate §5 invariant 3) → for final invoices: warehouseId required + sale-invoice
+ * per-product stock check ('insufficient-stock', err.product/err.available set). On
+ * success, final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
  */
 export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions = {}): Promise<Invoice> {
   await delay(200);
@@ -1512,6 +1515,15 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
   if (isPricedType(invoice.invoiceType)) {
     const missing = invoice.items.some((it) => !it.lmeFixed && it.lmePrice === undefined);
     if (missing) throw new Error('missing-lme-price');
+  }
+
+  if (isPricedType(invoice.invoiceType)) {
+    const noContainer = invoice.items.filter((it) => !it.containerId);
+    if (noContainer.length > 0) {
+      const err = new Error('missing-container') as Error & { products?: string[] };
+      err.products = noContainer.map((i) => i.product);
+      throw err;
+    }
   }
 
   // Re-validate remaining contract quantity at confirm time (spec §5 invariant 3): two
@@ -1678,6 +1690,16 @@ export async function markInvoiceSent(id: string): Promise<Invoice> {
   await delay(140);
   const invoice = findInvoiceOrThrow(id);
   invoice.sentAt = dayjs().toISOString();
+  persistDb();
+  return invoice;
+}
+
+/** Sets `containerId` on every item of `invoiceId` — used by the convert-container step
+ *  ("apply to all lines") so a freshly-converted draft can carry a single container (spec §7). */
+export async function applyContainerToAll(invoiceId: string, containerId: string): Promise<Invoice> {
+  await delay(160);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  for (const item of invoice.items) item.containerId = containerId;
   persistDb();
   return invoice;
 }

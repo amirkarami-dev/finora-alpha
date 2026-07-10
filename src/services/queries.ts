@@ -26,8 +26,8 @@ export const qk = {
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
   tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
   tradeInvoice: (id: string) => ['tradeInvoice', id] as const,
-  contractRemaining: (contractId: string, side: InvoiceSide) =>
-    ['contractRemaining', contractId, side] as const,
+  contractRemaining: (contractId: string, side: InvoiceSide, invoiceId?: string) =>
+    ['contractRemaining', contractId, side, invoiceId] as const,
   warehouses: ['warehouses'] as const,
   inventory: ['inventory'] as const,
   stock: ['stock'] as const,
@@ -256,10 +256,10 @@ export const useTradeInvoice = (id: string) =>
     enabled: !!id,
   });
 
-export const useContractRemaining = (contractId: string, side: InvoiceSide) =>
+export const useContractRemaining = (contractId: string, side: InvoiceSide, invoiceId?: string) =>
   useQuery({
-    queryKey: qk.contractRemaining(contractId, side),
-    queryFn: () => api.getContractRemaining(contractId, side),
+    queryKey: qk.contractRemaining(contractId, side, invoiceId),
+    queryFn: () => api.getContractRemaining(contractId, side, invoiceId),
     enabled: !!contractId,
   });
 
@@ -286,7 +286,9 @@ function useInvalidateInvoices() {
     }
     if (opts?.invoiceId) qc.invalidateQueries({ queryKey: qk.tradeInvoice(opts.invoiceId) });
     if (opts?.contractId && opts?.side) {
-      qc.invalidateQueries({ queryKey: qk.contractRemaining(opts.contractId, opts.side) });
+      // 3-element prefix (no invoiceId) so it matches every `useContractRemaining` caller
+      // regardless of which invoiceId (if any) they passed as the exclude id.
+      qc.invalidateQueries({ queryKey: ['contractRemaining', opts.contractId, opts.side] });
     }
     qc.invalidateQueries({ queryKey: qk.inventory });
     qc.invalidateQueries({ queryKey: qk.stock });
@@ -398,6 +400,15 @@ export const useMarkInvoiceSent = () => {
   const invalidate = useInvalidateInvoices();
   return useMutation({
     mutationFn: (id: string) => api.markInvoiceSent(id),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useApplyContainerToAll = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ invoiceId, containerId }: { invoiceId: string; containerId: string }) =>
+      api.applyContainerToAll(invoiceId, containerId),
     onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
   });
 };
