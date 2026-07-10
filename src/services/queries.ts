@@ -12,6 +12,7 @@ export const qk = {
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
   containers: ['containers'] as const,
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
+  containerOptions: ['containerOptions'] as const,
   payments: ['payments'] as const,
   paymentsByCustomer: (id: string) => ['payments', 'customer', id] as const,
   kpis: ['kpis'] as const,
@@ -54,6 +55,8 @@ export const useContainersByContract = (id: string) =>
     queryFn: () => api.getContainersByContract(id),
     enabled: !!id,
   });
+export const useContainerOptions = () =>
+  useQuery({ queryKey: qk.containerOptions, queryFn: api.getContainerOptions });
 
 export const usePayments = () => useQuery({ queryKey: qk.payments, queryFn: api.getPayments });
 export const usePaymentsByCustomer = (id: string) =>
@@ -140,8 +143,24 @@ export const useUpdateItem = () => {
   });
 };
 
-export const useCreateContainer = () => {
+/**
+ * A container's goods can be reassigned on edit, which shifts what invoice lines/contracts
+ * derive (goods summary, remaining MT, container pickers) — invalidate broadly, including
+ * both trade-invoice lists (spec §8).
+ */
+function useInvalidateContainers() {
   const invalidate = useInvalidateTrade();
+  const qc = useQueryClient();
+  return () => {
+    invalidate();
+    qc.invalidateQueries({ queryKey: qk.containerOptions });
+    qc.invalidateQueries({ queryKey: qk.tradeInvoices('PURCHASE') });
+    qc.invalidateQueries({ queryKey: qk.tradeInvoices('SALE') });
+  };
+}
+
+export const useCreateContainer = () => {
+  const invalidate = useInvalidateContainers();
   return useMutation({
     mutationFn: (input: api.ContainerInput) => api.createContainer(input),
     // A container is no longer tied to a single contract (spec §2) — invalidate broadly.
@@ -150,7 +169,7 @@ export const useCreateContainer = () => {
 };
 
 export const useUpdateContainer = () => {
-  const invalidate = useInvalidateTrade();
+  const invalidate = useInvalidateContainers();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: api.ContainerInput }) =>
       api.updateContainer(id, input),

@@ -171,6 +171,30 @@ export async function getContainersByContract(contractId: string): Promise<Conta
   return buildContainerRows().filter((c) => c.goods.some((g) => itemIds.has(g.contractItemId)));
 }
 
+/** Invoice numbers of invoices holding a line whose `containerId`/`contractItemId` match — used
+ *  by the container goods-removal guard (spec §4/§8). */
+function goodContainerUsage(containerId: string, contractItemId: string): string[] {
+  return db.invoices
+    .filter((inv) => inv.items.some((it) => it.containerId === containerId && it.contractItemId === contractItemId))
+    .map((inv) => inv.invoiceNumber);
+}
+
+export async function getGoodContainerUsage(containerId: string, contractItemId: string): Promise<string[]> {
+  await delay(120);
+  return goodContainerUsage(containerId, contractItemId);
+}
+
+export interface ContainerOptionRow {
+  id: string;
+  reference: string;
+  blNumber?: string;
+}
+
+export async function getContainerOptions(): Promise<ContainerOptionRow[]> {
+  await delay(100);
+  return db.containers.map((c) => ({ id: c.id, reference: c.reference, blNumber: c.blNumber }));
+}
+
 /* ----------------------------- Payments ----------------------------- */
 export interface PaymentRow extends Payment {
   customerName: string;
@@ -525,8 +549,8 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
  * contract/item — they carry a `goods` line array. They no longer drive
  * `Item.remainingMt` (that's invoice-based now, see `shippedMtForItem`/
  * `recomputeAllRemaining` below); a container mutation does NOT recompute it.
- * TEMP Phase A: minimal surface so the app compiles — Phase B (plan Task B1)
- * adds `getGoodContainerUsage`/`getContainerOptions` and the removal guard.
+ * `updateContainer` enforces the goods-removal guard (`assertNoRemovedGoodInUse`,
+ * spec §4/§8) before mutating.
  * ------------------------------------------------------------------- */
 
 export interface ContainerInput {
@@ -574,10 +598,30 @@ export async function createContainer(input: ContainerInput): Promise<ContainerR
   return buildContainerRows().find((c) => c.id === container.id)!;
 }
 
+/**
+ * Enforces the goods-removal guard server-side (spec §4/§8): a good present on the persisted
+ * container but absent from `nextGoods` may not be dropped while an invoice line still
+ * references it. Throws `'good-in-use'` with `.invoices`/`.product` attached, BEFORE mutating.
+ */
+function assertNoRemovedGoodInUse(container: Container, nextGoods: ContainerGood[]): void {
+  const nextIds = new Set(nextGoods.map((g) => g.contractItemId));
+  for (const good of container.goods) {
+    if (nextIds.has(good.contractItemId)) continue;
+    const usage = goodContainerUsage(container.id, good.contractItemId);
+    if (usage.length > 0) {
+      const err = new Error('good-in-use') as Error & { invoices?: string[]; product?: string };
+      err.invoices = usage;
+      err.product = itemProduct.get(good.contractItemId) ?? good.contractItemId;
+      throw err;
+    }
+  }
+}
+
 export async function updateContainer(id: string, input: ContainerInput): Promise<ContainerRow> {
   await delay(180);
   const container = db.containers.find((c) => c.id === id);
   if (!container) throw new Error(`Container ${id} not found`);
+  assertNoRemovedGoodInUse(container, input.goods);
   container.reference = input.reference;
   container.goods = input.goods;
   container.shipmentDate = input.shipmentDate;

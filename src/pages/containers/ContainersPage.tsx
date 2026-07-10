@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { useContainers } from '@/services/queries';
 import type { ContainerRow } from '@/services/api';
 import { formatDate, formatMt } from '@/utils/format';
-import { ContainerFormModal } from '@/pages/contracts/ContainerFormModal';
+import { ContainerFormModal } from '@/pages/containers/ContainerFormModal';
 
 const { Text } = Typography;
 
