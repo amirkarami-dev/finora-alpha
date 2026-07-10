@@ -32,8 +32,6 @@ export const CONTRACT_STATUSES: ContractStatus[] = [
   'CANCELLED',
 ];
 
-export const CONTAINER_STATUSES: ContainerStatus[] = ['OPEN', 'PAID', 'OVERDUE'];
-
 /** AntD tag colors keyed by status. */
 export const CONTRACT_STATUS_COLOR: Record<ContractStatus, string> = {
   ACTIVE: 'green',

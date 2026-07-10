@@ -37,8 +37,6 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [form] = Form.useForm<AddItemsFormValues>();
-  // excludeInvoiceId (this invoice) means `remaining` already reflects what's truly available
-  // to claim — no client-side "alreadyOnDoc" re-subtraction needed (spec §5 cap reconciliation).
   const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side, invoice.id);
   const { data: containerOptions } = useContainerOptions();
   const addMut = useAddInvoiceItems();
@@ -52,18 +50,33 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     [containerOptions],
   );
 
+  // getContractRemaining is CONFIRMED-only, so a DRAFT's own lines are never in its total —
+  // `excludeInvoiceId` (this invoice) is therefore a no-op for capping. Quantity already staged
+  // on THIS draft must be subtracted once here (mirrors EditLineModal's `otherLinesQty` idiom)
+  // so "206 MT item, 100 MT already added" correctly shows ~106 MT uninvoiced, not 206.
+  //
+  // NOTE: `alreadyOnDoc` is computed INLINE inside this memo (not as its own memo keyed off
+  // `invoice.items`) on purpose — the mock API mutates `invoice.items` in place (`.push`), so
+  // that array's reference never changes across refetches and a memo keyed on it would never
+  // recompute. `remaining` DOES get a fresh reference on every `getContractRemaining` refetch,
+  // so keying off it here (and reading `invoice.items`'s current contents inside the body)
+  // keeps this correctly reactive to same-session Add Items submissions.
   const rows: AddItemsFormRow[] = useMemo(() => {
+    const alreadyOnDoc = new Map<string, number>();
+    for (const it of invoice.items) {
+      alreadyOnDoc.set(it.contractItemId, (alreadyOnDoc.get(it.contractItemId) ?? 0) + it.quantityMt);
+    }
     return (remaining ?? [])
       .map((r) => ({
         contractItemId: r.itemId,
         product: r.product,
-        uninvoicedMt: r.uninvoicedMt,
+        uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
         include: false,
         quantityMt: undefined,
         containerId: undefined,
       }))
       .filter((r) => r.uninvoicedMt > 1e-9);
-  }, [remaining]);
+  }, [remaining, invoice.items]);
 
   useEffect(() => {
     if (open) form.setFieldsValue({ rows });

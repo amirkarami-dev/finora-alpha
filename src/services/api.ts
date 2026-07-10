@@ -75,24 +75,38 @@ interface SaleReceivable {
   overdue: number;
 }
 
+/** Σ IN-direction payments across an invoice's full chain (spec §7) — the SAME math used by
+ *  `getReceivableInvoices`' per-row `paidUSD`, shared here so `saleReceivables()`'s per-document
+ *  overdue netting agrees exactly with the per-row OVERDUE badges. */
+function receivablePaidUSD(inv: Invoice): number {
+  const chainIds = new Set(invoiceChain(inv).map((c) => c.id));
+  return round(
+    db.payments
+      .filter((p) => p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN')
+      .reduce((s, p) => s + p.amountUSD, 0),
+  );
+}
+
 /**
  * Per-customer receivables aggregate (spec §6): `invoiced` = Σ chain-leaf CONFIRMED SALE
- * totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`; `overdue` = Σ totals of
- * sale docs whose derived due date (`invoiceDate + paymentTermsDays`) is before TODAY, capped
- * at `outstanding` — a deterministic per-customer approximation, not per-document netting.
+ * totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`; `overdue` = Σ PER-DOCUMENT
+ * netted outstanding (`totalAmount − receivablePaidUSD(inv)`, floored at 0) over sale docs whose
+ * derived due date (`invoiceDate + paymentTermsDays`) is before TODAY — true per-document
+ * netting, matching `getReceivableInvoices`' per-row OVERDUE math exactly (NOT a raw-total sum
+ * capped at the customer-aggregate outstanding).
  */
 function saleReceivables(): Map<string, SaleReceivable> {
   const leaves = receivableLeaves();
   const map = new Map<string, SaleReceivable>();
   for (const customer of db.customers) map.set(customer.id, { invoiced: 0, paid: 0, outstanding: 0, overdue: 0 });
 
-  const overdueRaw = new Map<string, number>();
   for (const inv of leaves) {
     const entry = map.get(inv.customerId);
     if (!entry) continue;
     entry.invoiced += inv.totalAmount;
     if (invoiceDueDate(inv).isBefore(TODAY, 'day')) {
-      overdueRaw.set(inv.customerId, (overdueRaw.get(inv.customerId) ?? 0) + inv.totalAmount);
+      const docOutstanding = Math.max(inv.totalAmount - receivablePaidUSD(inv), 0);
+      entry.overdue += docOutstanding;
     }
   }
   // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
@@ -101,9 +115,9 @@ function saleReceivables(): Map<string, SaleReceivable> {
     const entry = map.get(p.customerId);
     if (entry) entry.paid += p.amountUSD;
   }
-  for (const [customerId, entry] of map) {
+  for (const [, entry] of map) {
     entry.outstanding = round(Math.max(entry.invoiced - entry.paid, 0));
-    entry.overdue = round(Math.min(overdueRaw.get(customerId) ?? 0, entry.outstanding));
+    entry.overdue = round(entry.overdue);
     entry.invoiced = round(entry.invoiced);
     entry.paid = round(entry.paid);
   }
@@ -172,12 +186,7 @@ export async function getReceivableInvoices(customerId?: string): Promise<Receiv
           : products.length === 1
             ? products[0]
             : `${products[0]} +${products.length - 1}`;
-      const chainIds = new Set(invoiceChain(inv).map((c) => c.id));
-      const paidUSD = round(
-        db.payments
-          .filter((p) => p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN')
-          .reduce((s, p) => s + p.amountUSD, 0),
-      );
+      const paidUSD = receivablePaidUSD(inv);
       const dueDate = invoiceDueDate(inv);
       const displayStatus: ContainerStatus =
         paidUSD >= inv.totalAmount - 0.01 ? 'PAID' : dueDate.isBefore(TODAY, 'day') ? 'OVERDUE' : 'OPEN';
