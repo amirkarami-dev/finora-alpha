@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Button, Card, Col, Row, Segmented, Skeleton, Statistic, Typography, theme } from 'antd';
+import { Button, Card, Col, List, Row, Segmented, Skeleton, Space, Statistic, Typography, theme } from 'antd';
 import {
   DollarOutlined,
   DownloadOutlined,
@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { Money } from '@/components/common/Money';
+import { StatusTag } from '@/components/common/StatusTag';
 import { CashflowChart } from '@/components/charts/CashflowChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -23,13 +24,16 @@ import {
   useCashflow,
   useKpis,
   useProductVolumes,
+  useReceivableInvoices,
   useStatusBreakdown,
 } from '@/services/queries';
 import { useAuthStore } from '@/store/useAuthStore';
-import { formatCompactCurrency, formatMt, formatPercent } from '@/utils/format';
+import { formatCompactCurrency, formatDate, formatMt, formatPercent } from '@/utils/format';
 import { BRAND, CHART_PALETTE, ROUTES } from '@/config/constants';
+import dayjs from 'dayjs';
 
 const { Text } = Typography;
+const TODAY = dayjs('2026-06-13');
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: BRAND.success,
@@ -77,6 +81,7 @@ export default function DashboardPage() {
   const products = useProductVolumes();
   const accounts = useAccounts();
   const aging = useAging();
+  const receivableInvoices = useReceivableInvoices();
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
@@ -112,6 +117,18 @@ export default function DashboardPage() {
   const agingData = useMemo(
     () => (aging.data ?? []).map((a) => ({ name: t(`reports.${a.bucket}`), value: a.value })),
     [aging.data, t],
+  );
+
+  const recentInvoices = useMemo(() => (receivableInvoices.data ?? []).slice(0, 6), [receivableInvoices.data]);
+
+  const upcomingDue = useMemo(
+    () =>
+      (receivableInvoices.data ?? [])
+        .filter((row) => row.displayStatus !== 'PAID')
+        .slice()
+        .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf())
+        .slice(0, 6),
+    [receivableInvoices.data],
   );
 
   const k = kpis.data;
@@ -194,9 +211,8 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Secondary stat strip. TEMP Phase A: the "Open containers" / "Volume" tiles are
-          dropped here — containers carry no status and DashboardKpis.totalVolumeMt is
-          removed (spec §6). Phase D (plan Task D2) may add invoice-based replacements. */}
+      {/* Secondary stat strip — contracts + customers only; containers carry no money/status
+          so there is no "Open containers"/"Volume" tile (spec §6). */}
       <Card variant="borderless" className="soft-card" style={{ marginTop: 16 }} styles={{ body: { padding: 18 } }}>
         <Row gutter={[16, 16]}>
           {[
@@ -283,9 +299,8 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Recent invoices + upcoming. TEMP Phase A: the container-derived shipment-invoice
-          feed is gone (spec §2) — Phase D (plan Task D2) re-derives both lists from
-          `useReceivableInvoices` (chain-leaf sale invoices, derived due dates). */}
+      {/* Recent invoices + upcoming due, sourced from chain-leaf confirmed sale invoices
+          (spec §6) via `useReceivableInvoices`. */}
       <Row gutter={[16, 16]} style={{ marginTop: 16, marginBottom: 8 }}>
         <Col xs={24} lg={14}>
           <ChartCard
@@ -295,13 +310,59 @@ export default function DashboardPage() {
                 {t('common.viewAll')}
               </Button>
             }
+            loading={receivableInvoices.isLoading}
           >
-            <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
+            <List
+              size="small"
+              dataSource={recentInvoices}
+              locale={{ emptyText: t('dashboard.noUpcoming') }}
+              renderItem={(row) => (
+                <List.Item
+                  onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <List.Item.Meta
+                    title={<Text style={{ fontFamily: 'monospace' }}>{row.invoiceNumber}</Text>}
+                    description={`${row.summary} · ${formatDate(row.invoiceDate)}`}
+                  />
+                  <Space direction="vertical" align="end" size={0}>
+                    <Money value={row.totalAmount} strong />
+                    <StatusTag status={row.displayStatus} />
+                  </Space>
+                </List.Item>
+              )}
+            />
           </ChartCard>
         </Col>
         <Col xs={24} lg={10}>
-          <ChartCard title={t('dashboard.upcomingDueTitle')}>
-            <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
+          <ChartCard title={t('dashboard.upcomingDueTitle')} loading={receivableInvoices.isLoading}>
+            <List
+              size="small"
+              dataSource={upcomingDue}
+              locale={{ emptyText: t('dashboard.noUpcoming') }}
+              renderItem={(row) => {
+                const days = TODAY.startOf('day').diff(dayjs(row.dueDate).startOf('day'), 'day');
+                return (
+                  <List.Item
+                    onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <List.Item.Meta
+                      title={<Text style={{ fontFamily: 'monospace' }}>{row.invoiceNumber}</Text>}
+                      description={row.summary}
+                    />
+                    <Space direction="vertical" align="end" size={0}>
+                      <Money value={row.totalAmount} strong />
+                      <Text type={days > 0 ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                        {days > 0
+                          ? t('containers.overdueBy', { count: days })
+                          : t('containers.dueIn', { count: -days })}
+                      </Text>
+                    </Space>
+                  </List.Item>
+                );
+              }}
+            />
           </ChartCard>
         </Col>
       </Row>
