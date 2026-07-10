@@ -55,43 +55,60 @@ only consumers (Dashboard overdue widget, Customer Portal open-invoices) move to
 invoices (§6). This removes the last container-derived financial view.
 
 ### Types cleanup
-`ContainerStatus` type + `CONTAINER_STATUSES` const become unused (containers have no status).
-Remove them and their i18n `status.OPEN/PAID/OVERDUE` only if no other consumer remains
-(grep first; `StatusTag` may map them for other entities — verify before deleting).
+`ContainerStatus`'s only remaining consumers after §2 are `Container.status`,
+`ShipmentInvoice.status`, and **`StatusTag.tsx:8,12`** (union + `CONTAINER_STATUS_COLOR`
+spread) — all removed/edited here, so deletion is safe. **`StatusTag.tsx` must be edited**
+(drop `ContainerStatus` from its prop union and the color-map spread) — it was missing from the
+file list. **BUT** the new `getReceivableInvoices.displayStatus` (§6) reuses the OPEN/PAID/
+OVERDUE *values* and their colors for the dashboard/portal badge — so keep
+`CONTAINER_STATUS_COLOR` + `status.OPEN/PAID/OVERDUE` i18n keys and just repurpose them
+(rename conceptually to a shared "settlement status"), rather than deleting them.
+**Keep `containers.overdueBy` / `containers.dueIn`** — the Dashboard "upcoming due" widget
+(DashboardPage.tsx:368-369) still uses them on the re-based feed.
 
 ## 3. Seed (`src/mock/data.ts`) — SCHEMA_VERSION 2 → 3
 
-The existing seed builds rich per-item containers (contractId/itemId/quantity/lmePrice/…) and
-one PO→PP→PI trade chain + a draft SO. Rework the container seed and, to keep the re-based
-dashboard populated (§6), derive **historical trade invoices** from the old container data —
-all with **zero new PRNG draws** (fixed transforms of existing values; determinism anchor:
-`cust-am` creditLimit must stay 2,750,000).
+**Determinism is the #1 risk.** The credit-limit post-pass (`data.ts:414-426`) runs right after
+container generation, consumes one `rnd()` per customer, and reads `container.invoiceUSD` /
+`container.status` — fields §2 removes. It runs BEFORE partner allocation (429-452), so moving
+it would shift the entire PRNG stream and change every seeded value (violating the `cust-am`
+creditLimit = 2,750,000 anchor). The container generation loop (`data.ts:234-299`, `344-378`)
+also pushes old-shape objects into a `containers: Container[]` array — which won't type-check
+the moment §2's new `Container` shape lands.
 
-Transform, in a post-pass placed after the existing trade-doc seed block:
-1. **Reshape containers → logistics.** For each existing seeded container, keep
-   `id, reference, shipmentDate, arrivalDate, blNumber, bookingNumber, sealNumber`; set
-   `goods: [{ contractItemId: <old itemId>, quantityMt: <old quantityMt> }]`; derive
-   `netWeightKg = round(quantityMt * 1000)`, `grossWeightKg = round(quantityMt * 1000 * 1.02)`
-   (2% tare — fixed factor, no PRNG). Drop the removed fields.
-2. **Historical trade invoices from shipments.** Group reshaped containers by their contract
-   (via the goods' contractItemId → contract). For each contract with containers, create one
-   **CONFIRMED** trade invoice — `SALE_INVOICE` for SELL contracts, `PURCHASE_INVOICE` for
-   PURCHASE — dated at the latest container shipmentDate + customer terms, `invoiceNumber` via
-   the standard scheme, one `InvoiceItem` per container-good (snapshot pricing from the
-   contract item; `containerId` set to that container; `quantityMt` from the good), totals
-   computed via the calc helpers. These are **in addition to** the existing PO→PP→PI chain and
-   draft SO. Numbering counters must continue from these so live-created numbers don't collide.
-   - Sale invoices → receivables; seed a partial IN payment on ~half of them (deterministic:
-     e.g. every other sale invoice, 60% paid) so outstanding/overdue/paid look realistic.
-     Payment ids continue the `NIZ` scheme; `direction: 'IN'`.
-   - Purchase invoices → payables (direction OUT), excluded from receivables per existing §7.
-   - Do **not** auto-create warehouse docs for these historical invoices (seed-only shortcut;
-     warehouse stays as the current single seed). Note this explicitly in a code comment.
-3. Persistence: bump `SCHEMA_VERSION` to 3; `seed` object unchanged in shape (same keys).
-   Extend `isCompatible`: probe `containers[0].goods` is an array and that
-   `containers[0].quantityMt === undefined` is NOT required — instead probe the NEW shape
-   (`Array.isArray(o.containers) && (o.containers[0]?.goods !== undefined || o.containers.length === 0)`).
-   The version bump is the real guard; the probe is the safety net.
+**Resolution — raw internal seed type, no reordering:**
+1. Introduce a file-local `RawContainerSeed` type (the OLD shape: `id, contractId, itemId,
+   reference, quantityMt, lmePrice, premium, shipmentDate, arrivalDate?, dueDate, invoiceUSD,
+   status, blNumber?, bookingNumber?, sealNumber?`). The generation loop builds into
+   `rawContainers: RawContainerSeed[]`, **byte-identical to today** (same order, same `rnd()`
+   draws). The credit-limit pass and partner pass stay **exactly where they are**, reading
+   `rawContainers` — so their PRNG draws and outputs are unchanged. This preserves 2,750,000.
+2. **Final post-pass (after partner allocation, zero new `rnd()` draws)** maps
+   `rawContainers → db.containers` (new logistics shape): keep `id, reference, shipmentDate,
+   arrivalDate, blNumber, bookingNumber, sealNumber`; set `goods: [{ contractItemId: raw.itemId,
+   quantityMt: raw.quantityMt }]`; `netWeightKg = round(raw.quantityMt * 1000)`,
+   `grossWeightKg = round(raw.quantityMt * 1000 * 1.02)` (fixed 2% tare). Drop removed fields.
+3. **Historical trade invoices from `rawContainers`** (NOT from a not-yet-existing invoice list).
+   Group `rawContainers` by contract (raw.contractId). For each contract with shipments, create
+   one **CONFIRMED** trade invoice — `SALE_INVOICE` for SELL, `PURCHASE_INVOICE` for PURCHASE —
+   dated at latest shipmentDate, one `InvoiceItem` per raw container (snapshot pricing from the
+   contract item; `containerId` = that container id; `quantityMt` = raw.quantityMt), totals via
+   calc helpers. In addition to the existing PO→PP→PI chain + draft SO.
+   - Sale invoices → receivables; seed a deterministic partial IN payment on every other sale
+     invoice (60% of total), `NIZ` id scheme, `direction: 'IN'`.
+   - Purchase invoices → payables (`direction: 'OUT'`), excluded from receivables (§7).
+   - No warehouse docs for these historical invoices (seed-only shortcut — code comment).
+   - **Numbering is reimplemented locally in `data.ts`** (it cannot import `api.ts`'s
+     `nextInvoiceNumber`/`nextInvoiceId` — the dependency runs the other way). Runtime creation
+     is scan-until-unique against `db.invoices` so live numbers won't collide with these; keep
+     the `<PFX>-<YYYY>-<NNNN>` / `inv-<pfx>-<NNNN>` schemes identical to avoid format drift.
+4. **Recompute `item.remainingMt` at seed end** via the new formula (`quantityMt −
+   shippedMtForItem`) rather than leaving the old container-derived value, so the seed matches
+   runtime semantics exactly (the 1:1 repackaging should make them coincide — assert, don't assume).
+5. Persistence: bump `SCHEMA_VERSION` to 3 (`STORAGE_KEY` → `finora-db-v3`, so old v2 blobs are
+   never read — the real guard). Tighten `isCompatible` with an `if (!Array.isArray(
+   o.containers[0]?.goods) && o.containers.length) return false;` guard, matching the file's
+   existing probe style.
 
 ## 4. Containers UI (`src/pages/containers/*`, `ContainerFormModal`)
 
@@ -106,9 +123,15 @@ Transform, in a post-pass placed after the existing trade-doc seed block:
 - Fields: `reference` (required), `shipmentDate` (required), `arrivalDate`, `grossWeightKg`,
   `netWeightKg`, `blNumber`, `bookingNumber`, `sealNumber`.
 - **Goods** — one `Form` + `Form.List` keyed by a stable row id (ItemFormModal partners
-  idiom, never array index). Each row: a goods `Select` (searchable across **all contracts'**
-  goods lines, grouped/labelled `"<contract id> · <product>"`) + `quantityMt` InputNumber.
-  Add/remove row buttons. At least one good required to save.
+  idiom, never array index). Each row: a goods `Select` + `quantityMt` InputNumber. Add/remove
+  row buttons. At least one good required to save. The Select uses real `OptGroup`s by contract
+  (the flat list is 100+ items) with each option labelled `"<product>"` and a secondary
+  remaining-MT hint (`t('containers.goodRemainingHint', { mt })` from `getContractRemaining`),
+  matching the AddItemsModal hint idiom.
+- **No quantity guardrail (accepted gap):** container goods quantity is NOT validated against
+  the contract item quantity — containers are logistics-only and `shippedMtForItem` (§5) sums
+  invoice lines, never container goods. A user may over-declare on a container with no hard cap.
+  This is an intentional, documented gap (not a silent omission).
 - **Removal block (approved rule 2):** when editing, removing a goods row whose
   `(containerId=this, contractItemId=row)` pair is referenced by any InvoiceItem is blocked.
   On remove attempt, show an AntD `Modal.warning` (or `App.modal.warning`) titled
@@ -135,14 +158,22 @@ Transform, in a post-pass placed after the existing trade-doc seed block:
   all items after any **invoice** mutation that changes item quantities/status/conversion
   (create/add/update/remove item, confirm, cancel, convert). `remainingMt = max(quantityMt −
   shippedMtForItem(id), 0)`. Remove container-mutation-driven remaining recompute.
+- **`updateItem` (api.ts:525)** also calls `shippedMt(itemId, db.containers)` directly on a
+  contract-item edit — a compile break once container loses `itemId`/`quantityMt`. Repoint it
+  to `shippedMtForItem(id)` and then **delete `calc.ts`'s `shippedMt`** once both call sites
+  (this + the removed container recompute) are migrated.
 - `buildContractRows` shippedPct keeps using `Item.remainingMt` — now invoice-sourced.
-- **Reconciliation note (flag for review):** the trade module's `getContractRemaining`
-  (add-items cap) currently subtracts chain-leaf **CONFIRMED** only. Contract "shipped" now
-  counts draft too. Decision: **align** `getContractRemaining` to the same
-  `chainLeafDocs(side, { includeDraft: true })` base so the add-items cap and the shipped
-  figure are complementary (uninvoiced = quantity − shipped). Confirm-time re-validation
-  (existing 'qty-exceeds-remaining') still guards concurrent drafts. Verify trade-module live
-  flows still behave (the earlier T8 sale E2E must still pass).
+- **Add-items cap reconciliation (corrected from review):** do NOT simply switch
+  `getContractRemaining` to include drafts — it has no `excludeInvoiceId` param, so the invoice
+  currently being edited (itself a chain-leaf DRAFT) would be counted in the claimed total AND
+  subtracted again by the UI's client-side `alreadyOnDoc` (AddItemsModal.tsx:43-55,
+  EditLineModal.tsx:29-38) → double subtraction, shrinking the cap on every added line and
+  breaking the T8 sale flow. **Fix:** add an optional `excludeInvoiceId` to `getContractRemaining`
+  and `chainLeafDocs`, thread it via `useContractRemaining(contractId, side, invoiceId)`, pass
+  the current invoice id from add-items/edit-line, and drop the now-redundant client-side
+  `alreadyOnDoc` subtraction. Contract "shipped" (§5) uses the same `chainLeafDocs(side,
+  {includeDraft:true})` WITHOUT an exclude id. Confirm-time 'qty-exceeds-remaining' still guards
+  concurrent drafts. Re-verify the T8 sale E2E.
 
 ## 6. Financial re-base (`src/services/api.ts`, dashboard, portal)
 
@@ -150,38 +181,72 @@ Containers no longer carry money, so every container-derived financial read move
 invoices. **Receivables = SALE side; payables = PURCHASE side** (already encoded via payment
 `direction`). A confirmed/relevant document's amount is its `totalAmount` (USD).
 
-- New selector `saleReceivables()` → per customer: `invoiced` = Σ chain-leaf non-cancelled
-  **SALE** provisional/invoice totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`;
+**Complete list of container-derived reads to re-base** (from review — the spec originally
+missed the last four; all read fields §2 deletes):
+1. `computeAccounts` (api.ts:66-97) — totalInvoiced/outstanding/overdue/openContainers.
+2. `getKpis` (api.ts:~237) — `openContainers`, `totalVolumeMt` on `DashboardKpis`.
+3. `getExecutiveSummary` — via the above.
+4. `getCashflowSeries` (api.ts:254-271) — monthly invoiced/collected.
+5. `getCustomerPortalSummary` (api.ts:818-840) — a **separate hand-rolled** monthly series +
+   aging over `db.containers`, NOT a call into getCashflowSeries — its own rewrite.
+6. `getProductVolumes` (api.ts:273-286) — used by Dashboard, Executive, **Reports** pages via
+   `useProductVolumes`. Re-aggregate over chain-leaf non-cancelled SALE `InvoiceItem`s (product
+   from contract item, qty, value from `invoiceItemAmount`).
+7. `getAgingBuckets` (api.ts:300-325) — dashboard aging; rebuild from `getReceivableInvoices`
+   derived due dates.
+8. `buildInvoices`/`getInvoices`/`ShipmentInvoice` — deleted (§2).
+
+Implementation:
+- `saleReceivables()` → per customer: `invoiced` = Σ chain-leaf non-cancelled **SALE**
+  provisional/invoice totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`;
   `overdue` = Σ outstanding of sale docs whose derived due date `< TODAY`
-  (dueDate = `invoiceDate + customer.paymentTermsDays`, since invoices have no stored due date).
-  Rewrite `computeAccounts` to use this (drop container reads). `openContainers` field on
-  `CustomerAccount` → repurpose as **open sale invoices count** or drop the column; prefer
-  dropping the column from Customers table + type to avoid a misleading name (verify consumers).
-- `getKpis`, `getExecutiveSummary`, cashflow series, `getCustomerPortalSummary` → same
-  invoice-sourced figures. Cashflow "invoiced" per month = Σ sale invoice totals by invoiceDate
-  month; "collected" already from IN payments.
-- **Dashboard** overdue/recent-invoices widget + **Customer Portal** open-invoices list:
-  replace the deleted `ShipmentInvoice` with a lightweight `getReceivableInvoices()` returning
-  sale provisional/invoice rows `{ id, invoiceNumber, customerId, customerName, product|summary,
-  totalAmount, invoiceDate, dueDate(derived), paidUSD, status }`. Portal scopes by customerId.
-- **Magnitude note for the review gate:** this is the largest part. If the seed §3 step 2 is
-  skipped, these views render only the seeded PP/PI chain and look sparse. The historical-
-  invoice seed keeps them rich. Both are in scope here; flag if it should be phased.
+  (dueDate = `invoiceDate + customer.paymentTermsDays`). `computeAccounts` uses it.
+- **`CustomerAccount.openContainers` AND `DashboardKpis.openContainers`** — both lose meaning
+  (containers have no status). **Drop both fields** and their UI (Customers "Open containers"
+  column + `dashboard.kpiContainers` tile + i18n keys). `DashboardKpis.totalVolumeMt` →
+  redefine as Σ shipped invoice qty (chain-leaf non-cancelled sale), or drop with its tile —
+  prefer **drop** (simplest; the Reports page already shows volume via product mix). Decide in
+  the plan; either way remove the container read.
+- `getReceivableInvoices()` → sale provisional/invoice rows
+  `{ id, invoiceNumber, customerId, customerName, summary (first product + "+N"), totalAmount,
+  invoiceDate, dueDate (derived), paidUSD, displayStatus }`. **No `containerReference`** (a sale
+  invoice can span 0..N containers) — Dashboard/Portal show `invoiceNumber` instead of the old
+  container reference. **`displayStatus` is an explicitly derived open/paid/overdue tri-state**
+  (paid ≥ total → PAID; unpaid & dueDate<TODAY → OVERDUE; else OPEN) so `StatusTag` +
+  `CONTAINER_STATUS_COLOR` still render correctly — do NOT pass the document DRAFT/CONFIRMED
+  status through. Portal scopes by customerId.
+- Dashboard uses `invoiceNumber` + `summary` where it used `containerReference · product`
+  (DashboardPage.tsx:342); Portal column `containers.reference`→ new
+  `tradeInvoices.number`, dataIndex `invoiceNumber` (CustomerPortalPage.tsx:98-100).
+- **Magnitude note for the review gate:** this (Phase D) is by far the largest, most
+  cross-cutting part — 8 selectors + Dashboard + Executive + Reports + Portal. If deferred, the
+  container/invoice-linkage/shipped work (Phases A–C) can land first, but the app will NOT
+  compile until Phase D lands too (container fields are gone). So Phase D is not optional within
+  this branch — flag if you'd rather split it into its own branch/spec landed first.
 
 ## 7. Invoice-item ↔ container (trade module: detail, add-items, edit-line, convert, confirm)
 
-- **Add-items / edit-line:** replace the BL No + Container No text inputs with a single
-  **container `Select`** (any container; label `"<reference> · <BL or —>"`; searchable). Not
-  required to add/save a draft line.
-- **Per-row assign (approved rule 3):** in the invoice detail items table, a line with no
-  `containerId` shows an "Assign container" button in the actions column (opens a small
-  container-select modal, or the existing edit-line modal focused on the container field).
-- **Convert modal:** when converting an order → provisional/invoice (and provisional →
-  invoice), show a step where the user may pick **one** container to apply to **all** copied
-  lines (optional). If chosen, set `containerId` on every line; if skipped, lines start
-  unassigned and rely on per-row assign. Implement by extending `convertInvoice` to accept an
-  optional `containerId`, or by a follow-up `applyContainerToAll(invoiceId, containerId)` the
-  modal calls after convert. Prefer the latter (keeps `convertInvoice` signature stable).
+- **Edit-line** (`EditLineModal.tsx:100-105`): replace its BL No + Container No text inputs with
+  a single **container `Select`** (any container; label `"<reference> · <BL or —>"`; searchable;
+  optional).
+- **Add-items** (`AddItemsModal.tsx`): today each row is only checkbox + `quantityMt` (there are
+  NO BL/container inputs to "replace" — this is a **net-new** control). Add a per-row container
+  `Select` after the qty field; rework the fixed-width flex row to fit it. Optional at add time.
+- **Per-row assign (approved rule 3):** a detail-table line with no `containerId` shows an
+  "Assign container" button in the actions column. **Reuse the existing `EditLineModal`**
+  (already wired via `editLineItem` + `ActiveModal='editLine'`, InvoiceDetailPage.tsx:701-717) —
+  do NOT add a new modal member for this. The button opens EditLineModal (its new container
+  Select is the relevant field).
+- **Convert container step (corrected from review):** convert is currently a **`Dropdown`**
+  whose item calls `convertInvoiceHandler` → `convertMut` → `navigate` directly, with NO modal
+  and no `ActiveModal` slot (InvoiceDetailPage.tsx:436-446, 199-209). So a container step must be
+  BUILT: add an `ActiveModal='convertContainer'` member + `pendingConvertTarget: InvoiceType`
+  state; the Dropdown item now opens that modal instead of converting immediately. The modal
+  offers an optional single container `Select` ("apply to all lines"), then on OK: `convertInvoice`
+  → if a container was chosen, `applyContainerToAll(createdId, containerId)` → `navigate` to the
+  new draft. Add `applyContainerToAll(invoiceId, containerId)` to the api (keeps `convertInvoice`
+  signature stable). If skipped, the new draft's lines are unassigned → per-row assign / confirm
+  guard handle it.
 - **Confirm guard (approved rule 3):** `confirmInvoice` for provisional/final types adds, in
   the guard order (after 'missing-lme-price', before stock), a **'missing-container'** check:
   every item must have `containerId`. Toast `tradeInvoices.missingContainer` listing the
@@ -201,10 +266,18 @@ invoices. **Receivables = SALE side; payables = PURCHASE side** (already encoded
   block server-side too (throw `'good-in-use'` with the invoice numbers attached).
 - `getGoodContainerUsage(containerId, contractItemId): string[]`.
 - `getContainerOptions()` → `{ id, reference, blNumber }[]` for pickers.
-- `shippedMtForItem`, `chainLeafDocs(side,{includeDraft})`, `saleReceivables`,
-  `getReceivableInvoices`, derived-due-date helper.
-- `confirmInvoice` 'missing-container' guard; `applyContainerToAll(invoiceId, containerId)`.
+- `shippedMtForItem(contractItemId)`, `chainLeafDocs(side, { includeDraft, excludeInvoiceId })`
+  (shared by shipped + add-items cap), `saleReceivables`, `getReceivableInvoices`,
+  derived-due-date helper. Re-based: `getProductVolumes`, `getAgingBuckets`, `getCashflowSeries`,
+  `getCustomerPortalSummary` monthly series + aging, `computeAccounts`, `getKpis`.
+- `getContractRemaining` gains optional `excludeInvoiceId`; `useContractRemaining(contractId,
+  side, invoiceId?)` threads it; add-items/edit-line pass the current invoice id and drop their
+  client-side `alreadyOnDoc` subtraction.
+- `confirmInvoice` 'missing-container' guard (after 'missing-lme-price', before stock);
+  `applyContainerToAll(invoiceId, containerId)`.
 - `updateInvoiceItem` accepts `containerId`; drop `blNumber`/`containerNo`.
+- `StatusTag.tsx` edited (drop `ContainerStatus` union member; keep `CONTAINER_STATUS_COLOR`
+  for the re-based settlement badge).
 - Every mutation still calls `persistDb()`; item-quantity-affecting invoice mutations now also
   recompute `Item.remainingMt` (§5).
 - queries.ts: reshape `useContainers`; add `useContainerOptions`, `useReceivableInvoices`,
