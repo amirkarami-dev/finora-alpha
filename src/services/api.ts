@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { db, persistDb } from '@/mock/data';
 import type {
   Container,
+  ContainerGood,
   ContainerStatus,
   Contract,
   ContractStatus,
@@ -24,20 +25,16 @@ import type {
   Partner,
   Payment,
   ProductVolume,
-  ShipmentInvoice,
   StatusBreakdown,
   TimeSeriesPoint,
   Warehouse,
 } from '@/types';
-import {
-  containerInvoice,
-  contractValue,
-  invoiceItemAmount,
-  invoiceItemUnitPrice,
-  shippedMt,
-} from '@/utils/calc';
+import { contractValue, invoiceItemAmount, invoiceItemUnitPrice } from '@/utils/calc';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
+
+/** Deterministic "today" pin for the mock dataset (matches `src/mock/data.ts`'s seed anchor). */
+const TODAY = dayjs('2026-06-13');
 
 /**
  * Lookup indexes over the mock `db`. They are rebuilt by `reindex()` after any
@@ -57,41 +54,88 @@ function reindex() {
   );
 }
 
-function customerOfContract(contractId: string) {
-  const contract = contractById.get(contractId);
-  return contract ? customerById.get(contract.customerId) : undefined;
+/* ----------------------------- Customers ---------------------------- */
+
+/** Derived due date for a trade invoice: invoiceDate + the customer's payment terms (spec §6). */
+function invoiceDueDate(inv: Invoice): dayjs.Dayjs {
+  const terms = customerById.get(inv.customerId)?.paymentTermsDays ?? 0;
+  return dayjs(inv.invoiceDate).add(terms, 'day');
 }
 
-/* ----------------------------- Customers ---------------------------- */
+/** Chain-leaf, CONFIRMED, non-cancelled, priced SALE documents — the receivables universe
+ *  (spec §6: "confirmed trade invoices"; draft provisionals/invoices are not yet receivable). */
+function receivableLeaves(): Invoice[] {
+  return chainLeafDocs('SALE', { includeDraft: false }).filter((inv) => isPricedType(inv.invoiceType));
+}
+
+interface SaleReceivable {
+  invoiced: number;
+  paid: number;
+  outstanding: number;
+  overdue: number;
+}
+
+/** Σ IN-direction payments across an invoice's full chain (spec §7) — the SAME math used by
+ *  `getReceivableInvoices`' per-row `paidUSD`, shared here so `saleReceivables()`'s per-document
+ *  overdue netting agrees exactly with the per-row OVERDUE badges. */
+function receivablePaidUSD(inv: Invoice): number {
+  const chainIds = new Set(invoiceChain(inv).map((c) => c.id));
+  return round(
+    db.payments
+      .filter((p) => p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN')
+      .reduce((s, p) => s + p.amountUSD, 0),
+  );
+}
+
+/**
+ * Per-customer receivables aggregate (spec §6): `invoiced` = Σ chain-leaf CONFIRMED SALE
+ * totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`; `overdue` = Σ PER-DOCUMENT
+ * netted outstanding (`totalAmount − receivablePaidUSD(inv)`, floored at 0) over sale docs whose
+ * derived due date (`invoiceDate + paymentTermsDays`) is before TODAY — true per-document
+ * netting, matching `getReceivableInvoices`' per-row OVERDUE math exactly (NOT a raw-total sum
+ * capped at the customer-aggregate outstanding).
+ */
+function saleReceivables(): Map<string, SaleReceivable> {
+  const leaves = receivableLeaves();
+  const map = new Map<string, SaleReceivable>();
+  for (const customer of db.customers) map.set(customer.id, { invoiced: 0, paid: 0, outstanding: 0, overdue: 0 });
+
+  for (const inv of leaves) {
+    const entry = map.get(inv.customerId);
+    if (!entry) continue;
+    entry.invoiced += inv.totalAmount;
+    if (invoiceDueDate(inv).isBefore(TODAY, 'day')) {
+      const docOutstanding = Math.max(inv.totalAmount - receivablePaidUSD(inv), 0);
+      entry.overdue += docOutstanding;
+    }
+  }
+  // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
+  for (const p of db.payments) {
+    if ((p.direction ?? 'IN') !== 'IN') continue;
+    const entry = map.get(p.customerId);
+    if (entry) entry.paid += p.amountUSD;
+  }
+  for (const [, entry] of map) {
+    entry.outstanding = round(Math.max(entry.invoiced - entry.paid, 0));
+    entry.overdue = round(entry.overdue);
+    entry.invoiced = round(entry.invoiced);
+    entry.paid = round(entry.paid);
+  }
+  return map;
+}
+
 export function computeAccounts(): CustomerAccount[] {
+  const receivables = saleReceivables();
   return db.customers.map((customer) => {
-    const contractIds = new Set(
-      db.contracts.filter((c) => c.customerId === customer.id).map((c) => c.id),
-    );
-    const conts = db.containers.filter((c) => contractIds.has(c.contractId));
-    // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
-    const pays = db.payments.filter(
-      (p) => p.customerId === customer.id && (p.direction ?? 'IN') === 'IN',
-    );
-
-    const totalInvoiced = conts.reduce((s, c) => s + c.invoiceUSD, 0);
-    const totalPaid = pays.reduce((s, p) => s + p.amountUSD, 0);
-    const totalOutstanding = conts
-      .filter((c) => c.status !== 'PAID')
-      .reduce((s, c) => s + c.invoiceUSD, 0);
-    const overdue = conts
-      .filter((c) => c.status === 'OVERDUE')
-      .reduce((s, c) => s + c.invoiceUSD, 0);
-    const openContainers = conts.filter((c) => c.status !== 'PAID').length;
-
+    const contractCount = db.contracts.filter((c) => c.customerId === customer.id).length;
+    const r = receivables.get(customer.id) ?? { invoiced: 0, paid: 0, outstanding: 0, overdue: 0 };
     return {
       ...customer,
-      totalInvoiced: round(totalInvoiced),
-      totalPaid: round(totalPaid),
-      totalOutstanding: round(totalOutstanding),
-      overdue: round(overdue),
-      openContainers,
-      contractCount: contractIds.size,
+      totalInvoiced: r.invoiced,
+      totalPaid: r.paid,
+      totalOutstanding: r.outstanding,
+      overdue: r.overdue,
+      contractCount,
     };
   });
 }
@@ -106,6 +150,60 @@ export async function getAccounts(): Promise<CustomerAccount[]> {
 export async function getAccount(id: string): Promise<CustomerAccount | undefined> {
   await delay(160);
   return computeAccounts().find((a) => a.id === id);
+}
+
+export interface ReceivableInvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  /** First line's product, plus "+N" when the invoice carries more than one line. */
+  summary: string;
+  totalAmount: number;
+  invoiceDate: string;
+  dueDate: string;
+  paidUSD: number;
+  /** Settlement tri-state — reuses the OPEN/PAID/OVERDUE union + `CONTAINER_STATUS_COLOR`
+   *  for the badge (spec §6). */
+  displayStatus: ContainerStatus;
+}
+
+/**
+ * Chain-leaf CONFIRMED sale documents as receivable "invoice" rows (spec §6), optionally
+ * scoped to one customer. `paidUSD` sums IN payments across the WHOLE chain — a payment may
+ * be recorded against an earlier document in the chain (e.g. a provisional later converted to
+ * a final invoice), not necessarily the leaf itself.
+ */
+export async function getReceivableInvoices(customerId?: string): Promise<ReceivableInvoiceRow[]> {
+  await delay(160);
+  const leaves = receivableLeaves().filter((inv) => !customerId || inv.customerId === customerId);
+  return leaves
+    .map((inv) => {
+      const products = inv.items.map((it) => it.product);
+      const summary =
+        products.length === 0
+          ? '—'
+          : products.length === 1
+            ? products[0]
+            : `${products[0]} +${products.length - 1}`;
+      const paidUSD = receivablePaidUSD(inv);
+      const dueDate = invoiceDueDate(inv);
+      const displayStatus: ContainerStatus =
+        paidUSD >= inv.totalAmount - 0.01 ? 'PAID' : dueDate.isBefore(TODAY, 'day') ? 'OVERDUE' : 'OPEN';
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerId: inv.customerId,
+        customerName: customerById.get(inv.customerId)?.name ?? '—',
+        summary,
+        totalAmount: inv.totalAmount,
+        invoiceDate: inv.invoiceDate,
+        dueDate: dueDate.toISOString(),
+        paidUSD,
+        displayStatus,
+      };
+    })
+    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
 }
 
 /* ----------------------------- Contracts ---------------------------- */
@@ -150,16 +248,19 @@ export async function getContractsByCustomer(customerId: string): Promise<Contra
 
 /* ----------------------------- Containers --------------------------- */
 export interface ContainerRow extends Container {
-  customerName: string;
-  product: string;
+  /** First good's product, plus "+N" when the container carries more than one line. */
+  goodsSummary: string;
+  totalQtyMt: number;
 }
 
 export function buildContainerRows(): ContainerRow[] {
-  return db.containers.map((c) => ({
-    ...c,
-    customerName: customerOfContract(c.contractId)?.name ?? '—',
-    product: itemProduct.get(c.itemId) ?? '—',
-  }));
+  return db.containers.map((c) => {
+    const totalQtyMt = round(c.goods.reduce((s, g) => s + g.quantityMt, 0));
+    const products = c.goods.map((g) => itemProduct.get(g.contractItemId) ?? '—');
+    const goodsSummary =
+      products.length === 0 ? '—' : products.length === 1 ? products[0] : `${products[0]} +${products.length - 1}`;
+    return { ...c, goodsSummary, totalQtyMt };
+  });
 }
 
 export async function getContainers(): Promise<ContainerRow[]> {
@@ -171,32 +272,32 @@ export async function getContainers(): Promise<ContainerRow[]> {
 
 export async function getContainersByContract(contractId: string): Promise<ContainerRow[]> {
   await delay(140);
-  return buildContainerRows().filter((c) => c.contractId === contractId);
+  const itemIds = new Set(contractById.get(contractId)?.items.map((i) => i.id) ?? []);
+  return buildContainerRows().filter((c) => c.goods.some((g) => itemIds.has(g.contractItemId)));
 }
 
-/* ----------------------------- Invoices ----------------------------- */
-export function buildInvoices(): ShipmentInvoice[] {
-  return db.containers.map((c) => {
-    const customer = customerOfContract(c.contractId);
-    return {
-      id: `INV-${c.reference}`,
-      containerReference: c.reference,
-      contractId: c.contractId,
-      customerId: customer?.id ?? '',
-      customerName: customer?.name ?? '—',
-      product: itemProduct.get(c.itemId) ?? '—',
-      quantityMt: c.quantityMt,
-      amountUSD: c.invoiceUSD,
-      issueDate: c.shipmentDate,
-      dueDate: c.dueDate,
-      status: c.status,
-    };
-  });
+/** Invoice numbers of invoices holding a line whose `containerId`/`contractItemId` match — used
+ *  by the container goods-removal guard (spec §4/§8). */
+function goodContainerUsage(containerId: string, contractItemId: string): string[] {
+  return db.invoices
+    .filter((inv) => inv.items.some((it) => it.containerId === containerId && it.contractItemId === contractItemId))
+    .map((inv) => inv.invoiceNumber);
 }
 
-export async function getInvoices(): Promise<ShipmentInvoice[]> {
-  await delay();
-  return buildInvoices().sort((a, b) => dayjs(b.issueDate).valueOf() - dayjs(a.issueDate).valueOf());
+export async function getGoodContainerUsage(containerId: string, contractItemId: string): Promise<string[]> {
+  await delay(120);
+  return goodContainerUsage(containerId, contractItemId);
+}
+
+export interface ContainerOptionRow {
+  id: string;
+  reference: string;
+  blNumber?: string;
+}
+
+export async function getContainerOptions(): Promise<ContainerOptionRow[]> {
+  await delay(100);
+  return db.containers.map((c) => ({ id: c.id, reference: c.reference, blNumber: c.blNumber }));
 }
 
 /* ----------------------------- Payments ----------------------------- */
@@ -234,8 +335,6 @@ export async function getKpis(): Promise<DashboardKpis> {
   const totalPaid = sum(accounts, (a) => a.totalPaid);
   const totalInvoiced = sum(accounts, (a) => a.totalInvoiced);
   const activeContracts = db.contracts.filter((c) => c.status === 'ACTIVE').length;
-  const openContainers = db.containers.filter((c) => c.status !== 'PAID').length;
-  const totalVolumeMt = db.containers.reduce((s, c) => s + c.quantityMt, 0);
   const collectionRate = totalInvoiced > 0 ? (totalPaid / totalInvoiced) * 100 : 0;
 
   return {
@@ -244,23 +343,24 @@ export async function getKpis(): Promise<DashboardKpis> {
     totalPaid: round(totalPaid),
     totalInvoiced: round(totalInvoiced),
     activeContracts,
-    openContainers,
     customers: db.customers.length,
-    totalVolumeMt: round(totalVolumeMt),
     collectionRate: round(collectionRate),
   };
 }
 
+/** Monthly invoiced (chain-leaf CONFIRMED sale totals) vs collected (IN payments), by date
+ *  (spec §6). */
 export async function getCashflowSeries(): Promise<TimeSeriesPoint[]> {
   await delay(180);
+  const leaves = receivableLeaves();
   const months: TimeSeriesPoint[] = [];
-  const start = dayjs('2026-06-13').subtract(11, 'month').startOf('month');
+  const start = TODAY.subtract(11, 'month').startOf('month');
   for (let i = 0; i < 12; i++) {
     const m = start.add(i, 'month');
     const key = m.format('YYYY-MM');
-    const invoiced = db.containers
-      .filter((c) => dayjs(c.shipmentDate).format('YYYY-MM') === key)
-      .reduce((s, c) => s + c.invoiceUSD, 0);
+    const invoiced = leaves
+      .filter((inv) => dayjs(inv.invoiceDate).format('YYYY-MM') === key)
+      .reduce((s, inv) => s + inv.totalAmount, 0);
     // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
       .filter((p) => dayjs(p.date).format('YYYY-MM') === key && (p.direction ?? 'IN') === 'IN')
@@ -270,15 +370,18 @@ export async function getCashflowSeries(): Promise<TimeSeriesPoint[]> {
   return months;
 }
 
+/** Aggregates chain-leaf CONFIRMED SALE invoice items — the same "confirmed trade invoices"
+ *  universe as receivables (spec §6). */
 export async function getProductVolumes(): Promise<ProductVolume[]> {
   await delay(180);
   const map = new Map<string, ProductVolume>();
-  for (const c of db.containers) {
-    const product = itemProduct.get(c.itemId) ?? '—';
-    const entry = map.get(product) ?? { product, volumeMt: 0, valueUSD: 0 };
-    entry.volumeMt += c.quantityMt;
-    entry.valueUSD += c.invoiceUSD;
-    map.set(product, entry);
+  for (const inv of receivableLeaves()) {
+    for (const it of inv.items) {
+      const entry = map.get(it.product) ?? { product: it.product, volumeMt: 0, valueUSD: 0 };
+      entry.volumeMt += it.quantityMt;
+      entry.valueUSD += it.amount;
+      map.set(it.product, entry);
+    }
   }
   return [...map.values()]
     .map((e) => ({ ...e, volumeMt: round(e.volumeMt), valueUSD: round(e.valueUSD) }))
@@ -302,18 +405,21 @@ export interface AgingBucket {
   value: number;
 }
 
+/** Aging over `getReceivableInvoices()`'s derived outstanding (totalAmount − paidUSD) and
+ *  derived due date (spec §6). */
 export async function getAgingBuckets(): Promise<AgingBucket[]> {
   await delay(160);
-  const today = dayjs('2026-06-13');
+  const rows = await getReceivableInvoices();
   const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90p: 0 };
-  for (const c of db.containers) {
-    if (c.status === 'PAID') continue;
-    const overdueDays = today.startOf('day').diff(dayjs(c.dueDate).startOf('day'), 'day');
-    if (overdueDays <= 0) buckets.current += c.invoiceUSD;
-    else if (overdueDays <= 30) buckets.d30 += c.invoiceUSD;
-    else if (overdueDays <= 60) buckets.d60 += c.invoiceUSD;
-    else if (overdueDays <= 90) buckets.d90 += c.invoiceUSD;
-    else buckets.d90p += c.invoiceUSD;
+  for (const row of rows) {
+    const outstanding = row.totalAmount - row.paidUSD;
+    if (outstanding <= 0.01) continue;
+    const overdueDays = TODAY.startOf('day').diff(dayjs(row.dueDate).startOf('day'), 'day');
+    if (overdueDays <= 0) buckets.current += outstanding;
+    else if (overdueDays <= 30) buckets.d30 += outstanding;
+    else if (overdueDays <= 60) buckets.d60 += outstanding;
+    else if (overdueDays <= 90) buckets.d90 += outstanding;
+    else buckets.d90p += outstanding;
   }
   return [
     { bucket: 'current', value: round(buckets.current) },
@@ -521,123 +627,101 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
   target.status = input.status;
   target.notes = input.notes ?? '';
   target.partners = input.partners ?? target.partners ?? [];
-  // Remaining respects MT already shipped on existing containers.
-  const shipped = shippedMt(itemId, db.containers);
-  target.remainingMt = Math.round(Math.max(input.quantityMt - shipped, 0) * 1000) / 1000;
+  // Remaining respects MT already invoiced against this item (spec §5) — NOT containers,
+  // which carry no shipped-quantity meaning since the schema-v3 logistics reshape.
+  target.remainingMt = Math.round(Math.max(input.quantityMt - shippedMtForItem(itemId), 0) * 1000) / 1000;
   reindex();
   persistDb();
   return target;
 }
 
-/* ----------------------------- Containers (mutations) --------------- */
+/* ----------------------------- Containers (mutations) --------------- *
+ * Containers are pure logistics (spec §2): no money, no status, no single
+ * contract/item — they carry a `goods` line array. They no longer drive
+ * `Item.remainingMt` (that's invoice-based now, see `shippedMtForItem`/
+ * `recomputeAllRemaining` below); a container mutation does NOT recompute it.
+ * `updateContainer` enforces the goods-removal guard (`assertNoRemovedGoodInUse`,
+ * spec §4/§8) before mutating.
+ * ------------------------------------------------------------------- */
 
 export interface ContainerInput {
-  contractId: string;
-  itemId: string;
   reference: string;
-  quantityMt: number;
-  lmePrice: number;
-  premium: number;
   /** ISO date string. */
   shipmentDate: string;
   /** ISO date string. */
   arrivalDate?: string;
-  /** ISO date string. */
-  dueDate: string;
-  status: ContainerStatus;
+  grossWeightKg?: number;
+  netWeightKg?: number;
   blNumber?: string;
   bookingNumber?: string;
   sealNumber?: string;
+  goods: ContainerGood[];
 }
 
-function findItemById(itemId: string): Item | undefined {
-  for (const contract of db.contracts) {
-    const item = contract.items.find((i) => i.id === itemId);
-    if (item) return item;
+function nextContainerId(): string {
+  const taken = new Set(db.containers.map((c) => c.id));
+  let n = db.containers.length + 1;
+  let id = `cnt-${n}`;
+  while (taken.has(id)) {
+    n += 1;
+    id = `cnt-${n}`;
   }
-  return undefined;
-}
-
-/** Recompute a parent item's remaining MT from the containers currently shipped against it. */
-function recomputeItemRemaining(itemId: string): void {
-  const item = findItemById(itemId);
-  if (!item) return;
-  const shipped = shippedMt(itemId, db.containers);
-  item.remainingMt = Math.round(Math.max(item.quantityMt - shipped, 0) * 1000) / 1000;
-}
-
-function nextContainerId(contractId: string): string {
-  const prefix = `cnt-${contractId}-`;
-  let max = 0;
-  for (const c of db.containers) {
-    if (c.id.startsWith(prefix)) {
-      const n = Number(c.id.slice(prefix.length));
-      if (Number.isFinite(n)) max = Math.max(max, n);
-    }
-  }
-  return `${prefix}${max + 1}`;
+  return id;
 }
 
 export async function createContainer(input: ContainerInput): Promise<ContainerRow> {
   await delay(180);
   const container: Container = {
-    id: nextContainerId(input.contractId),
-    contractId: input.contractId,
-    itemId: input.itemId,
+    id: nextContainerId(),
     reference: input.reference,
-    quantityMt: input.quantityMt,
-    lmePrice: input.lmePrice,
-    premium: input.premium,
+    goods: input.goods,
     shipmentDate: input.shipmentDate,
     arrivalDate: input.arrivalDate,
-    dueDate: input.dueDate,
-    invoiceUSD: round(
-      containerInvoice({
-        quantityMt: input.quantityMt,
-        lmePrice: input.lmePrice,
-        premium: input.premium,
-      }),
-    ),
-    status: input.status,
+    grossWeightKg: input.grossWeightKg,
+    netWeightKg: input.netWeightKg,
     blNumber: input.blNumber,
     bookingNumber: input.bookingNumber,
     sealNumber: input.sealNumber,
   };
   db.containers.push(container);
-  recomputeItemRemaining(input.itemId);
   reindex();
   persistDb();
   return buildContainerRows().find((c) => c.id === container.id)!;
+}
+
+/**
+ * Enforces the goods-removal guard server-side (spec §4/§8): a good present on the persisted
+ * container but absent from `nextGoods` may not be dropped while an invoice line still
+ * references it. Throws `'good-in-use'` with `.invoices`/`.product` attached, BEFORE mutating.
+ */
+function assertNoRemovedGoodInUse(container: Container, nextGoods: ContainerGood[]): void {
+  const nextIds = new Set(nextGoods.map((g) => g.contractItemId));
+  for (const good of container.goods) {
+    if (nextIds.has(good.contractItemId)) continue;
+    const usage = goodContainerUsage(container.id, good.contractItemId);
+    if (usage.length > 0) {
+      const err = new Error('good-in-use') as Error & { invoices?: string[]; product?: string };
+      err.invoices = usage;
+      err.product = itemProduct.get(good.contractItemId) ?? good.contractItemId;
+      throw err;
+    }
+  }
 }
 
 export async function updateContainer(id: string, input: ContainerInput): Promise<ContainerRow> {
   await delay(180);
   const container = db.containers.find((c) => c.id === id);
   if (!container) throw new Error(`Container ${id} not found`);
-  const previousItemId = container.itemId;
-  container.contractId = input.contractId;
-  container.itemId = input.itemId;
+  assertNoRemovedGoodInUse(container, input.goods);
   container.reference = input.reference;
-  container.quantityMt = input.quantityMt;
-  container.lmePrice = input.lmePrice;
-  container.premium = input.premium;
+  container.goods = input.goods;
   container.shipmentDate = input.shipmentDate;
   container.arrivalDate = input.arrivalDate;
-  container.dueDate = input.dueDate;
-  container.invoiceUSD = round(
-    containerInvoice({
-      quantityMt: input.quantityMt,
-      lmePrice: input.lmePrice,
-      premium: input.premium,
-    }),
-  );
-  container.status = input.status;
+  container.grossWeightKg = input.grossWeightKg;
+  container.netWeightKg = input.netWeightKg;
   container.blNumber = input.blNumber;
   container.bookingNumber = input.bookingNumber;
   container.sealNumber = input.sealNumber;
-  // Moving a container between items frees the old item and draws down the new one.
-  if (previousItemId !== input.itemId) recomputeItemRemaining(previousItemId);
-  recomputeItemRemaining(input.itemId);
   reindex();
   persistDb();
   return buildContainerRows().find((c) => c.id === id)!;
@@ -747,6 +831,7 @@ export async function setPartnerActive(id: string, active: boolean): Promise<Par
 }
 
 /* ----------------------------- Customer Portal ---------------------- */
+
 export interface CustomerPortalSummary {
   customerId: string;
   name: string;
@@ -770,11 +855,16 @@ export interface CustomerPortalSummary {
   availableCredit: number;
   aging: AgingBucket[];
   series: TimeSeriesPoint[];
-  openInvoices: ShipmentInvoice[];
+  openInvoices: ReceivableInvoiceRow[];
   recentPayments: PaymentRow[];
   contracts: ContractRow[];
 }
 
+/**
+ * Re-based onto trade invoices (spec §6): `openInvoices` = `getReceivableInvoices(customerId)`
+ * rows (excluding PAID), and the aging/series are derived from that same invoice-based source
+ * rather than re-scanning `db.invoices` directly.
+ */
 export async function getCustomerPortalSummary(
   customerId: string,
 ): Promise<CustomerPortalSummary | undefined> {
@@ -782,30 +872,27 @@ export async function getCustomerPortalSummary(
   const account = computeAccounts().find((a) => a.id === customerId);
   if (!account) return undefined;
 
-  const today = dayjs('2026-06-13');
-
   const myContracts = buildContractRows().filter((c) => c.customerId === customerId);
-  const contractIds = new Set(myContracts.map((c) => c.id));
 
-  const myInvoices = buildInvoices().filter((inv) => inv.customerId === customerId);
-  const openInvoices = myInvoices
-    .filter((inv) => inv.status !== 'PAID')
-    .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf());
+  const openInvoices = (await getReceivableInvoices(customerId)).filter(
+    (row) => row.displayStatus !== 'PAID',
+  );
 
   const recentPayments: PaymentRow[] = db.payments
     .filter((p) => p.customerId === customerId)
     .map((p) => ({ ...p, customerName: account.name }))
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 
-  // Aging buckets over this customer's unpaid invoices.
+  // Aging buckets over this customer's open (unpaid) invoices.
   const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90p: 0 };
   for (const inv of openInvoices) {
-    const overdueDays = today.startOf('day').diff(dayjs(inv.dueDate).startOf('day'), 'day');
-    if (overdueDays <= 0) buckets.current += inv.amountUSD;
-    else if (overdueDays <= 30) buckets.d30 += inv.amountUSD;
-    else if (overdueDays <= 60) buckets.d60 += inv.amountUSD;
-    else if (overdueDays <= 90) buckets.d90 += inv.amountUSD;
-    else buckets.d90p += inv.amountUSD;
+    const outstanding = inv.totalAmount - inv.paidUSD;
+    const overdueDays = TODAY.startOf('day').diff(dayjs(inv.dueDate).startOf('day'), 'day');
+    if (overdueDays <= 0) buckets.current += outstanding;
+    else if (overdueDays <= 30) buckets.d30 += outstanding;
+    else if (overdueDays <= 60) buckets.d60 += outstanding;
+    else if (overdueDays <= 90) buckets.d90 += outstanding;
+    else buckets.d90p += outstanding;
   }
   const aging: AgingBucket[] = [
     { bucket: 'current', value: round(buckets.current) },
@@ -815,18 +902,17 @@ export async function getCustomerPortalSummary(
     { bucket: 'days90plus', value: round(buckets.d90p) },
   ];
 
-  // 12-month invoiced-vs-collected series, scoped to this customer.
-  const myContainerIds = new Set(
-    db.containers.filter((c) => contractIds.has(c.contractId)).map((c) => c.id),
-  );
+  // 12-month invoiced-vs-collected series, scoped to this customer (same chain-leaf
+  // CONFIRMED-sale universe as the global cashflow series).
+  const myLeaves = receivableLeaves().filter((inv) => inv.customerId === customerId);
   const series: TimeSeriesPoint[] = [];
-  const start = today.subtract(11, 'month').startOf('month');
+  const start = TODAY.subtract(11, 'month').startOf('month');
   for (let i = 0; i < 12; i++) {
     const m = start.add(i, 'month');
     const key = m.format('YYYY-MM');
-    const invoiced = db.containers
-      .filter((c) => myContainerIds.has(c.id) && dayjs(c.shipmentDate).format('YYYY-MM') === key)
-      .reduce((s, c) => s + c.invoiceUSD, 0);
+    const invoiced = myLeaves
+      .filter((inv) => dayjs(inv.invoiceDate).format('YYYY-MM') === key)
+      .reduce((s, inv) => s + inv.totalAmount, 0);
     // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
       .filter(
@@ -935,7 +1021,7 @@ const INVOICE_ID_PREFIX: Record<InvoiceType, string> = {
 /** `<PFX>-<YYYY>-<NNNN>`, scan-until-unused against existing numbers of that type (spec §4). */
 function nextInvoiceNumber(type: InvoiceType): string {
   const prefix = INVOICE_NUMBER_PREFIX[type];
-  const year = dayjs('2026-06-13').format('YYYY');
+  const year = TODAY.format('YYYY');
   const taken = new Set(
     db.invoices.filter((inv) => inv.invoiceType === type).map((inv) => inv.invoiceNumber),
   );
@@ -988,7 +1074,7 @@ function nextInventoryDocId(): string {
 
 function nextInventoryDocNumber(type: 'IN' | 'OUT'): string {
   const prefix = type === 'IN' ? 'GRN' : 'GDN';
-  const year = dayjs('2026-06-13').format('YYYY');
+  const year = TODAY.format('YYYY');
   const taken = new Set(db.inventoryDocs.map((d) => d.docNumber));
   for (let n = 1; n <= 9999; n++) {
     const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
@@ -1027,12 +1113,51 @@ function invoiceChain(invoice: Invoice): Invoice[] {
   return chain;
 }
 
-/** Chain-leaf CONFIRMED docs of `side`: CONFIRMED with no non-cancelled successor (spec §5). */
-function chainLeafConfirmedInvoices(side: InvoiceSide): Invoice[] {
+/**
+ * Chain-leaf docs of `side`: leaf (no non-cancelled successor), excluding CANCELLED.
+ * `includeDraft` counts DRAFT leaves too (default: CONFIRMED-only); `excludeInvoiceId` drops
+ * one invoice's own claim. Provisional/invoice/order documents only — orders are unpriced but
+ * still gated by `isPricedType` at call sites that mean "shipped" (spec §5).
+ */
+function chainLeafDocs(
+  side: InvoiceSide,
+  opts: { includeDraft?: boolean; excludeInvoiceId?: string } = {},
+): Invoice[] {
   return db.invoices.filter(
     (inv) =>
-      isSide(inv.invoiceType, side) && inv.status === 'CONFIRMED' && !findSuccessor(inv.id),
+      isSide(inv.invoiceType, side) &&
+      inv.status !== 'CANCELLED' &&
+      (opts.includeDraft ? true : inv.status === 'CONFIRMED') &&
+      !findSuccessor(inv.id) &&
+      inv.id !== opts.excludeInvoiceId,
   );
+}
+
+/** Σ `InvoiceItem.quantityMt` for `contractItemId` across BOTH sides' chain-leaf, non-cancelled,
+ *  draft-or-confirmed priced documents (spec §5 — "shipped" = chain-once, draft+confirmed). */
+function shippedMtForItem(contractItemId: string): number {
+  const leaves = [
+    ...chainLeafDocs('PURCHASE', { includeDraft: true }),
+    ...chainLeafDocs('SALE', { includeDraft: true }),
+  ].filter((inv) => isPricedType(inv.invoiceType));
+  return leaves.reduce(
+    (s, inv) =>
+      s +
+      inv.items
+        .filter((it) => it.contractItemId === contractItemId)
+        .reduce((s2, it) => s2 + it.quantityMt, 0),
+    0,
+  );
+}
+
+/** Recompute every contract item's `remainingMt` from `shippedMtForItem` (spec §5). Call after
+ *  any invoice mutation that changes item quantities/status/conversion. */
+function recomputeAllRemaining(): void {
+  for (const contract of db.contracts) {
+    for (const item of contract.items) {
+      item.remainingMt = Math.round(Math.max(item.quantityMt - shippedMtForItem(item.id), 0) * 1000) / 1000;
+    }
+  }
 }
 
 /* ------------------------------- Selectors ---------------------------- */
@@ -1105,15 +1230,17 @@ export interface ContractRemainingRow {
   uninvoicedMt: number;
 }
 
-/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side` (spec §5). */
+/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side`, optionally
+ *  excluding one invoice's own claim (the doc currently being edited) (spec §5/§8). */
 export async function getContractRemaining(
   contractId: string,
   side: InvoiceSide,
+  excludeInvoiceId?: string,
 ): Promise<ContractRemainingRow[]> {
   await delay(120);
   const contract = contractById.get(contractId);
   if (!contract) return [];
-  const leaves = chainLeafConfirmedInvoices(side).filter((inv) => inv.contractId === contractId);
+  const leaves = chainLeafDocs(side, { excludeInvoiceId }).filter((inv) => inv.contractId === contractId);
   const claimedByItem = new Map<string, number>();
   for (const inv of leaves) {
     for (const it of inv.items) {
@@ -1135,7 +1262,7 @@ function itemUninvoicedMt(
   side: InvoiceSide,
   excludeInvoiceId?: string,
 ): number {
-  const leaves = chainLeafConfirmedInvoices(side).filter((inv) => inv.id !== excludeInvoiceId);
+  const leaves = chainLeafDocs(side, { excludeInvoiceId });
   const claimed = leaves.reduce(
     (s, inv) =>
       s + inv.items.filter((it) => it.contractItemId === contractItemId).reduce((s2, it) => s2 + it.quantityMt, 0),
@@ -1275,8 +1402,8 @@ export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch)
 export interface InvoiceItemInput {
   contractItemId: string;
   quantityMt: number;
-  blNumber?: string;
-  containerNo?: string;
+  /** Container this line's goods were shipped in (optional while drafting; spec §7). */
+  containerId?: string;
   description?: string;
 }
 
@@ -1323,8 +1450,7 @@ export async function addInvoiceItems(
       lmeFixed: contractItem.lmeFixed,
       fixedPrice: contractItem.fixedLmePrice,
       premium: contractItem.premium,
-      blNumber: input.blNumber?.trim() || undefined,
-      containerNo: input.containerNo?.trim() || undefined,
+      containerId: input.containerId,
       description: input.description?.trim() || undefined,
       amount: 0,
     };
@@ -1332,14 +1458,14 @@ export async function addInvoiceItems(
     invoice.items.push(newItem);
   }
   recomputeInvoiceTotals(invoice);
+  recomputeAllRemaining();
   persistDb();
   return invoice;
 }
 
 export interface InvoiceItemPatch {
   quantityMt?: number;
-  blNumber?: string;
-  containerNo?: string;
+  containerId?: string;
   description?: string;
   discountPercent?: number;
 }
@@ -1375,13 +1501,13 @@ export async function updateInvoiceItem(
     }
     item.quantityMt = patch.quantityMt;
   }
-  if (patch.blNumber !== undefined) item.blNumber = patch.blNumber.trim() || undefined;
-  if (patch.containerNo !== undefined) item.containerNo = patch.containerNo.trim() || undefined;
+  if (patch.containerId !== undefined) item.containerId = patch.containerId || undefined;
   if (patch.description !== undefined) item.description = patch.description.trim() || undefined;
   if (patch.discountPercent !== undefined) item.discountPercent = patch.discountPercent;
 
   recomputeItemAmount(item);
   recomputeInvoiceTotals(invoice);
+  recomputeAllRemaining();
   persistDb();
   return invoice;
 }
@@ -1392,6 +1518,7 @@ export async function removeInvoiceItem(invoiceId: string, itemId: string): Prom
   if (invoice.status !== 'DRAFT') throw new Error('not-draft');
   invoice.items = invoice.items.filter((it) => it.id !== itemId);
   recomputeInvoiceTotals(invoice);
+  recomputeAllRemaining();
   persistDb();
   return invoice;
 }
@@ -1434,11 +1561,12 @@ export interface ConfirmInvoiceOptions {
 }
 
 /**
- * Guards IN ORDER (spec §5/§6/§8): 'no-items' → 'missing-lme-price' (provisional/
- * final with a floating line lacking lmePrice) → 'qty-exceeds-remaining' (re-validate
- * §5 invariant 3) → for final invoices: warehouseId required + sale-invoice per-product
- * stock check ('insufficient-stock', err.product/err.available set). On success,
- * final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
+ * Guards IN ORDER (spec §5/§6/§7/§8): 'no-items' → 'missing-lme-price' (provisional/
+ * final with a floating line lacking lmePrice) → 'missing-container' (provisional/final:
+ * every line must carry a containerId; orders are exempt) → 'qty-exceeds-remaining'
+ * (re-validate §5 invariant 3) → for final invoices: warehouseId required + sale-invoice
+ * per-product stock check ('insufficient-stock', err.product/err.available set). On
+ * success, final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
  */
 export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions = {}): Promise<Invoice> {
   await delay(200);
@@ -1450,6 +1578,15 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
   if (isPricedType(invoice.invoiceType)) {
     const missing = invoice.items.some((it) => !it.lmeFixed && it.lmePrice === undefined);
     if (missing) throw new Error('missing-lme-price');
+  }
+
+  if (isPricedType(invoice.invoiceType)) {
+    const noContainer = invoice.items.filter((it) => !it.containerId);
+    if (noContainer.length > 0) {
+      const err = new Error('missing-container') as Error & { products?: string[] };
+      err.products = noContainer.map((i) => i.product);
+      throw err;
+    }
   }
 
   // Re-validate remaining contract quantity at confirm time (spec §5 invariant 3): two
@@ -1513,6 +1650,7 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
   }
 
   invoice.status = 'CONFIRMED';
+  recomputeAllRemaining();
   persistDb();
   return invoice;
 }
@@ -1547,6 +1685,7 @@ export async function cancelInvoice(id: string): Promise<Invoice> {
 
   invoice.status = 'CANCELLED';
   if (doc) doc.status = 'CANCELLED';
+  recomputeAllRemaining();
   persistDb();
   return invoice;
 }
@@ -1589,7 +1728,7 @@ export async function convertInvoice(id: string, targetType: InvoiceType): Promi
     id: newId,
     invoiceNumber: nextInvoiceNumber(targetType),
     invoiceType: targetType,
-    invoiceDate: dayjs('2026-06-13').toISOString(),
+    invoiceDate: TODAY.toISOString(),
     contractId: source.contractId,
     customerId: source.customerId,
     status: 'DRAFT',
@@ -1605,6 +1744,7 @@ export async function convertInvoice(id: string, targetType: InvoiceType): Promi
   };
   recomputeInvoiceTotals(draft);
   db.invoices.push(draft);
+  recomputeAllRemaining();
   persistDb();
   return draft;
 }
@@ -1613,6 +1753,16 @@ export async function markInvoiceSent(id: string): Promise<Invoice> {
   await delay(140);
   const invoice = findInvoiceOrThrow(id);
   invoice.sentAt = dayjs().toISOString();
+  persistDb();
+  return invoice;
+}
+
+/** Sets `containerId` on every item of `invoiceId` — used by the convert-container step
+ *  ("apply to all lines") so a freshly-converted draft can carry a single container (spec §7). */
+export async function applyContainerToAll(invoiceId: string, containerId: string): Promise<Invoice> {
+  await delay(160);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  for (const item of invoice.items) item.containerId = containerId;
   persistDb();
   return invoice;
 }

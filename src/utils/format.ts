@@ -53,13 +53,6 @@ export function formatDate(value?: string | null, pattern = 'DD MMM YYYY'): stri
   return d.isValid() ? d.format(pattern) : '—';
 }
 
-export function relativeDays(value?: string | null): number | null {
-  if (!value) return null;
-  const d = dayjs(value);
-  if (!d.isValid()) return null;
-  return d.startOf('day').diff(dayjs().startOf('day'), 'day');
-}
-
 /** Initials for avatars, e.g. "Alco Metal Trading" → "AM". */
 export function initials(name: string): string {
   return name

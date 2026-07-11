@@ -32,8 +32,7 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { CashflowChart } from '@/components/charts/CashflowChart';
 import { useCustomerPortal } from '@/services/queries';
 import { useAuthStore } from '@/store/useAuthStore';
-import type { ShipmentInvoice } from '@/types';
-import type { ContractRow, PaymentRow } from '@/services/api';
+import type { ContractRow, PaymentRow, ReceivableInvoiceRow } from '@/services/api';
 import { formatCompactCurrency, formatDate, formatMt, formatPercent } from '@/utils/format';
 import { BRAND } from '@/config/constants';
 
@@ -93,20 +92,20 @@ export default function CustomerPortalPage() {
     { name: t('portal.outstanding'), value: data?.outstanding ?? 0 },
   ];
 
-  const invoiceColumns: ColumnsType<ShipmentInvoice> = [
+  const invoiceColumns: ColumnsType<ReceivableInvoiceRow> = [
     {
-      title: t('containers.reference'),
-      dataIndex: 'containerReference',
+      title: t('tradeInvoices.number'),
+      dataIndex: 'invoiceNumber',
       render: (v) => <Text style={{ fontFamily: 'monospace' }}>{v}</Text>,
     },
     {
-      title: t('items.product'),
-      dataIndex: 'product',
+      title: t('common.summary'),
+      dataIndex: 'summary',
       render: (v) => <Tag bordered={false}>{v}</Tag>,
     },
     {
       title: t('invoices.amount'),
-      dataIndex: 'amountUSD',
+      dataIndex: 'totalAmount',
       align: 'right',
       render: (v) => <Money value={v} strong />,
     },
@@ -123,7 +122,7 @@ export default function CustomerPortalPage() {
     },
     {
       title: t('invoices.status'),
-      dataIndex: 'status',
+      dataIndex: 'displayStatus',
       align: 'center',
       render: (v) => <StatusTag status={v} />,
     },
@@ -333,7 +332,7 @@ export default function CustomerPortalPage() {
               key: 'invoices',
               label: `${t('portal.openInvoices')} (${data?.openInvoices.length ?? 0})`,
               children: (
-                <Table<ShipmentInvoice>
+                <Table<ReceivableInvoiceRow>
                   rowKey="id"
                   loading={isLoading}
                   columns={invoiceColumns}

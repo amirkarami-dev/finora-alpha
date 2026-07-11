@@ -1,15 +1,15 @@
-import { App, Form, Input, InputNumber, Modal } from 'antd';
+import { useMemo } from 'react';
+import { App, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
+import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
 
 interface EditLineFormValues {
   quantityMt: number;
+  containerId?: string;
   discountPercent?: number;
-  blNumber?: string;
-  containerNo?: string;
   description?: string;
 }
 
@@ -21,13 +21,23 @@ interface EditLineModalProps {
   side: InvoiceSide;
 }
 
-/** DRAFT-only line editor: quantity (capped at uninvoiced + this line's own claim), discount, BL/container/desc. */
+/** DRAFT-only line editor: quantity (capped at uninvoiced + this line's own claim), container, discount, desc. */
 export function EditLineModal({ open, onClose, invoice, item, side }: EditLineModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm<EditLineFormValues>();
-  const { data: remaining } = useContractRemaining(invoice.contractId, side);
+  const { data: remaining } = useContractRemaining(invoice.contractId, side, invoice.id);
+  const { data: containerOptions } = useContainerOptions();
   const updateMut = useUpdateInvoiceItem();
+
+  const containerSelectOptions = useMemo(
+    () =>
+      (containerOptions ?? []).map((c) => ({
+        value: c.id,
+        label: `${c.reference} · ${c.blNumber || '—'}`,
+      })),
+    [containerOptions],
+  );
 
   const remainingRow = remaining?.find((r) => r.itemId === item.contractItemId);
   // Other lines on THIS invoice already claiming the same contract item must be excluded too.
@@ -40,9 +50,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
 
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
+    containerId: item.containerId,
     discountPercent: item.discountPercent,
-    blNumber: item.blNumber,
-    containerNo: item.containerNo,
     description: item.description,
   };
 
@@ -59,9 +68,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         itemId: item.id,
         patch: {
           quantityMt: values.quantityMt,
+          containerId: values.containerId,
           discountPercent: values.discountPercent,
-          blNumber: values.blNumber?.trim() || undefined,
-          containerNo: values.containerNo?.trim() || undefined,
           description: values.description?.trim() || undefined,
         },
       });
@@ -94,14 +102,17 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         >
           <InputNumber min={0.01} max={maxQty} precision={2} style={{ width: '100%' }} />
         </Form.Item>
+        <Form.Item name="containerId" label={t('tradeInvoices.container')}>
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder={t('tradeInvoices.container')}
+            options={containerSelectOptions}
+          />
+        </Form.Item>
         <Form.Item name="discountPercent" label={t('tradeInvoices.discountPercent')}>
           <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} />
-        </Form.Item>
-        <Form.Item name="blNumber" label={t('containers.blNumber')}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="containerNo" label={t('tradeInvoices.containerNo')}>
-          <Input />
         </Form.Item>
         <Form.Item name="description" label={t('tradeInvoices.description')}>
           <TextArea rows={2} maxLength={300} showCount />

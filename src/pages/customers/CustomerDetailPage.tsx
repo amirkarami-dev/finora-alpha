@@ -119,7 +119,6 @@ export default function CustomerDetailPage() {
               { key: 'phone', label: 'Phone', children: account?.phone },
               { key: 'cur', label: t('customers.currency'), children: <Tag>{account?.defaultCurrency}</Tag> },
               { key: 'terms', label: t('customers.terms'), children: account ? t('customers.termsDays', { count: account.paymentTermsDays }) : '—' },
-              { key: 'containers', label: t('customers.openContainers'), children: <Tag color="processing">{account?.openContainers ?? 0}</Tag> },
             ]} />
           </Card>
         </Col>

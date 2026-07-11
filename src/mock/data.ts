@@ -12,6 +12,7 @@ import type {
   InventoryDocument,
   Invoice,
   InvoiceItem,
+  InvoiceType,
   Item,
   ItemPartner,
   Partner,
@@ -20,6 +21,31 @@ import type {
 } from '@/types';
 import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
 import { containerInvoice, invoiceItemAmount, invoiceItemUnitPrice, unitPrice } from '@/utils/calc';
+
+/**
+ * OLD (pre-schema-v3) container shape — the generation loop below still produces this
+ * exact shape, in the exact same order, consuming the exact same `rnd()` draws it always
+ * has (determinism anchor: `cust-am` creditLimit === 2,750,000). A later, zero-`rnd()`
+ * post-pass reshapes these into the new logistics `Container[]` and synthesizes historical
+ * trade invoices from them (spec §3 / plan Task A2). Never persisted directly.
+ */
+interface RawContainerSeed {
+  id: string;
+  contractId: string;
+  itemId: string;
+  reference: string;
+  quantityMt: number;
+  lmePrice: number;
+  premium: number;
+  shipmentDate: string;
+  arrivalDate?: string;
+  dueDate: string;
+  invoiceUSD: number;
+  status: ContainerStatus;
+  blNumber?: string;
+  bookingNumber?: string;
+  sealNumber?: string;
+}
 
 /* ------------------------------------------------------------------ *
  * Deterministic PRNG so the demo dataset is stable across reloads.
@@ -130,7 +156,7 @@ const CUSTOMER_SEEDS: CustomerSeed[] = [
  * ------------------------------------------------------------------ */
 const customers: Customer[] = [];
 const contracts: Contract[] = [];
-const containers: Container[] = [];
+const rawContainers: RawContainerSeed[] = [];
 const payments: Payment[] = [];
 
 let paymentCounter = 0;
@@ -259,7 +285,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
         }
 
         const reference = makeContainerRef();
-        const container: Container = {
+        const container: RawContainerSeed = {
           id: `cnt-${contractId}-${++containerSeq}`,
           contractId,
           itemId: item.id,
@@ -274,7 +300,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
           status,
           ...docNumbersFor(reference),
         };
-        containers.push(container);
+        rawContainers.push(container);
 
         if (status === 'PAID') {
           paymentCounter += 1;
@@ -341,7 +367,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
   };
   contracts.unshift(contract);
 
-  const c1: Container = {
+  const c1: RawContainerSeed = {
     id: `cnt-${contractId}-1`,
     contractId,
     itemId: item.id,
@@ -358,7 +384,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     bookingNumber: 'BK20461185',
     sealNumber: 'SL3392041',
   };
-  const c2: Container = {
+  const c2: RawContainerSeed = {
     id: `cnt-${contractId}-2`,
     contractId,
     itemId: item.id,
@@ -375,7 +401,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     bookingNumber: 'BK20461186',
     sealNumber: 'CN7741250',
   };
-  containers.unshift(c2, c1);
+  rawContainers.unshift(c2, c1);
 
   payments.unshift(
     {
@@ -415,7 +441,7 @@ customers.forEach((customer) => {
   const myContractIds = new Set(
     contracts.filter((c) => c.customerId === customer.id).map((c) => c.id),
   );
-  const myContainers = containers.filter((c) => myContractIds.has(c.contractId));
+  const myContainers = rawContainers.filter((c) => myContractIds.has(c.contractId));
   const invoiced = myContainers.reduce((s, c) => s + c.invoiceUSD, 0);
   const outstanding = myContainers
     .filter((c) => c.status !== 'PAID')
@@ -669,6 +695,171 @@ if (firstSellContract && firstSellContract.items.length > 0) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Container reshape (raw → logistics) + historical trade invoices
+ * (spec §3 / plan Task A2). ZERO PRNG draws — runs after every rnd()-
+ * consuming pass (credit-limit, partner allocation) AND after the
+ * PO/PP/PI/SO seed above, so historical invoice numbering can
+ * scan-until-unique against those ids too. Earlier seeded values (e.g.
+ * cust-am creditLimit 2,750,000) are untouched: this pass only READS
+ * `rawContainers`/`contracts`/`invoices` and WRITES the new `containers`
+ * plus appends to `invoices`/`payments`.
+ * ------------------------------------------------------------------ */
+const containers: Container[] = rawContainers.map((raw) => ({
+  id: raw.id,
+  reference: raw.reference,
+  goods: [{ contractItemId: raw.itemId, quantityMt: raw.quantityMt }],
+  shipmentDate: raw.shipmentDate,
+  arrivalDate: raw.arrivalDate,
+  blNumber: raw.blNumber,
+  bookingNumber: raw.bookingNumber,
+  sealNumber: raw.sealNumber,
+  netWeightKg: Math.round(raw.quantityMt * 1000),
+  grossWeightKg: Math.round(raw.quantityMt * 1000 * 1.02),
+}));
+
+const itemById = new Map<string, Item>();
+for (const c of contracts) for (const it of c.items) itemById.set(it.id, it);
+
+const rawByContract = new Map<string, RawContainerSeed[]>();
+for (const raw of rawContainers) {
+  const list = rawByContract.get(raw.contractId) ?? [];
+  list.push(raw);
+  rawByContract.set(raw.contractId, list);
+}
+
+const historicalInvoiceIds = new Set(invoices.map((inv) => inv.id));
+const historicalInvoiceNumbers = new Set(invoices.map((inv) => inv.invoiceNumber));
+
+/**
+ * `<PFX>-<YYYY>-<NNNN>` / `inv-<pfx>-<NNNN>`, scan-until-unused against every invoice id/number
+ * created so far in the seed (identical schemes to api.ts's runtime `nextInvoiceNumber`/
+ * `nextInvoiceId` — spec §3 step 3, reimplemented locally since data.ts cannot import api.ts).
+ */
+function nextHistoricalInvoiceIds(prefix: 'SI' | 'PI'): { id: string; number: string } {
+  const year = TODAY.format('YYYY');
+  let n = 1;
+  for (;;) {
+    const number = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
+    const id = `inv-${prefix.toLowerCase()}-${String(n).padStart(4, '0')}`;
+    if (!historicalInvoiceIds.has(id) && !historicalInvoiceNumbers.has(number)) {
+      historicalInvoiceIds.add(id);
+      historicalInvoiceNumbers.add(number);
+      return { id, number };
+    }
+    n += 1;
+  }
+}
+
+/** Snapshot InvoiceItem from a raw container + its contract-item pricing (spec §3 step 3). */
+function makeHistoricalInvoiceItem(invoiceId: string, raw: RawContainerSeed): InvoiceItem {
+  const contractItem = itemById.get(raw.itemId)!;
+  const lmePercent = contractItem.lmePercent;
+  const lmeFixed = contractItem.lmeFixed;
+  const fixedPrice = contractItem.fixedLmePrice;
+  const premium = contractItem.premium;
+  const lmePrice = !lmeFixed ? raw.lmePrice : undefined;
+  const quantityMt = raw.quantityMt;
+  const discountPercent = 0;
+  const amount = round(
+    invoiceItemAmount({ lmeFixed, fixedPrice, lmePrice, lmePercent, premium, quantityMt, discountPercent }),
+    2,
+  );
+  return {
+    id: nextInvoiceItemId(),
+    invoiceId,
+    contractItemId: raw.itemId,
+    product: contractItem.product,
+    quantityMt,
+    lmePercent,
+    lmeFixed,
+    fixedPrice,
+    premium,
+    lmePrice,
+    lmeDate: raw.shipmentDate,
+    discountPercent,
+    amount,
+    containerId: raw.id,
+  };
+}
+
+// One CONFIRMED historical invoice per contract that has raw shipments — SALE_INVOICE for
+// SELL contracts, PURCHASE_INVOICE for PURCHASE — one line per raw container (spec §3 step 3).
+let saleHistoricalIndex = 0;
+for (const contract of contracts) {
+  const raws = rawByContract.get(contract.id);
+  if (!raws || raws.length === 0) continue;
+
+  const invoiceType: InvoiceType = contract.contractType === 'SELL' ? 'SALE_INVOICE' : 'PURCHASE_INVOICE';
+  const prefix = invoiceType === 'SALE_INVOICE' ? 'SI' : 'PI';
+  const { id, number } = nextHistoricalInvoiceIds(prefix);
+  const items = raws.map((raw) => makeHistoricalInvoiceItem(id, raw));
+  const totals = invoiceTotals(items);
+  const invoiceDate = raws
+    .reduce(
+      (latest, raw) => (dayjs(raw.shipmentDate).isAfter(latest) ? dayjs(raw.shipmentDate) : latest),
+      dayjs(raws[0].shipmentDate),
+    )
+    .toISOString();
+
+  const invoice: Invoice = {
+    id,
+    invoiceNumber: number,
+    invoiceType,
+    invoiceDate,
+    contractId: contract.id,
+    customerId: contract.customerId,
+    status: 'CONFIRMED',
+    currency: 'USD',
+    exchangeRate: 1,
+    totalAmount: totals.totalAmount,
+    totalDiscount: totals.totalDiscount,
+    totalWeightMt: totals.totalWeightMt,
+    createdAt: invoiceDate,
+    items,
+  };
+  invoices.push(invoice);
+
+  // No warehouse docs are seeded for these historical invoices — seed-only shortcut (spec §3 step 4).
+  if (invoiceType === 'SALE_INVOICE') {
+    const idx = saleHistoricalIndex++;
+    if (idx % 2 === 0) {
+      // Deterministic partial IN payment on every OTHER historical sale invoice (60% of total).
+      const paymentAmount = round(invoice.totalAmount * 0.6, 2);
+      payments.push({
+        id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
+        customerId: invoice.customerId,
+        date: invoiceDate,
+        currency: 'USD',
+        amount: paymentAmount,
+        fxRate: 1,
+        amountUSD: paymentAmount,
+        method: 'TT',
+        reference: invoice.invoiceNumber,
+        invoiceId: invoice.id,
+        direction: 'IN',
+        notes: '',
+      });
+    }
+  }
+  // Purchase invoices are payables — no payment seeded here (spec §3 step 3).
+}
+
+// Recompute every item's remainingMt from the historical invoice lines just created, so the
+// seed matches the runtime `shippedMtForItem` formula exactly (spec §3 step 4/5). The 1:1
+// raw-container → invoice-line repackaging means this coincides with the original
+// container-derived remainingMt (same quantities, same summation order).
+const shippedByItem = new Map<string, number>();
+for (const inv of invoices) {
+  if (inv.status === 'CANCELLED') continue;
+  for (const it of inv.items) {
+    shippedByItem.set(it.contractItemId, (shippedByItem.get(it.contractItemId) ?? 0) + it.quantityMt);
+  }
+}
+for (const item of itemById.values()) {
+  item.remainingMt = round(Math.max(item.quantityMt - (shippedByItem.get(item.id) ?? 0), 0), 3);
+}
+
+/* ------------------------------------------------------------------ *
  * Persistence. The generated data above is the SEED. To keep edits
  * across page refreshes we hydrate `db` from localStorage on load and
  * write it back after every mutation (see api.ts `persistDb()` calls).
@@ -681,7 +872,7 @@ if (firstSellContract && firstSellContract.items.length > 0) {
  * `isCompatible()` also probes representative fields and falls back
  * to the seed when they're missing.
  * ------------------------------------------------------------------ */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
@@ -703,6 +894,13 @@ function isCompatible(d: unknown): d is typeof seed {
     return false;
   }
   if (!Array.isArray(o.invoices) || !Array.isArray(o.warehouses) || !Array.isArray(o.inventoryDocs)) {
+    return false;
+  }
+  if (!Array.isArray(o.containers)) return false;
+  // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
+  // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
+  // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
+  if (o.containers.length && !Array.isArray((o.containers[0] as Record<string, unknown> | undefined)?.goods)) {
     return false;
   }
   // Probe representative fields added over time (belt-and-braces vs. SCHEMA_VERSION).

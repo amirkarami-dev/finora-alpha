@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
-import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Space, Typography, theme } from 'antd';
+import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Typography, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { useContractRemaining, useAddInvoiceItems } from '@/services/queries';
+import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import type { InvoiceItemInput } from '@/services/api';
 import { formatMt } from '@/utils/format';
 import type { Invoice, InvoiceSide } from '@/types';
@@ -14,6 +14,7 @@ interface AddItemsFormRow {
   uninvoicedMt: number;
   include: boolean;
   quantityMt?: number;
+  containerId?: string;
 }
 
 interface AddItemsFormValues {
@@ -36,9 +37,30 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [form] = Form.useForm<AddItemsFormValues>();
-  const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side);
+  const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side, invoice.id);
+  const { data: containerOptions } = useContainerOptions();
   const addMut = useAddInvoiceItems();
 
+  const containerSelectOptions = useMemo(
+    () =>
+      (containerOptions ?? []).map((c) => ({
+        value: c.id,
+        label: `${c.reference} · ${c.blNumber || '—'}`,
+      })),
+    [containerOptions],
+  );
+
+  // getContractRemaining is CONFIRMED-only, so a DRAFT's own lines are never in its total —
+  // `excludeInvoiceId` (this invoice) is therefore a no-op for capping. Quantity already staged
+  // on THIS draft must be subtracted once here (mirrors EditLineModal's `otherLinesQty` idiom)
+  // so "206 MT item, 100 MT already added" correctly shows ~106 MT uninvoiced, not 206.
+  //
+  // NOTE: `alreadyOnDoc` is computed INLINE inside this memo (not as its own memo keyed off
+  // `invoice.items`) on purpose — the mock API mutates `invoice.items` in place (`.push`), so
+  // that array's reference never changes across refetches and a memo keyed on it would never
+  // recompute. `remaining` DOES get a fresh reference on every `getContractRemaining` refetch,
+  // so keying off it here (and reading `invoice.items`'s current contents inside the body)
+  // keeps this correctly reactive to same-session Add Items submissions.
   const rows: AddItemsFormRow[] = useMemo(() => {
     const alreadyOnDoc = new Map<string, number>();
     for (const it of invoice.items) {
@@ -51,6 +73,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
         uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
         include: false,
         quantityMt: undefined,
+        containerId: undefined,
       }))
       .filter((r) => r.uninvoicedMt > 1e-9);
   }, [remaining, invoice.items]);
@@ -78,7 +101,11 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     const items: InvoiceItemInput[] = values.rows
       .map((r, i) => ({ ...r, contractItemId: rows[i]?.contractItemId ?? r.contractItemId }))
       .filter((r) => r.include)
-      .map((r) => ({ contractItemId: r.contractItemId, quantityMt: r.quantityMt ?? 0 }));
+      .map((r) => ({
+        contractItemId: r.contractItemId,
+        quantityMt: r.quantityMt ?? 0,
+        containerId: r.containerId,
+      }));
     if (items.length === 0) {
       message.error(t('tradeInvoices.selectAtLeastOne'));
       return;
@@ -97,7 +124,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   return (
     <Modal
       open={open}
-      width={640}
+      width={720}
       title={t('tradeInvoices.addItems')}
       okText={t('tradeInvoices.insertSelected')}
       cancelText={t('common.cancel')}
@@ -134,6 +161,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                       style={{
                         display: 'flex',
                         alignItems: 'center',
+                        flexWrap: 'wrap',
                         gap: 12,
                         padding: '8px 12px',
                         border: `1px solid ${token.colorBorderSecondary}`,
@@ -147,7 +175,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                       >
                         <Checkbox />
                       </Form.Item>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                         <Text strong>{row.product}</Text>
                         <div>
                           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -190,6 +218,20 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           {t('common.mtUnit')}
                         </Text>
                       </div>
+                      <Form.Item
+                        name={[field.name, 'containerId']}
+                        style={{ marginBottom: 0, width: 200 }}
+                      >
+                        <Select
+                          allowClear
+                          showSearch
+                          optionFilterProp="label"
+                          size="small"
+                          placeholder={t('tradeInvoices.container')}
+                          options={containerSelectOptions}
+                          disabled={!included}
+                        />
+                      </Form.Item>
                     </div>
                   );
                 })}

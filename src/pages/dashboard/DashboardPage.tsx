@@ -1,20 +1,6 @@
 import { useMemo } from 'react';
+import { Button, Card, Col, List, Row, Segmented, Skeleton, Space, Statistic, Typography, theme } from 'antd';
 import {
-  Avatar,
-  Button,
-  Card,
-  Col,
-  List,
-  Row,
-  Segmented,
-  Skeleton,
-  Statistic,
-  Tag,
-  Typography,
-  theme,
-} from 'antd';
-import {
-  ContainerOutlined,
   DollarOutlined,
   DownloadOutlined,
   FallOutlined,
@@ -36,16 +22,18 @@ import {
   useAccounts,
   useAging,
   useCashflow,
-  useShipmentInvoices,
   useKpis,
   useProductVolumes,
+  useReceivableInvoices,
   useStatusBreakdown,
 } from '@/services/queries';
 import { useAuthStore } from '@/store/useAuthStore';
-import { formatCompactCurrency, formatMt, formatPercent, initials, relativeDays } from '@/utils/format';
+import { formatCompactCurrency, formatDate, formatMt, formatPercent } from '@/utils/format';
 import { BRAND, CHART_PALETTE, ROUTES } from '@/config/constants';
+import dayjs from 'dayjs';
 
 const { Text } = Typography;
+const TODAY = dayjs('2026-06-13');
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: BRAND.success,
@@ -93,7 +81,7 @@ export default function DashboardPage() {
   const products = useProductVolumes();
   const accounts = useAccounts();
   const aging = useAging();
-  const invoices = useShipmentInvoices();
+  const receivableInvoices = useReceivableInvoices();
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
@@ -131,14 +119,16 @@ export default function DashboardPage() {
     [aging.data, t],
   );
 
-  const recentInvoices = useMemo(() => (invoices.data ?? []).slice(0, 6), [invoices.data]);
-  const upcoming = useMemo(
+  const recentInvoices = useMemo(() => (receivableInvoices.data ?? []).slice(0, 6), [receivableInvoices.data]);
+
+  const upcomingDue = useMemo(
     () =>
-      (invoices.data ?? [])
-        .filter((i) => i.status !== 'PAID')
-        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      (receivableInvoices.data ?? [])
+        .filter((row) => row.displayStatus !== 'PAID')
+        .slice()
+        .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf())
         .slice(0, 6),
-    [invoices.data],
+    [receivableInvoices.data],
   );
 
   const k = kpis.data;
@@ -221,14 +211,13 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Secondary stat strip */}
+      {/* Secondary stat strip — contracts + customers only; containers carry no money/status
+          so there is no "Open containers"/"Volume" tile (spec §6). */}
       <Card variant="borderless" className="soft-card" style={{ marginTop: 16 }} styles={{ body: { padding: 18 } }}>
         <Row gutter={[16, 16]}>
           {[
             { icon: <FileTextOutlined />, label: t('dashboard.kpiContracts'), value: k?.activeContracts, color: BRAND.primary },
-            { icon: <ContainerOutlined />, label: t('dashboard.kpiContainers'), value: k?.openContainers, color: BRAND.info },
             { icon: <TeamOutlined />, label: t('dashboard.kpiCustomers'), value: k?.customers, color: BRAND.accent },
-            { icon: <DollarOutlined />, label: t('dashboard.kpiVolume'), value: k ? formatMt(k.totalVolumeMt) : '—', color: BRAND.success },
           ].map((s, i) => (
             <Col xs={12} lg={6} key={i}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -247,9 +236,8 @@ export default function DashboardPage() {
                   {s.icon}
                 </span>
                 <Statistic
-                  value={typeof s.value === 'number' ? s.value : undefined}
+                  value={s.value}
                   title={s.label}
-                  formatter={typeof s.value === 'string' ? () => s.value as string : undefined}
                   loading={kpis.isLoading}
                   valueStyle={{ fontSize: 20, fontWeight: 700 }}
                 />
@@ -311,70 +299,70 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Recent invoices + upcoming */}
+      {/* Recent invoices + upcoming due, sourced from chain-leaf confirmed sale invoices
+          (spec §6) via `useReceivableInvoices`. */}
       <Row gutter={[16, 16]} style={{ marginTop: 16, marginBottom: 8 }}>
         <Col xs={24} lg={14}>
           <ChartCard
             title={t('dashboard.recentInvoicesTitle')}
-            loading={invoices.isLoading}
             extra={
               <Button type="link" onClick={() => navigate(ROUTES.sale)} style={{ padding: 0 }}>
                 {t('common.viewAll')}
               </Button>
             }
+            loading={receivableInvoices.isLoading}
           >
             <List
+              size="small"
               dataSource={recentInvoices}
-              renderItem={(inv) => (
+              locale={{ emptyText: t('dashboard.noUpcoming') }}
+              renderItem={(row) => (
                 <List.Item
-                  style={{ paddingInline: 0 }}
-                  actions={[<Money key="amt" value={inv.amountUSD} strong />, <StatusTag key="st" status={inv.status} />]}
+                  onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <List.Item.Meta
-                    avatar={
-                      <Avatar style={{ background: token.colorFillSecondary, color: token.colorText }}>
-                        {initials(inv.customerName)}
-                      </Avatar>
-                    }
-                    title={<span style={{ fontWeight: 600 }}>{inv.customerName}</span>}
-                    description={
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {inv.containerReference} · {inv.product}
-                      </Text>
-                    }
+                    title={<Text style={{ fontFamily: 'monospace' }}>{row.invoiceNumber}</Text>}
+                    description={`${row.summary} · ${formatDate(row.invoiceDate)}`}
                   />
+                  <Space direction="vertical" align="end" size={0}>
+                    <Money value={row.totalAmount} strong />
+                    <StatusTag status={row.displayStatus} />
+                  </Space>
                 </List.Item>
               )}
             />
           </ChartCard>
         </Col>
         <Col xs={24} lg={10}>
-          <ChartCard title={t('dashboard.upcomingDueTitle')} loading={invoices.isLoading}>
-            {upcoming.length === 0 ? (
-              <Text type="secondary">{t('dashboard.noUpcoming')}</Text>
-            ) : (
-              <List
-                dataSource={upcoming}
-                renderItem={(inv) => {
-                  const days = relativeDays(inv.dueDate) ?? 0;
-                  const overdue = days < 0;
-                  return (
-                    <List.Item style={{ paddingInline: 0 }} actions={[<Money key="amt" value={inv.amountUSD} strong />]}>
-                      <List.Item.Meta
-                        title={<span style={{ fontWeight: 600 }}>{inv.customerName}</span>}
-                        description={
-                          <Tag color={overdue ? 'error' : days <= 7 ? 'warning' : 'default'} style={{ marginInlineStart: 0 }}>
-                            {overdue
-                              ? t('containers.overdueBy', { count: Math.abs(days) })
-                              : t('containers.dueIn', { count: days })}
-                          </Tag>
-                        }
-                      />
-                    </List.Item>
-                  );
-                }}
-              />
-            )}
+          <ChartCard title={t('dashboard.upcomingDueTitle')} loading={receivableInvoices.isLoading}>
+            <List
+              size="small"
+              dataSource={upcomingDue}
+              locale={{ emptyText: t('dashboard.noUpcoming') }}
+              renderItem={(row) => {
+                const days = TODAY.startOf('day').diff(dayjs(row.dueDate).startOf('day'), 'day');
+                return (
+                  <List.Item
+                    onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <List.Item.Meta
+                      title={<Text style={{ fontFamily: 'monospace' }}>{row.invoiceNumber}</Text>}
+                      description={row.summary}
+                    />
+                    <Space direction="vertical" align="end" size={0}>
+                      <Money value={row.totalAmount} strong />
+                      <Text type={days > 0 ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                        {days > 0
+                          ? t('containers.overdueBy', { count: days })
+                          : t('containers.dueIn', { count: -days })}
+                      </Text>
+                    </Space>
+                  </List.Item>
+                );
+              }}
+            />
           </ChartCard>
         </Col>
       </Row>

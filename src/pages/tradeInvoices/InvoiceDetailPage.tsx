@@ -43,8 +43,8 @@ import { InvoiceStatusTag } from './statusColors';
 import {
   useApplyLmePrice,
   useCancelInvoice,
+  useContainerOptions,
   useContractRemaining,
-  useConvertInvoice,
   useMarkInvoiceSent,
   useRemoveInvoiceItem,
   useStockLevels,
@@ -57,6 +57,7 @@ import type { InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
 import { CreateInvoiceModal } from './CreateInvoiceModal';
 import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
+import { ConvertContainerModal } from './ConvertContainerModal';
 import { EditLineModal } from './EditLineModal';
 import { RecordPaymentModal } from './RecordPaymentModal';
 
@@ -79,7 +80,7 @@ const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
   SALE_INVOICE: [],
 };
 
-type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'payment' | null;
+type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'payment' | 'convertContainer' | null;
 
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
@@ -91,15 +92,18 @@ export default function InvoiceDetailPage() {
 
   const { data, isLoading } = useTradeInvoice(invoiceId);
   const { data: stockLevels } = useStockLevels();
+  const { data: containerOptions } = useContainerOptions();
   const removeItemMut = useRemoveInvoiceItem();
   const applyLmeMut = useApplyLmePrice();
   const cancelMut = useCancelInvoice();
   const sentMut = useMarkInvoiceSent();
-  const convertMut = useConvertInvoice();
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [editLineItem, setEditLineItem] = useState<InvoiceItem | undefined>(undefined);
   const [showUninvoicedAlert, setShowUninvoicedAlert] = useState(false);
+  const [pendingConvertTarget, setPendingConvertTarget] = useState<InvoiceType | undefined>(undefined);
+
+  const containerById = new Map((containerOptions ?? []).map((c) => [c.id, c]));
 
   const [lmeDate, setLmeDate] = useState<dayjs.Dayjs | null>(dayjs());
   const [lmePrice, setLmePrice] = useState<number | null>(null);
@@ -193,18 +197,6 @@ export default function InvoiceDetailPage() {
       message.success(t('tradeInvoices.sentSuccess'));
     } catch {
       message.error(t('common.saveFailed'));
-    }
-  };
-
-  const convertInvoiceHandler = async (targetType: InvoiceType) => {
-    try {
-      const created = await convertMut.mutateAsync({ id: invoice.id, targetType });
-      message.success(t('tradeInvoices.converted'));
-      navigate(`/app/invoices/${encodeURIComponent(created.id)}`);
-    } catch (err) {
-      const code = err instanceof Error ? err.message : '';
-      if (code === 'has-successor') message.error(t('tradeInvoices.hasSuccessor'));
-      else message.error(t('common.saveFailed'));
     }
   };
 
@@ -308,16 +300,30 @@ export default function InvoiceDetailPage() {
         ),
     },
     {
-      title: t('containers.blNumber'),
-      dataIndex: 'blNumber',
-      width: 130,
-      render: (v?: string) => v ?? <Text type="secondary">—</Text>,
+      title: t('tradeInvoices.containerNo'),
+      key: 'containerNo',
+      width: 150,
+      render: (_, r) => {
+        const container = r.containerId ? containerById.get(r.containerId) : undefined;
+        return container ? (
+          <span style={{ fontFamily: 'monospace' }}>{container.reference}</span>
+        ) : (
+          <Text type="secondary">—</Text>
+        );
+      },
     },
     {
-      title: t('tradeInvoices.containerNo'),
-      dataIndex: 'containerNo',
-      width: 130,
-      render: (v?: string) => v ?? <Text type="secondary">—</Text>,
+      title: t('tradeInvoices.blNo'),
+      key: 'blNo',
+      width: 150,
+      render: (_, r) => {
+        const container = r.containerId ? containerById.get(r.containerId) : undefined;
+        return container?.blNumber ? (
+          <span style={{ fontFamily: 'monospace' }}>{container.blNumber}</span>
+        ) : (
+          <Text type="secondary">—</Text>
+        );
+      },
     },
     {
       title: t('tradeInvoices.description'),
@@ -331,10 +337,23 @@ export default function InvoiceDetailPage() {
             title: t('common.actions'),
             key: 'actions',
             fixed: 'right' as const,
-            width: 140,
+            width: 190,
             onCell: () => ({ onClick: (e: MouseEvent) => e.stopPropagation() }),
             render: (_: unknown, r: InvoiceItem) => (
               <Space size={4}>
+                {priced && !r.containerId && (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<LinkOutlined />}
+                    onClick={() => {
+                      setEditLineItem(r);
+                      setActiveModal('editLine');
+                    }}
+                  >
+                    {t('tradeInvoices.assignContainer')}
+                  </Button>
+                )}
                 <Button
                   type="link"
                   size="small"
@@ -437,12 +456,13 @@ export default function InvoiceDetailPage() {
                   <Dropdown
                     menu={{
                       items: convertMenuItems,
-                      onClick: ({ key }) => convertInvoiceHandler(key as InvoiceType),
+                      onClick: ({ key }) => {
+                        setPendingConvertTarget(key as InvoiceType);
+                        setActiveModal('convertContainer');
+                      },
                     }}
                   >
-                    <Button icon={<SwapOutlined />} loading={convertMut.isPending}>
-                      {t('tradeInvoices.convert')}
-                    </Button>
+                    <Button icon={<SwapOutlined />}>{t('tradeInvoices.convert')}</Button>
                   </Dropdown>
                 )}
                 {canSend && (
@@ -607,7 +627,7 @@ export default function InvoiceDetailPage() {
           columns={itemColumns}
           dataSource={invoice.items}
           pagination={false}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 1700 }}
           locale={{ emptyText: <Empty description={t('tradeInvoices.noItemsYet')} /> }}
         />
       </Card>
@@ -730,6 +750,18 @@ export default function InvoiceDetailPage() {
           onClose={() => setActiveModal(null)}
           invoice={invoice}
           remainingUSD={remainingUSD}
+        />
+      )}
+
+      {pendingConvertTarget && (
+        <ConvertContainerModal
+          open={activeModal === 'convertContainer'}
+          onClose={() => {
+            setActiveModal(null);
+            setPendingConvertTarget(undefined);
+          }}
+          invoice={invoice}
+          targetType={pendingConvertTarget}
         />
       )}
     </div>

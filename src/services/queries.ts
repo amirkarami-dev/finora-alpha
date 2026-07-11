@@ -12,8 +12,7 @@ export const qk = {
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
   containers: ['containers'] as const,
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
-  /** Flattened container-derived view — used by Dashboard + Customer Portal only. */
-  shipmentInvoices: ['shipmentInvoices'] as const,
+  containerOptions: ['containerOptions'] as const,
   payments: ['payments'] as const,
   paymentsByCustomer: (id: string) => ['payments', 'customer', id] as const,
   kpis: ['kpis'] as const,
@@ -23,12 +22,13 @@ export const qk = {
   aging: ['aging'] as const,
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
+  receivableInvoices: (customerId?: string) => ['receivableInvoices', customerId ?? 'all'] as const,
   partners: ['partners'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
   tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
   tradeInvoice: (id: string) => ['tradeInvoice', id] as const,
-  contractRemaining: (contractId: string, side: InvoiceSide) =>
-    ['contractRemaining', contractId, side] as const,
+  contractRemaining: (contractId: string, side: InvoiceSide, invoiceId?: string) =>
+    ['contractRemaining', contractId, side, invoiceId] as const,
   warehouses: ['warehouses'] as const,
   inventory: ['inventory'] as const,
   stock: ['stock'] as const,
@@ -56,9 +56,8 @@ export const useContainersByContract = (id: string) =>
     queryFn: () => api.getContainersByContract(id),
     enabled: !!id,
   });
-
-export const useShipmentInvoices = () =>
-  useQuery({ queryKey: qk.shipmentInvoices, queryFn: api.getInvoices });
+export const useContainerOptions = () =>
+  useQuery({ queryKey: qk.containerOptions, queryFn: api.getContainerOptions });
 
 export const usePayments = () => useQuery({ queryKey: qk.payments, queryFn: api.getPayments });
 export const usePaymentsByCustomer = (id: string) =>
@@ -84,6 +83,12 @@ export const useCustomerPortal = (id: string) =>
     enabled: !!id,
   });
 
+export const useReceivableInvoices = (customerId?: string) =>
+  useQuery({
+    queryKey: qk.receivableInvoices(customerId),
+    queryFn: () => api.getReceivableInvoices(customerId),
+  });
+
 export const useCustomers = () => useQuery({ queryKey: qk.customers, queryFn: api.getCustomers });
 export const usePartners = () => useQuery({ queryKey: qk.partners, queryFn: api.getPartners });
 export const useProductNames = () =>
@@ -106,7 +111,6 @@ function useInvalidateTrade() {
     qc.invalidateQueries({ queryKey: qk.productVolumes });
     // A product rename flows into the container `product` column and invoices.
     qc.invalidateQueries({ queryKey: qk.containers });
-    qc.invalidateQueries({ queryKey: qk.shipmentInvoices });
     qc.invalidateQueries({ queryKey: qk.aging });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
   };
@@ -146,20 +150,37 @@ export const useUpdateItem = () => {
   });
 };
 
-export const useCreateContainer = () => {
+/**
+ * A container's goods can be reassigned on edit, which shifts what invoice lines/contracts
+ * derive (goods summary, remaining MT, container pickers) — invalidate broadly, including
+ * both trade-invoice lists (spec §8).
+ */
+function useInvalidateContainers() {
   const invalidate = useInvalidateTrade();
+  const qc = useQueryClient();
+  return () => {
+    invalidate();
+    qc.invalidateQueries({ queryKey: qk.containerOptions });
+    qc.invalidateQueries({ queryKey: qk.tradeInvoices('PURCHASE') });
+    qc.invalidateQueries({ queryKey: qk.tradeInvoices('SALE') });
+  };
+}
+
+export const useCreateContainer = () => {
+  const invalidate = useInvalidateContainers();
   return useMutation({
     mutationFn: (input: api.ContainerInput) => api.createContainer(input),
-    onSuccess: (row) => invalidate(row.contractId),
+    // A container is no longer tied to a single contract (spec §2) — invalidate broadly.
+    onSuccess: () => invalidate(),
   });
 };
 
 export const useUpdateContainer = () => {
-  const invalidate = useInvalidateTrade();
+  const invalidate = useInvalidateContainers();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: api.ContainerInput }) =>
       api.updateContainer(id, input),
-    onSuccess: (row) => invalidate(row.contractId),
+    onSuccess: () => invalidate(),
   });
 };
 
@@ -242,10 +263,10 @@ export const useTradeInvoice = (id: string) =>
     enabled: !!id,
   });
 
-export const useContractRemaining = (contractId: string, side: InvoiceSide) =>
+export const useContractRemaining = (contractId: string, side: InvoiceSide, invoiceId?: string) =>
   useQuery({
-    queryKey: qk.contractRemaining(contractId, side),
-    queryFn: () => api.getContractRemaining(contractId, side),
+    queryKey: qk.contractRemaining(contractId, side, invoiceId),
+    queryFn: () => api.getContractRemaining(contractId, side, invoiceId),
     enabled: !!contractId,
   });
 
@@ -272,7 +293,9 @@ function useInvalidateInvoices() {
     }
     if (opts?.invoiceId) qc.invalidateQueries({ queryKey: qk.tradeInvoice(opts.invoiceId) });
     if (opts?.contractId && opts?.side) {
-      qc.invalidateQueries({ queryKey: qk.contractRemaining(opts.contractId, opts.side) });
+      // 3-element prefix (no invoiceId) so it matches every `useContractRemaining` caller
+      // regardless of which invoiceId (if any) they passed as the exclude id.
+      qc.invalidateQueries({ queryKey: ['contractRemaining', opts.contractId, opts.side] });
     }
     qc.invalidateQueries({ queryKey: qk.inventory });
     qc.invalidateQueries({ queryKey: qk.stock });
@@ -280,6 +303,12 @@ function useInvalidateInvoices() {
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    // Every receivables view is invoice-derived (spec §6) — invalidate them together. A bare
+    // ['receivableInvoices'] prefix matches every customerId-scoped variant too.
+    qc.invalidateQueries({ queryKey: ['receivableInvoices'] });
+    qc.invalidateQueries({ queryKey: qk.productVolumes });
+    qc.invalidateQueries({ queryKey: qk.aging });
+    qc.invalidateQueries({ queryKey: qk.cashflow });
     if (opts?.customerId) qc.invalidateQueries({ queryKey: qk.customerPortal(opts.customerId) });
   };
 }
@@ -384,6 +413,15 @@ export const useMarkInvoiceSent = () => {
   const invalidate = useInvalidateInvoices();
   return useMutation({
     mutationFn: (id: string) => api.markInvoiceSent(id),
+    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+  });
+};
+
+export const useApplyContainerToAll = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ invoiceId, containerId }: { invoiceId: string; containerId: string }) =>
+      api.applyContainerToAll(invoiceId, containerId),
     onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
   });
 };
