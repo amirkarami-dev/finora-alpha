@@ -6,21 +6,23 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import {
+  useCancelInventoryDocument,
   useInventoryDocuments,
+  useInvoiceOptions,
   useSetWarehouseActive,
   useStockLevels,
-  useTradeInvoices,
   useWarehouses,
 } from '@/services/queries';
 import type { StockLevelRow } from '@/services/api';
 import { formatDate, formatMt } from '@/utils/format';
 import { useTabParam } from '@/hooks/useTabParam';
 import type { InventoryDocType, InventoryDocument, InventoryDocumentItem, Warehouse } from '@/types';
+import { InventoryDocFormModal } from './InventoryDocFormModal';
 import { WarehouseFormModal } from './WarehouseFormModal';
 
 const { Text } = Typography;
 
-const TAB_KEYS = ['warehouses', 'inventory'] as const;
+const TAB_KEYS = ['warehouses', 'inventory', 'documents'] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 const DOC_TYPE_COLOR: Record<InventoryDocType, string> = { IN: 'blue', OUT: 'gold' };
@@ -34,11 +36,18 @@ export default function WarehousePage() {
   const { data: warehouses, isLoading: warehousesLoading } = useWarehouses();
   const setActive = useSetWarehouseActive();
   const [formState, setFormState] = useState<{ open: boolean; warehouse?: Warehouse }>({ open: false });
+  const [docFormState, setDocFormState] = useState<{ open: boolean; type: InventoryDocType }>({
+    open: false,
+    type: 'IN',
+  });
 
   const { data: stockLevels, isLoading: stockLoading } = useStockLevels();
   const { data: inventoryDocs, isLoading: docsLoading } = useInventoryDocuments();
-  const { data: purchaseInvoices } = useTradeInvoices('PURCHASE');
-  const { data: saleInvoices } = useTradeInvoices('SALE');
+  // Lightweight, ALL-invoices label map (not `useTradeInvoices` x2) — cancelled/superseded
+  // invoices must still resolve to a number since cancelling a trade invoice no longer
+  // cascades to its inventory documents (warehouse spec §6.1).
+  const { data: invoiceOptions } = useInvoiceOptions();
+  const cancelDoc = useCancelInventoryDocument();
 
   const warehouseById = useMemo(() => {
     const map = new Map<string, Warehouse>();
@@ -48,10 +57,9 @@ export default function WarehousePage() {
 
   const invoiceNumberById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const inv of purchaseInvoices ?? []) map.set(inv.id, inv.invoiceNumber);
-    for (const inv of saleInvoices ?? []) map.set(inv.id, inv.invoiceNumber);
+    for (const inv of invoiceOptions ?? []) map.set(inv.id, inv.invoiceNumber);
     return map;
-  }, [purchaseInvoices, saleInvoices]);
+  }, [invoiceOptions]);
 
   const stockByWarehouse = useMemo(() => {
     const map = new Map<string, StockLevelRow[]>();
@@ -184,6 +192,37 @@ export default function WarehousePage() {
         </Tag>
       ),
     },
+    {
+      title: t('common.actions'),
+      key: 'actions',
+      width: 110,
+      align: 'right',
+      onCell: () => ({ onClick: (e: MouseEvent) => e.stopPropagation() }),
+      render: (_, r) =>
+        r.status === 'CANCELLED' ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Popconfirm
+            title={t('warehouse.cancelDocConfirm')}
+            okText={t('common.yes')}
+            cancelText={t('common.no')}
+            onConfirm={async () => {
+              try {
+                await cancelDoc.mutateAsync(r.id);
+                message.success(t('warehouse.docCancelled'));
+              } catch (err) {
+                const code = err instanceof Error ? err.message : '';
+                if (code === 'cancel-blocked-stock') message.error(t('warehouse.cancelBlockedStock'));
+                else message.error(t('common.saveFailed'));
+              }
+            }}
+          >
+            <Button type="link" size="small" danger>
+              {t('warehouse.cancelDoc')}
+            </Button>
+          </Popconfirm>
+        ),
+    },
   ];
 
   const itemColumns: ColumnsType<InventoryDocumentItem> = [
@@ -210,6 +249,22 @@ export default function WarehousePage() {
             >
               {t('warehouse.newWarehouse')}
             </Button>
+          ) : tab === 'documents' ? (
+            <Space wrap>
+              <Button
+                icon={<PlusOutlined />}
+                onClick={() => setDocFormState({ open: true, type: 'IN' })}
+              >
+                {t('warehouse.newReceipt')}
+              </Button>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setDocFormState({ open: true, type: 'OUT' })}
+              >
+                {t('warehouse.newIssue')}
+              </Button>
+            </Space>
           ) : undefined
         }
       />
@@ -220,6 +275,7 @@ export default function WarehousePage() {
         tabList={[
           { key: 'warehouses', label: t('warehouse.tabWarehouses') },
           { key: 'inventory', label: t('warehouse.tabInventory') },
+          { key: 'documents', label: t('warehouse.tabDocuments') },
         ]}
         activeTabKey={tab}
         onTabChange={(key) => setTab(key as TabKey)}
@@ -237,64 +293,61 @@ export default function WarehousePage() {
         )}
 
         {tab === 'inventory' && (
-          <>
-            <div style={{ marginBottom: 20 }}>
-              <Typography.Title level={5} style={{ marginBottom: 12 }}>
-                {t('warehouse.stockTitle')}
-              </Typography.Title>
-              <Row gutter={[16, 16]}>
-                {(warehouses ?? []).map((w) => {
-                  const rows = stockByWarehouse.get(w.id) ?? [];
-                  return (
-                    <Col xs={24} sm={12} lg={8} key={w.id}>
-                      <Card size="small" title={w.name} loading={stockLoading}>
-                        {rows.length === 0 ? (
-                          <Text type="secondary">{t('warehouse.noStock')}</Text>
-                        ) : (
-                          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                            {rows.map((r) => (
-                              <div
-                                key={r.productKey}
-                                style={{ display: 'flex', justifyContent: 'space-between' }}
-                              >
-                                <Text>{r.product}</Text>
-                                <Text strong>{formatMt(r.mt)}</Text>
-                              </div>
-                            ))}
-                          </Space>
-                        )}
-                      </Card>
-                    </Col>
-                  );
-                })}
-              </Row>
-            </div>
-
+          <div>
             <Typography.Title level={5} style={{ marginBottom: 12 }}>
-              {t('warehouse.docsTitle')}
+              {t('warehouse.stockTitle')}
             </Typography.Title>
-            <Table<InventoryDocument>
-              rowKey="id"
-              loading={docsLoading}
-              columns={docColumns}
-              dataSource={inventoryDocs ?? []}
-              scroll={{ x: 900 }}
-              pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
-              locale={{ emptyText: <Empty description={t('common.noData')} /> }}
-              expandable={{
-                rowExpandable: (r) => r.items.length > 0,
-                expandedRowRender: (r) => (
-                  <Table<InventoryDocumentItem>
-                    rowKey="id"
-                    columns={itemColumns}
-                    dataSource={r.items}
-                    pagination={false}
-                    size="small"
-                  />
-                ),
-              }}
-            />
-          </>
+            <Row gutter={[16, 16]}>
+              {(warehouses ?? []).map((w) => {
+                const rows = stockByWarehouse.get(w.id) ?? [];
+                return (
+                  <Col xs={24} sm={12} lg={8} key={w.id}>
+                    <Card size="small" title={w.name} loading={stockLoading}>
+                      {rows.length === 0 ? (
+                        <Text type="secondary">{t('warehouse.noStock')}</Text>
+                      ) : (
+                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                          {rows.map((r) => (
+                            <div
+                              key={r.productKey}
+                              style={{ display: 'flex', justifyContent: 'space-between' }}
+                            >
+                              <Text>{r.product}</Text>
+                              <Text strong>{formatMt(r.mt)}</Text>
+                            </div>
+                          ))}
+                        </Space>
+                      )}
+                    </Card>
+                  </Col>
+                );
+              })}
+            </Row>
+          </div>
+        )}
+
+        {tab === 'documents' && (
+          <Table<InventoryDocument>
+            rowKey="id"
+            loading={docsLoading}
+            columns={docColumns}
+            dataSource={inventoryDocs ?? []}
+            scroll={{ x: 1000 }}
+            pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+            locale={{ emptyText: <Empty description={t('common.noData')} /> }}
+            expandable={{
+              rowExpandable: (r) => r.items.length > 0,
+              expandedRowRender: (r) => (
+                <Table<InventoryDocumentItem>
+                  rowKey="id"
+                  columns={itemColumns}
+                  dataSource={r.items}
+                  pagination={false}
+                  size="small"
+                />
+              ),
+            }}
+          />
         )}
       </Card>
 
@@ -302,6 +355,12 @@ export default function WarehousePage() {
         open={formState.open}
         onClose={() => setFormState((s) => ({ ...s, open: false }))}
         warehouse={formState.warehouse}
+      />
+
+      <InventoryDocFormModal
+        open={docFormState.open}
+        onClose={() => setDocFormState((s) => ({ ...s, open: false }))}
+        type={docFormState.type}
       />
     </div>
   );
