@@ -3,6 +3,7 @@ import { App, Modal, Select, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useApplyContainerToAll, useContainerOptions, useConvertInvoice } from '@/services/queries';
+import { buildContainerOptions } from './containerOptions';
 import type { Invoice, InvoiceType } from '@/types';
 
 const { Text } = Typography;
@@ -28,12 +29,10 @@ export function ConvertContainerModal({ open, onClose, invoice, targetType }: Co
   const applyContainerMut = useApplyContainerToAll();
   const [containerId, setContainerId] = useState<string | undefined>(undefined);
 
+  // Unfiltered on purpose (spec §5.2): a strict superset filter would be empty for any
+  // multi-product invoice, i.e. dead UI. Coverage is reported after apply instead (below).
   const containerSelectOptions = useMemo(
-    () =>
-      (containerOptions ?? []).map((c) => ({
-        value: c.id,
-        label: `${c.reference} · ${c.blNumber || '—'}`,
-      })),
+    () => buildContainerOptions(containerOptions ?? []),
     [containerOptions],
   );
 
@@ -41,9 +40,18 @@ export function ConvertContainerModal({ open, onClose, invoice, targetType }: Co
     try {
       const created = await convertMut.mutateAsync({ id: invoice.id, targetType });
       if (containerId) {
-        await applyContainerMut.mutateAsync({ invoiceId: created.id, containerId });
+        const { applied, total } = await applyContainerMut.mutateAsync({
+          invoiceId: created.id,
+          containerId,
+        });
+        message.success(
+          applied < total
+            ? t('tradeInvoices.containerAppliedToSome', { applied, total })
+            : t('tradeInvoices.converted'),
+        );
+      } else {
+        message.success(t('tradeInvoices.converted'));
       }
-      message.success(t('tradeInvoices.converted'));
       setContainerId(undefined);
       onClose();
       navigate(`/app/invoices/${encodeURIComponent(created.id)}`);

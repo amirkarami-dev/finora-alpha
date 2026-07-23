@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react';
-import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Typography, theme } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Switch, Typography, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import type { InvoiceItemInput } from '@/services/api';
 import { formatMt } from '@/utils/format';
+import { buildContainerOptions } from './containerOptions';
 import type { Invoice, InvoiceSide } from '@/types';
 
 const { Text } = Typography;
@@ -40,15 +41,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const { data: remaining, isLoading } = useContractRemaining(invoice.contractId, side, invoice.id);
   const { data: containerOptions } = useContainerOptions();
   const addMut = useAddInvoiceItems();
-
-  const containerSelectOptions = useMemo(
-    () =>
-      (containerOptions ?? []).map((c) => ({
-        value: c.id,
-        label: `${c.reference} · ${c.blNumber || '—'}`,
-      })),
-    [containerOptions],
-  );
+  const [showAllContainers, setShowAllContainers] = useState(false);
 
   // getContractRemaining is CONFIRMED-only, so a DRAFT's own lines are never in its total —
   // `excludeInvoiceId` (this invoice) is therefore a no-op for capping. Quantity already staged
@@ -82,6 +75,19 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     if (open) form.setFieldsValue({ rows });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, rows]);
+
+  // Per-row container options, filtered to the row's own good unless "Show all containers" is
+  // on (spec §5.2). Keyed by contractItemId rather than field.name — rows are stable per good.
+  const containerOptionsByItem = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildContainerOptions>>();
+    for (const row of rows) {
+      map.set(
+        row.contractItemId,
+        buildContainerOptions(containerOptions ?? [], showAllContainers ? undefined : row.contractItemId),
+      );
+    }
+    return map;
+  }, [containerOptions, rows, showAllContainers]);
 
   const watchedRows = Form.useWatch('rows', form) ?? rows;
   const includedCount = watchedRows.filter((r) => r?.include).length;
@@ -134,13 +140,19 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       destroyOnHidden
       maskClosable={false}
     >
-      <Space style={{ marginBottom: 12 }}>
+      <Space style={{ marginBottom: 12 }} wrap>
         <Button size="small" onClick={insertAll} disabled={rows.length === 0}>
           {t('tradeInvoices.insertAllFromContract')}
         </Button>
         <Text type="secondary" style={{ fontSize: 12 }}>
           {t('tradeInvoices.selectedCount', { count: includedCount, total: rows.length })}
         </Text>
+        <Space size={6}>
+          <Switch size="small" checked={showAllContainers} onChange={setShowAllContainers} />
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('tradeInvoices.showAllContainers')}
+          </Text>
+        </Space>
       </Space>
 
       {!isLoading && rows.length === 0 && (
@@ -228,7 +240,13 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           optionFilterProp="label"
                           size="small"
                           placeholder={t('tradeInvoices.container')}
-                          options={containerSelectOptions}
+                          options={containerOptionsByItem.get(row.contractItemId) ?? []}
+                          notFoundContent={
+                            <Empty
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              description={t('tradeInvoices.noContainerForGood')}
+                            />
+                          }
                           disabled={!included}
                         />
                       </Form.Item>

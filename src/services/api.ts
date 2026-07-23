@@ -295,11 +295,23 @@ export interface ContainerOptionRow {
   id: string;
   reference: string;
   blNumber?: string;
+  loadDate: string;
+  /** Contract-item ids this container carries (`c.goods[].contractItemId`) — drives the
+   *  good-filtered container pickers (spec §5.2). */
+  contractItemIds: string[];
 }
 
 export async function getContainerOptions(): Promise<ContainerOptionRow[]> {
   await delay(100);
-  return db.containers.map((c) => ({ id: c.id, reference: c.reference, blNumber: c.blNumber }));
+  return db.containers
+    .map((c) => ({
+      id: c.id,
+      reference: c.reference,
+      blNumber: c.blNumber,
+      loadDate: c.loadDate,
+      contractItemIds: c.goods.map((g) => g.contractItemId),
+    }))
+    .sort((a, b) => dayjs(b.loadDate).valueOf() - dayjs(a.loadDate).valueOf());
 }
 
 /* ----------------------------- Payments ----------------------------- */
@@ -1991,14 +2003,39 @@ export async function markInvoiceSent(id: string): Promise<Invoice> {
   return invoice;
 }
 
-/** Sets `containerId` on every item of `invoiceId` — used by the convert-container step
- *  ("apply to all lines") so a freshly-converted draft can carry a single container (spec §7). */
-export async function applyContainerToAll(invoiceId: string, containerId: string): Promise<Invoice> {
+export interface ApplyContainerToAllResult {
+  invoice: Invoice;
+  /** Number of lines the container was actually assigned to. */
+  applied: number;
+  /** Total lines on the invoice. */
+  total: number;
+}
+
+/**
+ * Sets `containerId` on every item of `invoiceId` whose good that container actually carries
+ * — used by the convert-container step ("apply to all lines") so a freshly-converted draft can
+ * carry a single container (spec §7). Carriage-checked (spec §5.2): every seeded container
+ * carries exactly one good while many invoices span multiple goods, so an unconditional assign
+ * mis-assigns by construction, and `confirmInvoice` never re-checks carriage. Returns
+ * `applied`/`total` so the caller (ConvertContainerModal) can report coverage.
+ */
+export async function applyContainerToAll(
+  invoiceId: string,
+  containerId: string,
+): Promise<ApplyContainerToAllResult> {
   await delay(160);
   const invoice = findInvoiceOrThrow(invoiceId);
-  for (const item of invoice.items) item.containerId = containerId;
+  const container = db.containers.find((c) => c.id === containerId);
+  const carriedItemIds = new Set(container?.goods.map((g) => g.contractItemId) ?? []);
+  let applied = 0;
+  for (const item of invoice.items) {
+    if (carriedItemIds.has(item.contractItemId)) {
+      item.containerId = containerId;
+      applied++;
+    }
+  }
   persistDb();
-  return invoice;
+  return { invoice, applied, total: invoice.items.length };
 }
 
 /* -------------------------- Warehouse mutations ------------------------ */

@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
-import { App, Form, Input, InputNumber, Modal, Select } from 'antd';
+import { useMemo, useState } from 'react';
+import { App, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
+import { buildContainerOptions, withSelectedContainer } from './containerOptions';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
+const { Text } = Typography;
 
 interface EditLineFormValues {
   quantityMt: number;
@@ -29,15 +31,22 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const { data: remaining } = useContractRemaining(invoice.contractId, side, invoice.id);
   const { data: containerOptions } = useContainerOptions();
   const updateMut = useUpdateInvoiceItem();
+  const [showAllContainers, setShowAllContainers] = useState(false);
 
-  const containerSelectOptions = useMemo(
-    () =>
-      (containerOptions ?? []).map((c) => ({
-        value: c.id,
-        label: `${c.reference} · ${c.blNumber || '—'}`,
-      })),
-    [containerOptions],
-  );
+  // Filtered to this line's good by default (spec §5.2), with the currently-assigned container
+  // always unioned in (flagged) so a pre-existing non-carrying value never renders as a raw id.
+  const containerSelectOptions = useMemo(() => {
+    const base = buildContainerOptions(
+      containerOptions ?? [],
+      showAllContainers ? undefined : item.contractItemId,
+    );
+    return withSelectedContainer(
+      base,
+      containerOptions ?? [],
+      item.containerId,
+      t('tradeInvoices.containerNotCarryingGood'),
+    );
+  }, [containerOptions, showAllContainers, item.contractItemId, item.containerId, t]);
 
   const remainingRow = remaining?.find((r) => r.itemId === item.contractItemId);
   // Other lines on THIS invoice already claiming the same contract item must be excluded too.
@@ -102,13 +111,27 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         >
           <InputNumber min={0.01} max={maxQty} precision={2} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="containerId" label={t('tradeInvoices.container')}>
+        <Form.Item
+          name="containerId"
+          label={t('tradeInvoices.container')}
+          extra={
+            <Space size={6}>
+              <Switch size="small" checked={showAllContainers} onChange={setShowAllContainers} />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t('tradeInvoices.showAllContainers')}
+              </Text>
+            </Space>
+          }
+        >
           <Select
             allowClear
             showSearch
             optionFilterProp="label"
             placeholder={t('tradeInvoices.container')}
             options={containerSelectOptions}
+            notFoundContent={
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('tradeInvoices.noContainerForGood')} />
+            }
           />
         </Form.Item>
         <Form.Item name="discountPercent" label={t('tradeInvoices.discountPercent')}>

@@ -427,7 +427,7 @@ export const useApplyContainerToAll = () => {
   return useMutation({
     mutationFn: ({ invoiceId, containerId }: { invoiceId: string; containerId: string }) =>
       api.applyContainerToAll(invoiceId, containerId),
-    onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
+    onSuccess: ({ invoice }) => invalidate(invalidateArgsFor(invoice)),
   });
 };
 

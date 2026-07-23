@@ -261,6 +261,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
                       <Select
                         showSearch
                         optionFilterProp="label"
+                        optionLabelProp="label"
                         placeholder={t('containers.goods')}
                       >
                         {(contracts ?? []).map((c) => (
