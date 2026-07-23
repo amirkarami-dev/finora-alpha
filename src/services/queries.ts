@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InvoiceSide, InvoiceType } from '@/types';
+import type { InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -32,6 +32,9 @@ export const qk = {
   warehouses: ['warehouses'] as const,
   inventory: ['inventory'] as const,
   stock: ['stock'] as const,
+  inventoryDocLines: (invoiceId: string) => ['inventoryDocLines', invoiceId] as const,
+  invoiceOptions: ['invoiceOptions'] as const,
+  inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -280,8 +283,12 @@ export const useStockLevels = () => useQuery({ queryKey: qk.stock, queryFn: api.
 
 /**
  * Trade-document mutations touch the invoice lists/detail, the contract's uninvoiced-qty
- * figure, and — on confirm/cancel of a final invoice or a payment — inventory/stock and
- * every receivables aggregate (mirrors `useInvalidateTrade`/`useInvalidateCustomers`).
+ * figure, and — on confirm/cancel or a payment — every receivables aggregate (mirrors
+ * `useInvalidateTrade`/`useInvalidateCustomers`). Confirming/cancelling no longer touches
+ * warehouse stock (warehouse spec §4) — those queries are invalidated separately by
+ * `useInvalidateWarehouses` — but it DOES change which invoices are chain-leaf CONFIRMED and
+ * what the documents table's id→number label map must resolve, so `qk.invoiceOptions` is
+ * invalidated here instead.
  */
 function useInvalidateInvoices() {
   const qc = useQueryClient();
@@ -297,8 +304,7 @@ function useInvalidateInvoices() {
       // regardless of which invoiceId (if any) they passed as the exclude id.
       qc.invalidateQueries({ queryKey: ['contractRemaining', opts.contractId, opts.side] });
     }
-    qc.invalidateQueries({ queryKey: qk.inventory });
-    qc.invalidateQueries({ queryKey: qk.stock });
+    qc.invalidateQueries({ queryKey: qk.invoiceOptions });
     qc.invalidateQueries({ queryKey: qk.payments });
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
@@ -386,8 +392,7 @@ export const useApplyLmePrice = () => {
 export const useConfirmInvoice = () => {
   const invalidate = useInvalidateInvoices();
   return useMutation({
-    mutationFn: ({ id, options }: { id: string; options?: api.ConfirmInvoiceOptions }) =>
-      api.confirmInvoice(id, options),
+    mutationFn: (id: string) => api.confirmInvoice(id),
     onSuccess: (invoice) => invalidate(invalidateArgsFor(invoice)),
   });
 };
@@ -432,8 +437,43 @@ function useInvalidateWarehouses() {
     qc.invalidateQueries({ queryKey: qk.warehouses });
     qc.invalidateQueries({ queryKey: qk.stock });
     qc.invalidateQueries({ queryKey: qk.inventory });
+    // Bare prefixes so every invoiceId/type-scoped variant is caught too.
+    qc.invalidateQueries({ queryKey: ['inventoryDocLines'] });
+    qc.invalidateQueries({ queryKey: ['inventorySourceInvoices'] });
   };
 }
+
+export const useInventoryDocLines = (invoiceId: string) =>
+  useQuery({
+    queryKey: qk.inventoryDocLines(invoiceId),
+    queryFn: () => api.getInvoiceLinesForInventory(invoiceId),
+    enabled: !!invoiceId,
+  });
+
+export const useInvoiceOptions = () =>
+  useQuery({ queryKey: qk.invoiceOptions, queryFn: api.getInvoiceOptions });
+
+export const useInventorySourceInvoices = (type: InventoryDocType) =>
+  useQuery({
+    queryKey: qk.inventorySourceInvoices(type),
+    queryFn: () => api.getInventorySourceInvoices(type),
+  });
+
+export const useCreateInventoryDocument = () => {
+  const invalidate = useInvalidateWarehouses();
+  return useMutation({
+    mutationFn: (input: api.InventoryDocInput) => api.createInventoryDocument(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelInventoryDocument = () => {
+  const invalidate = useInvalidateWarehouses();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelInventoryDocument(id),
+    onSuccess: invalidate,
+  });
+};
 
 export const useCreateWarehouse = () => {
   const invalidate = useInvalidateWarehouses();

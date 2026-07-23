@@ -17,7 +17,6 @@ import {
   Table,
   Tag,
   Typography,
-  theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
@@ -47,7 +46,6 @@ import {
   useContractRemaining,
   useMarkInvoiceSent,
   useRemoveInvoiceItem,
-  useStockLevels,
   useTradeInvoice,
 } from '@/services/queries';
 import { invoiceItemUnitPrice } from '@/utils/calc';
@@ -85,13 +83,11 @@ type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'payment
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const { token } = theme.useToken();
   const navigate = useNavigate();
   const { id = '' } = useParams();
   const invoiceId = decodeURIComponent(id);
 
   const { data, isLoading } = useTradeInvoice(invoiceId);
-  const { data: stockLevels } = useStockLevels();
   const { data: containerOptions } = useContainerOptions();
   const removeItemMut = useRemoveInvoiceItem();
   const applyLmeMut = useApplyLmePrice();
@@ -130,7 +126,6 @@ export default function InvoiceDetailPage() {
   const side = invoiceSide(invoice.invoiceType);
   const isDraft = invoice.status === 'DRAFT';
   const isConfirmed = invoice.status === 'CONFIRMED';
-  const isSaleFinal = invoice.invoiceType === 'SALE_INVOICE';
   const priced = isPricedType(invoice.invoiceType);
   const canSend = invoice.invoiceType !== 'PURCHASE_ORDER' && invoice.invoiceType !== 'SALE_ORDER';
   // Payments apply to provisional/final documents only (spec §7) — orders are unpriced.
@@ -139,13 +134,6 @@ export default function InvoiceDetailPage() {
   const isOverpaid = paidUSD > invoice.totalAmount;
   const progressPercent =
     invoice.totalAmount > 0 ? Math.min((paidUSD / invoice.totalAmount) * 100, 100) : 0;
-
-  const stockByProduct = new Map<string, number>();
-  if (stockLevels) {
-    for (const row of stockLevels) {
-      stockByProduct.set(row.productKey, (stockByProduct.get(row.productKey) ?? 0) + row.mt);
-    }
-  }
 
   const convertTargets = CONVERT_TARGETS[invoice.invoiceType];
   const canConvert = isConfirmed && !successor && convertTargets.length > 0;
@@ -186,7 +174,6 @@ export default function InvoiceDetailPage() {
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
       if (code === 'cancel-blocked-successor') message.error(t('tradeInvoices.cancelBlockedSuccessor'));
-      else if (code === 'cancel-blocked-stock') message.error(t('tradeInvoices.cancelBlockedStock'));
       else message.error(t('common.saveFailed'));
     }
   };
@@ -221,25 +208,6 @@ export default function InvoiceDetailPage() {
       align: 'right',
       render: (v) => formatMt(v),
     },
-    ...(isSaleFinal && isDraft
-      ? [
-          {
-            title: t('warehouse.availableMt'),
-            key: 'available',
-            width: 130,
-            align: 'right' as const,
-            render: (_: unknown, r: InvoiceItem) => {
-              const available = stockByProduct.get(r.product.trim().toLowerCase()) ?? 0;
-              const short = r.quantityMt > available + 1e-9;
-              return (
-                <Text style={{ color: short ? token.colorWarning : undefined, fontWeight: short ? 600 : undefined }}>
-                  {formatMt(available)}
-                </Text>
-              );
-            },
-          },
-        ]
-      : []),
     {
       title: t('items.lmePercent'),
       dataIndex: 'lmePercent',

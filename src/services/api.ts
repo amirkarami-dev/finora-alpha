@@ -15,9 +15,11 @@ import type {
   Incoterm,
   Invoice,
   InventoryDocument,
+  InventoryDocumentItem,
   InventoryDocType,
   InvoiceItem,
   InvoiceSide,
+  InvoiceStatus,
   InvoiceType,
   Item,
   ItemPartner,
@@ -1082,15 +1084,33 @@ function nextInventoryDocId(): string {
   return `idoc-${String(max + 1).padStart(4, '0')}`;
 }
 
-function nextInventoryDocNumber(type: 'IN' | 'OUT'): string {
+/** `<GRN|GDN>-<YYYY>-<NNNN>`; the year comes from the document's own `date` (the user picks
+ *  it), NOT `TODAY` — a receipt/issue backdated into a prior year must number into that year. */
+function nextInventoryDocNumber(type: InventoryDocType, date: string): string {
   const prefix = type === 'IN' ? 'GRN' : 'GDN';
-  const year = TODAY.format('YYYY');
+  const year = dayjs(date).format('YYYY');
   const taken = new Set(db.inventoryDocs.map((d) => d.docNumber));
   for (let n = 1; n <= 9999; n++) {
     const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
     if (!taken.has(candidate)) return candidate;
   }
   return `${prefix}-${year}-${db.inventoryDocs.length + 1}`;
+}
+
+let inventoryDocItemSeq = db.inventoryDocs.reduce(
+  (max, doc) =>
+    doc.items.reduce((m, it) => {
+      const match = /^idocitem-(\d+)$/.exec(it.id);
+      return match ? Math.max(m, Number(match[1])) : m;
+    }, max),
+  0,
+);
+/** Monotonic max-scanning counter (mirrors `nextInvoiceItemId`) — NOT length-derived, so it
+ *  can't repeat an id after a cancel/create interleave the way
+ *  `` `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}` `` would. */
+function nextInventoryDocItemId(): string {
+  inventoryDocItemSeq += 1;
+  return `idocitem-${inventoryDocItemSeq}`;
 }
 
 /* --------------------------- Chain helpers --------------------------- */
@@ -1581,23 +1601,15 @@ function isPricedType(type: InvoiceType): boolean {
   return type !== 'PURCHASE_ORDER' && type !== 'SALE_ORDER';
 }
 
-function isFinalType(type: InvoiceType): boolean {
-  return type === 'PURCHASE_INVOICE' || type === 'SALE_INVOICE';
-}
-
-export interface ConfirmInvoiceOptions {
-  warehouseId?: string;
-}
-
 /**
- * Guards IN ORDER (spec §5/§6/§7/§8): 'no-items' → 'missing-lme-price' (provisional/
- * final with a floating line lacking lmePrice) → 'missing-container' (provisional/final:
- * every line must carry a containerId; orders are exempt) → 'qty-exceeds-remaining'
- * (re-validate §5 invariant 3) → for final invoices: warehouseId required + sale-invoice
- * per-product stock check ('insufficient-stock', err.product/err.available set). On
- * success, final invoices create a CONFIRMED IN (purchase) / OUT (sale) InventoryDocument.
+ * Guards IN ORDER (spec §5/§7/§8, warehouse-decoupling spec §4): 'not-draft' → 'no-items' →
+ * 'missing-lme-price' (provisional/final with a floating line lacking lmePrice) →
+ * 'missing-container' (provisional/final: every line must carry a containerId; orders are
+ * exempt) → 'qty-exceeds-remaining' (re-validate §5 invariant 3). Confirming an invoice no
+ * longer touches warehouse stock or creates inventory documents — those are created by hand
+ * via `createInventoryDocument` against a chain-leaf CONFIRMED invoice (warehouse spec §6.1).
  */
-export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions = {}): Promise<Invoice> {
+export async function confirmInvoice(id: string): Promise<Invoice> {
   await delay(200);
   const invoice = findInvoiceOrThrow(id);
   if (invoice.status !== 'DRAFT') throw new Error('not-draft');
@@ -1639,48 +1651,6 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
     }
   }
 
-  if (isFinalType(invoice.invoiceType)) {
-    if (!options.warehouseId) throw new Error('warehouse-required');
-    const warehouse = db.warehouses.find((w) => w.id === options.warehouseId && w.active);
-    if (!warehouse) throw new Error('warehouse-required');
-
-    if (invoice.invoiceType === 'SALE_INVOICE') {
-      const levels = await getStockLevels();
-      for (const item of invoice.items) {
-        const available = stockOf(warehouse.id, item.product, levels);
-        if (item.quantityMt > available + 1e-9) {
-          const err = new Error('insufficient-stock') as Error & { product?: string; available?: number };
-          err.product = item.product;
-          err.available = round(Math.max(available, 0));
-          throw err;
-        }
-      }
-    }
-
-    const docType: InventoryDocType = invoice.invoiceType === 'PURCHASE_INVOICE' ? 'IN' : 'OUT';
-    const docId = nextInventoryDocId();
-    const doc: InventoryDocument = {
-      id: docId,
-      docNumber: nextInventoryDocNumber(docType),
-      warehouseId: warehouse.id,
-      invoiceId: invoice.id,
-      type: docType,
-      date: invoice.invoiceDate,
-      status: 'CONFIRMED',
-      items: invoice.items.map((it, idx) => ({
-        id: `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}`,
-        documentId: docId,
-        invoiceItemId: it.id,
-        // Phase A stopgap: propagate the now-required id unchanged (no behavior change) —
-        // this whole block is deleted in Phase B (spec §4) in favor of createInventoryDocument.
-        referenceDocumentItemId: it.referenceDocumentItemId,
-        product: it.product,
-        quantityMt: it.quantityMt,
-      })),
-    };
-    db.inventoryDocs.push(doc);
-  }
-
   invoice.status = 'CONFIRMED';
   recomputeAllRemaining();
   persistDb();
@@ -1689,8 +1659,9 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
 
 /**
  * Throws `'cancel-blocked-successor'` when a non-cancelled successor exists (spec §5).
- * For purchase finals, throws `'cancel-blocked-stock'` when cancelling would drive any
- * of its products' stock negative (spec §6). Cascades its inventory doc to CANCELLED.
+ * Cancelling an invoice no longer touches warehouse documents (warehouse spec §4) — any
+ * inventory receipt/issue created against this invoice survives and must be cancelled
+ * separately via `cancelInventoryDocument`, which carries its own stock guard.
  */
 export async function cancelInvoice(id: string): Promise<Invoice> {
   await delay(180);
@@ -1701,25 +1672,251 @@ export async function cancelInvoice(id: string): Promise<Invoice> {
     throw new Error('cancel-blocked-successor');
   }
 
-  const doc = db.inventoryDocs.find((d) => d.invoiceId === invoice.id && d.status === 'CONFIRMED');
-  if (invoice.invoiceType === 'PURCHASE_INVOICE' && doc) {
-    // Simulate reversing this IN doc and check no product would go negative anywhere it's stocked.
-    const levels = await getStockLevels();
+  invoice.status = 'CANCELLED';
+  recomputeAllRemaining();
+  persistDb();
+  return invoice;
+}
+
+/* ------------------------- Warehouse documents ------------------------ */
+
+export interface InventoryDocItemInput {
+  /** Chain-stable line identity (`InvoiceItem.referenceDocumentItemId`) — the dedupe/ledger key. */
+  referenceDocumentItemId: string;
+  quantityMt: number;
+}
+
+export interface InventoryDocInput {
+  type: InventoryDocType;
+  warehouseId: string;
+  invoiceId: string;
+  date: string;
+  notes?: string;
+  items: InventoryDocItemInput[];
+}
+
+/** Σ `InventoryDocumentItem.quantityMt` per `referenceDocumentItemId`, over documents where
+ *  `status !== 'CANCELLED'` — written this way (not `=== 'CONFIRMED'`) so a future DRAFT
+ *  inventory-doc status would still count toward the ledger (warehouse spec §6.1). */
+function usedQtyByReferenceDocumentItemId(): Map<string, number> {
+  const used = new Map<string, number>();
+  for (const doc of db.inventoryDocs) {
+    if (doc.status === 'CANCELLED') continue;
     for (const item of doc.items) {
-      const current = stockOf(doc.warehouseId, item.product, levels);
+      used.set(item.referenceDocumentItemId, (used.get(item.referenceDocumentItemId) ?? 0) + item.quantityMt);
+    }
+  }
+  return used;
+}
+
+export interface InventoryDocLineRow {
+  invoiceItemId: string;
+  referenceDocumentItemId: string;
+  product: string;
+  quantityMt: number;
+  usedMt: number;
+  remainingMt: number;
+  containerId?: string;
+  /** docNumbers of the non-cancelled inventory documents that have consumed this line. */
+  usedInDocNumbers: string[];
+}
+
+/** Per-line consumed-quantity ledger for one invoice — feeds the receipt/issue picker; a line
+ *  is offered while `remainingMt > 1e-9` (warehouse spec §6.1). */
+export async function getInvoiceLinesForInventory(invoiceId: string): Promise<InventoryDocLineRow[]> {
+  await delay(140);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  const used = usedQtyByReferenceDocumentItemId();
+  return invoice.items.map((it) => {
+    const usedMt = round(used.get(it.referenceDocumentItemId) ?? 0);
+    const usedInDocNumbers = db.inventoryDocs
+      .filter(
+        (d) =>
+          d.status !== 'CANCELLED' &&
+          d.items.some((di) => di.referenceDocumentItemId === it.referenceDocumentItemId),
+      )
+      .map((d) => d.docNumber);
+    return {
+      invoiceItemId: it.id,
+      referenceDocumentItemId: it.referenceDocumentItemId,
+      product: it.product,
+      quantityMt: it.quantityMt,
+      usedMt,
+      remainingMt: round(Math.max(it.quantityMt - usedMt, 0)),
+      containerId: it.containerId,
+      usedInDocNumbers,
+    };
+  });
+}
+
+export interface InventorySourceInvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  invoiceDate: string;
+  customerName: string;
+}
+
+/** Chain-leaf CONFIRMED priced invoices of the side matching `type` (IN⇔PURCHASE, OUT⇔SALE) —
+ *  feeds the receipt/issue invoice picker. Distinct from `getInvoiceOptions` below: this list
+ *  is intentionally narrow (warehouse spec §6.1). */
+export async function getInventorySourceInvoices(type: InventoryDocType): Promise<InventorySourceInvoiceRow[]> {
+  await delay(140);
+  const side: InvoiceSide = type === 'IN' ? 'PURCHASE' : 'SALE';
+  return chainLeafDocs(side)
+    .filter((inv) => isPricedType(inv.invoiceType))
+    .map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceType: inv.invoiceType,
+      invoiceDate: inv.invoiceDate,
+      customerName: customerById.get(inv.customerId)?.name ?? '—',
+    }))
+    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
+}
+
+export interface InvoiceOptionRow {
+  id: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  status: InvoiceStatus;
+}
+
+/** ALL invoices, unfiltered — feeds the documents table's id→number label map, which must
+ *  resolve even for cancelled/superseded invoices now that cancelling an invoice no longer
+ *  cascades to its inventory documents (warehouse spec §6.1). Do NOT filter this one; that's
+ *  what `getInventorySourceInvoices` is for. */
+export async function getInvoiceOptions(): Promise<InvoiceOptionRow[]> {
+  await delay(100);
+  return db.invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    invoiceType: inv.invoiceType,
+    status: inv.status,
+  }));
+}
+
+/**
+ * Creates a manual Receipt (IN) / Issue (OUT) document sourced from one invoice's lines,
+ * consumption-tracked against `referenceDocumentItemId` (warehouse spec §6.1). `product` and
+ * each line's ceiling are NEVER taken from the client — both are derived here from the
+ * invoice line `referenceDocumentItemId` points at, so a caller can't mint phantom stock or
+ * smuggle a negative quantity past the OUT-only stock guard.
+ *
+ * Guards IN ORDER: 'no-items' → 'warehouse-required' (id exists AND is active) →
+ * 'invoice-side-mismatch' / 'invoice-not-confirmed' (must be a chain-leaf CONFIRMED priced
+ * document of the matching side) → per line, in order: 'line-not-on-invoice' →
+ * 'invalid-quantity' (qty <= 0) → 'exceeds-remaining' (err.product/err.remaining) → OUT only
+ * 'insufficient-stock' (err.product/err.available), checked with a RUNNING deduction (a
+ * mutable per-product map, lazily seeded from `stockOf`/`getStockLevels` and subtracted as
+ * each line validates) so two lines of the same product that are jointly over stock are
+ * caught — a fresh per-line snapshot read would let them both through.
+ */
+export async function createInventoryDocument(input: InventoryDocInput): Promise<InventoryDocument> {
+  await delay(220);
+  if (input.items.length === 0) throw new Error('no-items');
+
+  const warehouse = db.warehouses.find((w) => w.id === input.warehouseId && w.active);
+  if (!warehouse) throw new Error('warehouse-required');
+
+  const invoice = findInvoiceOrThrow(input.invoiceId);
+  const side: InvoiceSide = input.type === 'IN' ? 'PURCHASE' : 'SALE';
+  if (!isSide(invoice.invoiceType, side)) throw new Error('invoice-side-mismatch');
+  const isChainLeafConfirmed =
+    isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice.id);
+  if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+
+  const lineByRefId = new Map(invoice.items.map((it) => [it.referenceDocumentItemId, it]));
+  const used = usedQtyByReferenceDocumentItemId();
+  const levels = input.type === 'OUT' ? await getStockLevels() : undefined;
+  const stockByKey = new Map<string, number>();
+
+  const docId = nextInventoryDocId();
+  const items: InventoryDocumentItem[] = [];
+  for (const line of input.items) {
+    const invoiceItem = lineByRefId.get(line.referenceDocumentItemId);
+    if (!invoiceItem) throw new Error('line-not-on-invoice');
+    if (line.quantityMt <= 0) throw new Error('invalid-quantity');
+
+    const usedMt = used.get(line.referenceDocumentItemId) ?? 0;
+    const remainingMt = round(Math.max(invoiceItem.quantityMt - usedMt, 0));
+    if (line.quantityMt > remainingMt + 1e-9) {
+      const err = new Error('exceeds-remaining') as Error & { product?: string; remaining?: number };
+      err.product = invoiceItem.product;
+      err.remaining = remainingMt;
+      throw err;
+    }
+
+    if (levels) {
+      const productKey = invoiceItem.product.trim().toLowerCase();
+      if (!stockByKey.has(productKey)) stockByKey.set(productKey, stockOf(warehouse.id, invoiceItem.product, levels));
+      const available = stockByKey.get(productKey) ?? 0;
+      if (line.quantityMt > available + 1e-9) {
+        const err = new Error('insufficient-stock') as Error & { product?: string; available?: number };
+        err.product = invoiceItem.product;
+        err.available = round(Math.max(available, 0));
+        throw err;
+      }
+      stockByKey.set(productKey, round(available - line.quantityMt));
+    }
+
+    items.push({
+      id: nextInventoryDocItemId(),
+      documentId: docId,
+      invoiceItemId: invoiceItem.id,
+      referenceDocumentItemId: line.referenceDocumentItemId,
+      product: invoiceItem.product,
+      quantityMt: line.quantityMt,
+    });
+  }
+
+  const doc: InventoryDocument = {
+    id: docId,
+    docNumber: nextInventoryDocNumber(input.type, input.date),
+    warehouseId: warehouse.id,
+    invoiceId: invoice.id,
+    type: input.type,
+    date: input.date,
+    status: 'CONFIRMED',
+    notes: input.notes?.trim() || undefined,
+    items,
+  };
+  db.inventoryDocs.push(doc);
+  persistDb();
+  return doc;
+}
+
+/**
+ * Sets `status = 'CANCELLED'`. For an IN doc, throws `'cancel-blocked-stock'` (err.product)
+ * when reversing it would drive any of its products' stock negative anywhere it's stocked —
+ * checked with the same running-accumulation map as `createInventoryDocument`'s OUT guard, so
+ * two lines of the same product within this one doc can't each pass against a stale snapshot.
+ */
+export async function cancelInventoryDocument(id: string): Promise<InventoryDocument> {
+  await delay(180);
+  const doc = db.inventoryDocs.find((d) => d.id === id);
+  if (!doc) throw new Error(`Inventory document ${id} not found`);
+  if (doc.status === 'CANCELLED') return doc;
+
+  if (doc.type === 'IN') {
+    const levels = await getStockLevels();
+    const stockByKey = new Map<string, number>();
+    for (const item of doc.items) {
+      const productKey = item.product.trim().toLowerCase();
+      if (!stockByKey.has(productKey)) stockByKey.set(productKey, stockOf(doc.warehouseId, item.product, levels));
+      const current = stockByKey.get(productKey) ?? 0;
       if (current - item.quantityMt < -1e-9) {
         const err = new Error('cancel-blocked-stock') as Error & { product?: string };
         err.product = item.product;
         throw err;
       }
+      stockByKey.set(productKey, round(current - item.quantityMt));
     }
   }
 
-  invoice.status = 'CANCELLED';
-  if (doc) doc.status = 'CANCELLED';
-  recomputeAllRemaining();
+  doc.status = 'CANCELLED';
   persistDb();
-  return invoice;
+  return doc;
 }
 
 const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
