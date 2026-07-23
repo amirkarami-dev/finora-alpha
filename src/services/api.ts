@@ -266,7 +266,7 @@ export function buildContainerRows(): ContainerRow[] {
 export async function getContainers(): Promise<ContainerRow[]> {
   await delay();
   return buildContainerRows().sort(
-    (a, b) => dayjs(b.shipmentDate).valueOf() - dayjs(a.shipmentDate).valueOf(),
+    (a, b) => dayjs(b.loadDate).valueOf() - dayjs(a.loadDate).valueOf(),
   );
 }
 
@@ -647,7 +647,7 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
 export interface ContainerInput {
   reference: string;
   /** ISO date string. */
-  shipmentDate: string;
+  loadDate: string;
   /** ISO date string. */
   arrivalDate?: string;
   grossWeightKg?: number;
@@ -675,7 +675,7 @@ export async function createContainer(input: ContainerInput): Promise<ContainerR
     id: nextContainerId(),
     reference: input.reference,
     goods: input.goods,
-    shipmentDate: input.shipmentDate,
+    loadDate: input.loadDate,
     arrivalDate: input.arrivalDate,
     grossWeightKg: input.grossWeightKg,
     netWeightKg: input.netWeightKg,
@@ -715,7 +715,7 @@ export async function updateContainer(id: string, input: ContainerInput): Promis
   assertNoRemovedGoodInUse(container, input.goods);
   container.reference = input.reference;
   container.goods = input.goods;
-  container.shipmentDate = input.shipmentDate;
+  container.loadDate = input.loadDate;
   container.arrivalDate = input.arrivalDate;
   container.grossWeightKg = input.grossWeightKg;
   container.netWeightKg = input.netWeightKg;
@@ -1063,6 +1063,16 @@ function nextInvoiceItemId(): string {
   return `invitem-${invoiceItemSeq}`;
 }
 
+/** RFC 4122 v4; falls back to getRandomValues on non-secure origins. Runtime only — never in the seed. */
+function newGuid(): string {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  const b = new Uint8Array(16); c.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+
 function nextInventoryDocId(): string {
   let max = 0;
   for (const doc of db.inventoryDocs) {
@@ -1111,6 +1121,22 @@ function invoiceChain(invoice: Invoice): Invoice[] {
     current = next;
   }
   return chain;
+}
+
+/**
+ * Closes the convert bypass (spec §3): re-adding a contract item to a converted DRAFT (one
+ * with a `refInvoiceId`) must reuse the SAME `referenceDocumentItemId` an earlier chain
+ * document already assigned that contract item — otherwise the same goods could be received
+ * twice under two different ids. Returns `undefined` (mint a fresh id) when the invoice has no
+ * chain ancestor, or no chain document has a line for this contract item yet.
+ */
+function chainReferenceDocumentItemId(invoice: Invoice, contractItemId: string): string | undefined {
+  if (!invoice.refInvoiceId) return undefined;
+  for (const inv of invoiceChain(invoice)) {
+    const match = inv.items.find((it) => it.contractItemId === contractItemId);
+    if (match) return match.referenceDocumentItemId;
+  }
+  return undefined;
 }
 
 /**
@@ -1444,6 +1470,9 @@ export async function addInvoiceItems(
       id: nextInvoiceItemId(),
       invoiceId: invoice.id,
       contractItemId: contractItem.id,
+      // Reuse the chain's existing id on a converted draft (closes the delete+re-add bypass,
+      // spec §3); mint a fresh one only when this contract item has no prior chain line.
+      referenceDocumentItemId: chainReferenceDocumentItemId(invoice, contractItem.id) ?? newGuid(),
       product: contractItem.product,
       quantityMt: input.quantityMt,
       lmePercent: contractItem.lmePercent,
@@ -1642,6 +1671,9 @@ export async function confirmInvoice(id: string, options: ConfirmInvoiceOptions 
         id: `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}`,
         documentId: docId,
         invoiceItemId: it.id,
+        // Phase A stopgap: propagate the now-required id unchanged (no behavior change) —
+        // this whole block is deleted in Phase B (spec §4) in favor of createInventoryDocument.
+        referenceDocumentItemId: it.referenceDocumentItemId,
         product: it.product,
         quantityMt: it.quantityMt,
       })),
@@ -1714,6 +1746,11 @@ export async function convertInvoice(id: string, targetType: InvoiceType): Promi
   const carryPrices = source.invoiceType === 'PURCHASE_PROVISIONAL' || source.invoiceType === 'SALE_PROVISIONAL';
 
   const newId = nextInvoiceId(targetType);
+  // The `...it` spread is what carries `referenceDocumentItemId` (and every other unlisted
+  // field) from the source line to the new draft's line, unchanged — that is what makes the
+  // ref id survive provisional→final conversion (spec §3 requirement 5). Replacing this spread
+  // with an explicit field list would silently drop it: no type error, just a fresh id minted
+  // wherever a line is next created against the same contract item, breaking warehouse dedupe.
   const newItems: InvoiceItem[] = source.items.map((it) => ({
     ...it,
     id: nextInvoiceItemId(),

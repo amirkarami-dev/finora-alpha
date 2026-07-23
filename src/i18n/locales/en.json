@@ -274,11 +274,11 @@
   },
   "containers": {
     "title": "Containers",
-    "subtitle": "Shipments and their invoice status",
+    "subtitle": "Shipments and their logistics details",
     "newContainer": "New container",
     "reference": "Container",
     "quantityMt": "Quantity (MT)",
-    "shipmentDate": "Shipped",
+    "loadDate": "Load date",
     "arrivalDate": "Arrival",
     "overdueBy": "Overdue by {{count}} days",
     "dueIn": "Due in {{count}} days",

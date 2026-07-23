@@ -274,11 +274,11 @@
   },
   "containers": {
     "title": "الحاويات",
-    "subtitle": "الشحنات وحالة فواتيرها",
+    "subtitle": "الشحنات وتفاصيلها اللوجستية",
     "newContainer": "حاوية جديدة",
     "reference": "الحاوية",
     "quantityMt": "الكمية (طن)",
-    "shipmentDate": "الشحن",
+    "loadDate": "تاريخ التحميل",
     "arrivalDate": "الوصول",
     "overdueBy": "متأخر بـ {{count}} يوماً",
     "dueIn": "يستحق خلال {{count}} يوماً",

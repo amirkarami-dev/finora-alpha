@@ -274,11 +274,11 @@
   },
   "containers": {
     "title": "کانتینرها",
-    "subtitle": "محموله‌ها و وضعیت فاکتور آن‌ها",
+    "subtitle": "محموله‌ها و جزئیات لجستیکی آن‌ها",
     "newContainer": "کانتینر جدید",
     "reference": "کانتینر",
     "quantityMt": "مقدار (تن)",
-    "shipmentDate": "حمل",
+    "loadDate": "تاریخ بارگیری",
     "arrivalDate": "ورود",
     "overdueBy": "{{count}} روز معوق",
     "dueIn": "سررسید تا {{count}} روز",
