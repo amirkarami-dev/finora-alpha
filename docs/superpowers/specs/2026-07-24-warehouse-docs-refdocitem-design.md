@@ -1,42 +1,45 @@
 # Warehouse Receipt/Issue + ReferenceDocumentItemId + Load Date — Design
 
-Date: 2026-07-24 · Branch: `feature/warehouse-docs-refdocitem` · Status: draft design, pre-approval
+Date: 2026-07-24 · Branch: `feature/warehouse-docs-refdocitem` · Status: design v2 (adversarial review folded in), pre-approval
 
 ## 1. Scope & approved decisions
 
-Six changes requested by the user:
+Requested changes:
 1. Container `shipmentDate` → **`loadDate`** ("Load date").
 2. Invoice-line container pickers **filter to containers carrying that line's good**, label shows the load date.
 3. Fix the **goods Select** in ContainerFormModal (hint text bleeds into the selected value).
 4. New **Warehouse tab** to create custom **Receipt (IN)** / **Issue (OUT)** documents.
 5. Every invoice line gets a permanent **`referenceDocumentItemId`** (UUID) that **survives provisional→final conversion**.
-6. Warehouse doc creation **dedupes on `referenceDocumentItemId`** — a line already consumed by a non-cancelled warehouse transaction cannot be added again.
+6. Warehouse doc creation **dedupes on `referenceDocumentItemId`**.
 
-User-approved decisions (AskUserQuestion, 2026-07-24):
-- **Auto-creation of warehouse docs on final-invoice confirm is REMOVED ENTIRELY.** All stock movements are created by hand in the new tab. Confirm no longer takes a warehouse, no longer creates IN/OUT docs; the stock check moves to Issue creation.
+User-approved decisions:
+- **Auto-creation of warehouse docs on final-invoice confirm is REMOVED ENTIRELY.** All stock
+  movements are created by hand; the stock check moves to Issue creation.
 - **Receipt/Issue are invoice-sourced only** (no free-form lines).
 - **Rename goes to the data field**, not just the label.
-- **Container filter is strict** — if no container carries the good, show an empty hint.
+- **Consumption is quantity-tracked** (not presence-only): a line carries a consumed-MT ledger and
+  is only exhausted when fully consumed. *(Decision 2026-07-24 after review — see §6.1.)*
+- **Container picker filters by default with a "Show all containers" toggle** — never a dead end.
+  *(Decision 2026-07-24 after review; a strict filter provably blocks 29/120 seeded goods.)*
 
-All line/anchor references below were verified by a 5-agent code map (workflow `wf_90ebdbba-e44`), including reading the installed `rc-select` and executing the seed in node.
+All line references verified by a 5-agent code map (`wf_90ebdbba-e44`) and a 3-lens adversarial
+review (`wf_26dceb2c-02d`) that read `rc-select` and **executed the seed in node**.
 
 ## 2. Data model (`src/types/index.ts`) — SCHEMA_VERSION 3 → 4
 
 - `Container.shipmentDate` → **`loadDate: string`** (L110).
 - `InvoiceItem` gains **`referenceDocumentItemId: string`** (required).
-- `InventoryDocumentItem` gains **`referenceDocumentItemId?: string`** (keep the existing
-  `invoiceItemId?` — they are different: `invoiceItemId` points at one concrete row;
-  `referenceDocumentItemId` is the chain-stable identity that survives conversion).
-- `InventoryDocument.invoiceId` becomes **required** in practice (invoice-sourced only) but stays
-  optional in the type for the seeded/legacy doc; new docs always set it.
+- `InventoryDocumentItem` gains **`referenceDocumentItemId: string`** (keep `invoiceItemId?` — they
+  differ: `invoiceItemId` points at one concrete row; the ref id is the chain-stable identity).
 
-**SCHEMA_VERSION 3 → 4 is mandatory** (three shape changes). Without it a persisted `finora-db-v3`
-blob hydrates with `loadDate === undefined` (every Load date cell blank, `dayjs(undefined)` in the
-edit form silently stamps *today*) and `referenceDocumentItemId === undefined` on every line —
-which makes the dedupe guard treat *every* line as a duplicate of every other.
+**SCHEMA_VERSION 3 → 4 is mandatory.** Without it a persisted v3 blob hydrates with
+`loadDate === undefined` (blank cells; `dayjs(undefined)` in the edit form silently stamps *today*)
+and `referenceDocumentItemId === undefined` on every line — which makes the ledger treat all lines
+as one bucket.
 
-`isCompatible()` additions (defensive — `createInvoice` can produce an empty-items draft, so
-**find the first doc that has items**, never index `[0].items[0]` blindly):
+`isCompatible()` additions (defensive — `createInvoice` produces empty-items drafts, so **find** the
+first entity that has items; never index `[0].items[0]` blindly, or a leading empty draft
+false-negatives and silently wipes user data):
 ```ts
 if (o.containers.length && typeof (o.containers[0] as any)?.loadDate !== 'string') return false;
 const invWithItems = (o.invoices as any[]).find((i) => Array.isArray(i?.items) && i.items.length);
@@ -45,13 +48,9 @@ const docWithItems = (o.inventoryDocs as any[]).find((d) => Array.isArray(d?.ite
 if (docWithItems && typeof docWithItems.items[0].referenceDocumentItemId !== 'string') return false;
 ```
 
-## 3. UUIDs & determinism (the critical constraint)
+## 3. UUIDs & determinism
 
-The repo currently has **zero** `crypto.randomUUID` / `Math.random` / `Date.now` in `src/`. This
-feature introduces the first non-determinism source and it must be confined to runtime paths.
-
-**Runtime** — exactly ONE generation site: `addInvoiceItems`' `newItem` literal (api.ts L1443-1456).
-Add near the other id helpers:
+**Runtime** — one generation site: `addInvoiceItems`' `newItem` literal (api.ts L1443-1456):
 ```ts
 /** RFC 4122 v4; falls back to getRandomValues on non-secure origins. Runtime only — never in the seed. */
 function newGuid(): string {
@@ -63,12 +62,13 @@ function newGuid(): string {
   return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
 ```
-(Guarded because `crypto.randomUUID` is undefined on non-secure origins — the app is served over
-plain HTTP on a LAN IP in production.)
+(Guarded: `crypto.randomUUID` is undefined on non-secure origins, and this app is served over plain
+HTTP on a LAN IP in production.)
 
-**Seed** — deterministic, UUID-shaped, **zero PRNG draws**, placed in the existing zero-`rnd()`
-region (data.ts L485+). Version nibble forced to `'0'` so a seed id can **never** collide with a
-runtime v4 GUID:
+**Seed** — deterministic, UUID-shaped, **zero PRNG draws**, in the existing zero-`rnd()` region
+(data.ts L485+). **The salt must be PREFIXED, not appended** — review proved that appending makes
+FNV-1a suffix-extend, so all four passes collide together and effective strength is 32 bits, with a
+demonstrated real collision (`seedUuid('k72vu') === seedUuid('keuea')`):
 ```ts
 function fnv1a(str: string): number {
   let h = 0x811c9dc5;
@@ -76,260 +76,276 @@ function fnv1a(str: string): number {
   return h >>> 0;
 }
 const hex8 = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
-/** Deterministic UUID-shaped id. Version+variant nibbles forced to '0' → can never equal a v4 GUID. */
+/** Deterministic UUID-shaped id (~120-bit). Version+variant nibbles forced to '0' → can never
+ *  equal a runtime v4 GUID. Salt is PREFIXED so the four passes are independent. */
 function seedUuid(key: string): string {
-  const h = hex8(fnv1a(`finora-ref|${key}`)) + hex8(fnv1a(`finora-ref|${key}|1`))
-          + hex8(fnv1a(`finora-ref|${key}|2`)) + hex8(fnv1a(`finora-ref|${key}|3`));
+  const h = hex8(fnv1a(`0|finora-ref|${key}`)) + hex8(fnv1a(`1|finora-ref|${key}`))
+          + hex8(fnv1a(`2|finora-ref|${key}`)) + hex8(fnv1a(`3|finora-ref|${key}`));
   return [h.slice(0,8), h.slice(8,12), '0'+h.slice(13,16), '0'+h.slice(17,20), h.slice(20,32)].join('-');
 }
 ```
-Verified: 176/176 seed lines unique, 0 malformed, 0 with version nibble `4`.
+**Regression assertion (exact expected numbers):** the 176 seed lines produce **174 distinct ids**;
+the two duplications are the intended PO/PP/PI chain share. 0 malformed, 0 with version nibble `4`.
+Re-verify uniqueness after the prefix change.
 
-**Seed keys (chain-aware — this is requirement 5 in the seed):**
+**Seed keys:**
 | Lines | Key |
 |---|---|
-| PO/PP/PI chain (data.ts L560, L582-584, L607-609) | `` `inv-po-0001|${contractItem.id}` `` for **all three** so the converted lines share one ref id |
+| PO/PP/PI chain (L560, L582-584, L607-609) | `` `inv-po-0001|${contractItem.id}` `` for **all three** |
 | SO draft (L676) | `` `inv-so-0001|${firstItem.id}` `` |
-| Historical invoices (`makeHistoricalInvoiceItem`, L754-783, call L795) | `raw.id` (`cnt-<contractId>-<n>`) |
+| Historical invoices (`makeHistoricalInvoiceItem` L754-783, call L795) | `raw.id` |
 | Seeded GRN items (L640-646) | **copy `piItems[idx].referenceDocumentItemId`** — never mint |
 
-Give `makeInvoiceItem` a new `refKey: string` parameter rather than deriving inside it.
+Give `makeInvoiceItem` a `refKey: string` parameter rather than deriving inside it.
 
-> The seeded GRN copy is load-bearing: if `idoc-0001`'s item does not carry the PI line's ref id,
-> the dedupe guard cannot see it and `inv-pi-0001` can be received again, double-counting stock.
+**`convertInvoice` needs no functional change** — its copy (api.ts L1717-1724) spreads `...it`, so
+the ref id carries through. Add a **load-bearing comment**: replacing the spread with an explicit
+field list would silently break requirement 5 with no type error.
 
-**`convertInvoice` needs NO functional change** — its item copy (api.ts L1717-1724) uses `{...it,
-id, invoiceId, ...}`, so the spread already carries `referenceDocumentItemId`. This satisfies
-requirement 5 for free but is **fragile by accident**: replacing the spread with an explicit field
-list would silently drop it with no type error. Add a load-bearing comment there and verify it live.
+**Closing the convert bypass (review finding):** on a converted DRAFT final the user can delete a
+line and re-add the same contract item, minting a *fresh* ref id — the same goods could then be
+received twice (once the provisional drops out of `chainLeafDocs`, `itemUninvoicedMt` reports the
+quantity as uninvoiced again). **Fix:** in `addInvoiceItems`, when the target invoice has a
+`refInvoiceId`, walk the chain for a line with the same `contractItemId` and **reuse its
+`referenceDocumentItemId`**; mint a new GUID only when none exists.
 
 **Do NOT change `InvoiceItem.id` to a UUID** — `invoiceItemSeq` regex-scans `/^invitem-(\d+)$/`
-(api.ts L1053-1060, currently 176); UUID ids would reset it to 0 and collide with seeded ids.
+(api.ts L1053-1060); UUID ids reset it to 0 and collide with seeded ids.
 
-**Regression anchor:** `cust-am` creditLimit === **2,750,000** (empirically confirmed at HEAD). All
-new seed code goes at/after data.ts L485 and calls no `rnd()`/`pick()`/`between()`/`intBetween()`.
+**Anchor:** `cust-am` creditLimit === **2,750,000**. All new seed code sits at/after data.ts L485 and
+calls no `rnd()`/`pick()`/`between()`/`intBetween()`.
 
 ## 4. Remove the confirm/cancel warehouse coupling
 
+> **Sequencing (review finding):** `tsconfig.app.json` sets `noUnusedLocals`/`noUnusedParameters`,
+> so deleting the only callers of `stockOf`, `nextInventoryDocId`, `nextInventoryDocNumber` and the
+> `InventoryDocument`/`InventoryDocType` imports produces **TS6133 build errors** until §6.1 re-uses
+> them. (Lint would *not* have caught it — `no-unused-vars` is a warning and `eslint .` has no
+> `--max-warnings`.) Therefore **§4's deletions and §6.1's `createInventoryDocument` /
+> `cancelInventoryDocument` must land in the SAME commit** — see §9.
+
 `src/services/api.ts`:
-- **`confirmInvoice`** — delete the entire final-invoice warehouse block (L1613-1650): the
-  `warehouse-required` guard, the SALE stock check (`insufficient-stock` + its `err.product` /
-  `err.available`), and the GRN/GDN document creation. Delete `ConfirmInvoiceOptions` (L1559-1561)
-  and the `options` param → **`confirmInvoice(id: string): Promise<Invoice>`**. Keep the tail
-  (status CONFIRMED, `recomputeAllRemaining()`, `persistDb()`). Update the JSDoc (L1563-1570).
-  Guard order becomes: `not-draft → no-items → missing-lme-price → missing-container →
-  qty-exceeds-remaining`.
-- **`cancelInvoice`** — delete the doc lookup (L1672), the `cancel-blocked-stock` purchase guard
-  (L1673-1684) and the `if (doc) doc.status = 'CANCELLED'` cascade (L1687). Keep
-  `cancel-blocked-successor`. **Cancelling an invoice no longer touches warehouse documents** —
-  they are independent documents now and are cancelled from the Warehouse tab. Update the JSDoc.
-- `isFinalType` (L1555-1557) becomes dead → remove. `stockOf` (L1318-1322),
-  `nextInventoryDocId` (L1066-1073), `nextInventoryDocNumber` (L1075-1084) and the
-  `InventoryDocument`/`InventoryDocType` type imports are **kept and repurposed** by §6 (they would
-  otherwise fail lint as unused).
+- **`confirmInvoice`** — delete the final-invoice warehouse block (L1613-1650): `warehouse-required`,
+  the SALE stock check, and GRN/GDN creation. Delete `ConfirmInvoiceOptions` (L1559-1561) and the
+  `options` param → **`confirmInvoice(id: string)`**. Delete now-dead `isFinalType` (L1555-1557).
+  Keep the tail; update the JSDoc (L1563-1570). Guard order becomes
+  `not-draft → no-items → missing-lme-price → missing-container → qty-exceeds-remaining`.
+- **`cancelInvoice`** — delete the doc lookup (L1672), the `cancel-blocked-stock` guard (L1673-1684)
+  and the cascade (L1687). Keep `cancel-blocked-successor`. **Cancelling an invoice no longer
+  touches warehouse documents.** Update the JSDoc.
+- `stockOf`, `nextInventoryDocId`, `nextInventoryDocNumber` and the two type imports are **retained
+  and re-used** by §6.1 in the same commit.
 
 `ConfirmInvoiceModal.tsx` — strip `useWarehouses`, `activeWarehouses`, `warehouseId` state, the
-default-selection memo, `noActiveWarehouse`, `okDisabled`/`okButtonProps`, the whole `{isFinal && …}`
-warehouse block (L97-111), the `Alert`/`Select` imports, and the `insufficient-stock` +
-`warehouse-required` error branches. Keep `no-items` / `missing-lme-price` / `missing-container` /
-`qty-exceeds-remaining` and the Descriptions summary. `formatMt` stays (used by totalWeight).
-`isFinal` stays — it gates `onConfirmed?.()` (the uninvoiced alert), not warehouse logic.
+default-selection memo, `noActiveWarehouse`, `okDisabled`/`okButtonProps`, the `{isFinal && …}`
+warehouse block (L97-111), the `Alert`/`Select` imports, **and the now-unused
+`import { useMemo, useState } from 'react'` (L1)**, plus the `insufficient-stock` +
+`warehouse-required` error branches. Keep `formatMt` (totalWeight) and `isFinal` (it gates
+`onConfirmed?.()`, the uninvoiced alert).
 
-`InvoiceDetailPage.tsx` — delete the `cancel-blocked-stock` branch (L189, now unthrowable).
-**Decision: also remove the draft-sale "Available stock" column** (L224-242) with its
-`useStockLevels` import/call (L50, L94) and `stockByProduct` map (L143-148). It previewed a
-confirm-time check that no longer exists, and it summed stock across *all* warehouses so it was
-already only an approximation. Keeping it would advertise a guard the app no longer performs.
+`InvoiceDetailPage.tsx` — delete the `cancel-blocked-stock` branch (L189). **Remove the draft-sale
+"Available stock" column** (L224-242) with `useStockLevels` (L50, L94) and `stockByProduct`
+(L143-148): it previewed a check that no longer exists at confirm and summed across *all*
+warehouses. **Also remove what that orphans:** `isSaleFinal` (L133), the `theme` import (L20) and
+the `const { token } = theme.useToken()` destructure (L88) — `token` is referenced only inside the
+deleted column, so leaving them breaks the build under `noUnusedLocals`.
 
-`queries.ts` — `useConfirmInvoice` mutation variable becomes `id: string` (drop `options`).
-`useInvalidateInvoices` (L286-314) should **stop** invalidating `qk.inventory`/`qk.stock`
-(L300-301): invoice mutations can no longer change stock. Fix its doc comment (L281-285).
+`queries.ts` — `useConfirmInvoice` variable becomes `id: string`. In `useInvalidateInvoices`
+(L286-314): remove `qk.inventory`/`qk.stock` (L300-301) **and add
+`qc.invalidateQueries({ queryKey: qk.invoiceOptions })`** — the new invoice picker and the documents
+table's number map are status-dependent and nothing else refreshes them (`staleTime: 60_000`,
+`refetchOnWindowFocus: false`, so a just-confirmed invoice would be missing for up to a minute).
+Fix the helper's doc comment.
 
-## 5. Load date rename + container pickers + goods Select fix
+## 5. Load date, container pickers, goods Select
 
-### 5.1 `shipmentDate` → `loadDate` (22 code lines, 3 i18n keys)
+### 5.1 `shipmentDate` → `loadDate`
 - `types/index.ts` L110.
-- `mock/data.ts`: `RawContainerSeed.shipmentDate` (L40) — rename for consistency; generator local
-  const (L274, feeding L275 arrival / L276 due) and object literal (L296); the two verbatim Alco
-  containers (L378, L395); the raw→logistics reshape (L711). **Two semantic readers must be renamed
-  too, not just the display sites:** `makeHistoricalInvoiceItem` sets `lmeDate: raw.shipmentDate`
-  (L778) and the historical `invoiceDate` = MAX(raw.shipmentDate) (L797-802, reused as `createdAt`
-  L817 and the seeded payment date L831). This is a **pure identifier rename — no value or ordering
-  change** (those dates drive aging/KPIs).
-- `api.ts`: `getContainers` sort key (L269), `ContainerInput.shipmentDate` (L650),
-  `createContainer` (L678), `updateContainer` (L718).
+- `mock/data.ts`: `RawContainerSeed` (L40); generator local const (L274, feeding L275 arrival /
+  L276 due) and literal (L296); the two verbatim Alco containers (L378, L395); the reshape (L711).
+  **Two semantic readers must be renamed too:** `lmeDate: raw.shipmentDate` (L778) and the
+  historical `invoiceDate = MAX(raw.shipmentDate)` (L797-802, reused as `createdAt` L817 and the
+  seeded payment date L831). **Pure identifier rename — no value or ordering change** (these dates
+  drive aging/KPIs).
+- `api.ts`: `getContainers` sort (L269), `ContainerInput` (L650), `createContainer` (L678),
+  `updateContainer` (L718).
 - `ContainersPage.tsx`: column title/dataIndex/sorter (L59-64).
-- `ContainerFormModal.tsx`: **all five sites must move atomically** — `ContainerFormValues` key
-  (L22), both `initialValues` branches (L86, L95), submit mapping (L138), and the `Form.Item
-  name="shipmentDate"` string (L206). A missed `name` string does not fail typecheck; it fails at
-  runtime as a required-field error.
-- i18n: `containers.shipmentDate` ("Shipped") → **`containers.loadDate` ("Load date")** in
-  en/ar/fa at L281 (suggest ar `تاريخ التحميل`, fa `تاریخ بارگیری`).
-- **Do NOT rename `contracts.progress`** (value "Shipped", L236) — it labels `ContractRow.shippedPct`.
-  Landing copy and `shippedMtForItem`/`recomputeAllRemaining` are also out of scope.
-- While here: `containers.subtitle` still reads "Shipments and their invoice status" — containers
-  carry no invoice status since the logistics reshape. Reword in all three locales.
+- `ContainerFormModal.tsx`: **all five sites atomically** — `ContainerFormValues` (L22), both
+  `initialValues` branches (L86, L95), submit (L138), and the `Form.Item name="shipmentDate"` string
+  (L206). A missed `name` does not fail typecheck; it fails at runtime as a required-field error.
+- i18n: `containers.shipmentDate` ("Shipped") → **`containers.loadDate` ("Load date")** in en/ar/fa
+  (ar `تاريخ التحميل`, fa `تاریخ بارگیری`). **Do NOT rename `contracts.progress`** (also "Shipped",
+  L236) — it labels `shippedPct`. Also reword `containers.subtitle` ("Shipments and their invoice
+  status" — containers carry no invoice status since the logistics reshape).
 
-### 5.2 Filter container pickers by good
-`ContainerOptionRow` (api.ts L292-296) is too thin — it returns `{id, reference, blNumber?}` only.
-Widen to `{ id, reference, blNumber?, loadDate, contractItemIds: string[] }` (all straight off
-`db.containers`; keep `getContainerOptions` a one-line map, sorted by `loadDate` desc to mirror
-`getContainers`). This is additive for the two read-only consumers (InvoiceDetailPage L95,
-InvoicePrintPage L27).
+### 5.2 Container pickers
+Widen `ContainerOptionRow` (api.ts L292-296) to
+`{ id, reference, blNumber?, loadDate, contractItemIds: string[] }`, sorted by `loadDate` desc.
+Additive for the two read-only consumers (InvoiceDetailPage L95, InvoicePrintPage L27).
 
-The three pickers each build the identical flat memo today
-(`` `${c.reference} · ${c.blNumber || '—'}` ``). Replace with a **shared helper** that filters by a
-`contractItemId` and labels `` `${reference} · ${formatDate(loadDate)}` ``:
-- **AddItemsModal** (L41, L44-51, Select L221-234): per-row options via a memoized
-  `Map<contractItemId, Option[]>`; the row's `contractItemId` is already in scope (`rows[field.name]`).
-- **EditLineModal** (L30, L33-40, Select L105-113): filter by `item.contractItemId`. **Regression
-  risk:** a line may already reference a container that does not carry that good (seeded data, or a
-  container later edited). AntD renders an unmatched value as the raw id string. **Always union the
-  currently-selected container into the filtered list**, flagged with
-  `tradeInvoices.containerNotCarryingGood`.
-- **ConvertContainerModal** (L26, L31-38, Select L73-82): **stays unfiltered** — `applyContainerToAll`
-  assigns one container to *every* line, so a strict (superset) filter is empty for any
-  multi-product invoice and the step becomes dead UI, while a "matches at least one line" filter
-  would silently mis-assign the rest. Keep it optional, relabel with the load date, and add a hint
-  that individual lines can be corrected afterwards (the per-line filter + the `missing-container`
-  confirm guard remain the real safeguards).
-- **Labels must stay plain strings** — all three pass `options` + `optionFilterProp="label"`; a
-  ReactNode label would reproduce the §5.3 bleed *and* break search.
+Replace the three duplicated flat memos with a **shared helper**: options filtered by a
+`contractItemId`, labelled `` `${reference} · ${formatDate(loadDate)}` `` (**plain strings** — all
+three pass `optionFilterProp="label"`; a ReactNode label would reproduce §5.3 *and* break search).
+
+- **AddItemsModal** (L41, L44-51, Select L221-234) — per-row options; the row's `contractItemId` is
+  in scope via `rows[field.name]`. **Show-all toggle** (approved): a small `Switch`/link in the
+  modal flips every row's picker to the unfiltered list. Default = filtered.
+- **EditLineModal** (L30, L33-40, Select L105-113) — filter by `item.contractItemId`, same toggle.
+  **Always union the currently-selected container** into the list (flagged with
+  `tradeInvoices.containerNotCarryingGood`) so an existing non-carrying value never renders as a raw
+  id. *(Corrected rationale: the seed contains 0 non-carrying lines and `assertNoRemovedGoodInUse`
+  already blocks removal/swap of an in-use good, so the union is a display safety net — the actual
+  producer is `applyContainerToAll`, fixed below.)*
+- **`applyContainerToAll` (api.ts L1762-1768) — fix the root cause.** Today it assigns one container
+  to *every* line with no carriage check; since every seeded container carries exactly one good and
+  29 of 46 invoices span multiple goods, apply-to-all **mis-assigns by construction**, and
+  `confirmInvoice` never re-checks carriage. Change it to assign **only to lines the container
+  actually carries**, and return the skipped count so ConvertContainerModal can report
+  "applied to N of M lines". ConvertContainerModal's picker then safely stays **unfiltered**
+  (a strict superset filter would be empty for any multi-product invoice = dead UI).
 - Empty state: `notFoundContent={<Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-  description={t('tradeInvoices.noContainerForGood')} />}`. No file in src sets `notFoundContent`
-  today — introduce it consistently across the pickers.
+  description={t('tradeInvoices.noContainerForGood')} />}` plus the show-all toggle as the escape.
 
 ### 5.3 Goods Select bleed — one-line fix
-**Root cause (verified in `node_modules/rc-select`, not inferred):** the goods Select supplies
-options as JSX children, so `childrenAsData = true` (Select.js:119) and `fillFieldNames` resolves
-label to `'children'` (valueUtil.js:39). The selected value is then
-`rawLabel = option[optionLabelProp || mergedFieldNames.label]` (Select.js:169) — i.e. the whole
-two-line `<div>`, hint included. The `label={i.product}` prop on `Option` only feeds search.
+**Root cause (verified in `node_modules/rc-select`):** options are supplied as JSX children, so
+`childrenAsData = true` (Select.js:119) and `fillFieldNames` resolves label to `'children'`
+(valueUtil.js:39); the selected value is `option[optionLabelProp || fieldNames.label]`
+(Select.js:169) — the whole two-line `<div>`. The `label={i.product}` prop only feeds search.
 
-**Fix — add one prop** at ContainerFormModal L261:
-```tsx
-<Select showSearch optionFilterProp="label" optionLabelProp="label" …>
-```
-Now the selector shows `i.product` alone, the dropdown keeps its rich two-line rendering, and search
-still filters on label. **Do not "modernise" to the `options` prop** — with `options`,
-`fieldNames.label === 'label'`, so a ReactNode label bleeds exactly the same way.
+**Fix — one prop** at ContainerFormModal L261: `optionLabelProp="label"`. Selector then shows the
+product alone; the dropdown keeps its rich rendering; search still works. **Do not "modernise" to
+the `options` prop** — with `options`, `fieldNames.label === 'label'`, so a ReactNode label bleeds
+identically.
 
-## 6. Warehouse Receipt / Issue (new tab)
+## 6. Warehouse Receipt / Issue
 
-### 6.1 API (`src/services/api.ts`)
+### 6.1 API
 ```ts
-export interface InventoryDocItemInput {
-  referenceDocumentItemId: string; invoiceItemId?: string; product: string; quantityMt: number;
-}
+export interface InventoryDocItemInput { referenceDocumentItemId: string; quantityMt: number; }
 export interface InventoryDocInput {
   type: InventoryDocType; warehouseId: string; invoiceId: string; date: string;
   notes?: string; items: InventoryDocItemInput[];
 }
-createInventoryDocument(input): Promise<InventoryDocument>
-cancelInventoryDocument(id): Promise<InventoryDocument>
-getInvoiceLinesForInventory(invoiceId): Promise<InventoryInvoiceLineRow[]>
-getInvoiceOptions(): Promise<InvoiceOptionRow[]>
 ```
+**`product` and the maximum quantity are derived SERVER-SIDE** from the invoice line looked up by
+`referenceDocumentItemId` within `input.invoiceId` — never taken from the client (otherwise a caller
+can mint phantom stock, or send a negative qty on an IN doc to bypass the OUT-only guard).
+
+**Quantity ledger (approved decision).**
+```ts
+usedQtyByReferenceDocumentItemId(): Map<string, number>   // Σ over docs where status !== 'CANCELLED'
+```
+Written as `!== 'CANCELLED'` (not `=== 'CONFIRMED'`) so a future DRAFT status still blocks.
+`getInvoiceLinesForInventory(invoiceId)` returns per line:
+`{ invoiceItemId, referenceDocumentItemId, product, quantityMt, usedMt, remainingMt, containerId?,
+usedInDocNumbers: string[] }` where `remainingMt = quantityMt − usedMt`. A line is offered while
+`remainingMt > 1e-9` and disabled (with the consuming document names) when exhausted.
+
 `createInventoryDocument` guards **in order**:
 1. `'no-items'`
-2. `'warehouse-required'` — id must exist **and** be `active` (mirrors the deleted L1615 check)
-3. `'duplicate-reference-item'` (attach `err.products: string[]`) — server-side re-check, because two
-   modals can stage the same line
-4. **OUT only** `'insufficient-stock'` (attach `err.product`, `err.available`) — reuses `stockOf` +
-   `getStockLevels`, the logic lifted from the deleted confirm block
+2. `'warehouse-required'` — id exists **and** is `active`
+3. `'invoice-not-confirmed'` / `'invoice-side-mismatch'` — the invoice must be a **chain-leaf
+   CONFIRMED** priced document (`chainLeafDocs(side)`), and IN⇔PURCHASE / OUT⇔SALE. Enforced in the
+   API, not only the modal (otherwise an OUT doc against a purchase invoice permanently consumes
+   that line's ledger and blocks its legitimate receipt).
+4. `'line-not-on-invoice'` — every `referenceDocumentItemId` must belong to that invoice
+5. `'invalid-quantity'` — `qty <= 0`
+6. `'exceeds-remaining'` (attach `err.product`, `err.remaining`) — `qty > remainingMt`, re-checked
+   server-side because two modals can stage the same line
+7. **OUT only** `'insufficient-stock'` (attach `err.product`, `err.available`) — with a **running
+   deduction**: build a mutable `Map<productKey, number>` from `getStockLevels()` and subtract each
+   line as it validates, so two lines of the same product that are jointly over stock are caught
+   (today's confirm-block logic re-reads one snapshot per line and would pass them).
 
-Private helpers: **`nextInventoryDocItemId()`** — a monotonic max-scanning counter copying the
+Private helpers: **`nextInventoryDocItemId()`** — monotonic max-scanning counter copying the
 `nextInvoiceItemId` idiom (L1053-1064). **Do not** copy the deleted block's
-`` `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}` `` scheme (L1642): it is length-derived, so
-after a cancel/create interleave it repeats and produces duplicate item ids.
+`` `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}` `` scheme: it is length-derived and repeats
+after a cancel/create interleave.
 
-**`usedReferenceDocumentItemIds(): Map<string, {docId, docNumber}>`** — scans
-`db.inventoryDocs.filter(d => d.status !== 'CANCELLED').flatMap(d => d.items)`. Write it as
-`!== 'CANCELLED'` (not `=== 'CONFIRMED'`) per requirement 6, so a future DRAFT status still blocks.
+`cancelInventoryDocument(id)` sets `status = 'CANCELLED'` + `persistDb()`; guard
+`'cancel-blocked-stock'` when reversing an **IN** doc would drive any product negative — with the
+same running accumulation (the lifted `cancelInvoice` loop re-reads one snapshot and misses joint
+cases).
 
-`getInvoiceLinesForInventory` returns per line:
-`{ invoiceItemId, referenceDocumentItemId, product, quantityMt, containerId?, alreadyUsed,
-usedInDocNumber?, usedInDocId? }`.
+`nextInventoryDocNumber` currently pins the year to `TODAY`; **derive it from `input.date`** now
+that the user picks the date.
 
-`cancelInventoryDocument` sets `status = 'CANCELLED'` + `persistDb()`, guarded by
-`'cancel-blocked-stock'` when reversing an **IN** doc would drive any of its products negative —
-lift the logic verbatim from the deleted `cancelInvoice` block (L1673-1684).
+**Two distinct invoice reads** (they serve incompatible needs — do not collapse them):
+- `getInventorySourceInvoices(type)` → chain-leaf CONFIRMED, side-matched: feeds the **picker**.
+- `getInvoiceOptions()` → **ALL** invoices `{ id, invoiceNumber, invoiceType, status }`: feeds the
+  documents table's id→number **label map**, which must resolve even for cancelled/superseded
+  invoices (§4 removed the cascade, so a CONFIRMED doc can outlive a CANCELLED invoice).
 
-**Invoice picker policy (decision):** Receipt (IN) lists **CONFIRMED PURCHASE** provisional/invoice
-documents; Issue (OUT) lists **CONFIRMED SALE** provisional/invoice documents. Orders and drafts are
-excluded (nothing is received/issued against an unconfirmed document). This is a deliberate choice —
-flag it at the review gate if receipts against drafts are wanted.
-
-`nextInventoryDocNumber` pins the year to `TODAY`, not the document's own date, so a Receipt dated
-2025 still gets `GRN-2026-####`. Harmless today but now user-visible since the user picks the date —
-**derive the year from `input.date`** instead.
-
-### 6.2 Queries (`src/services/queries.ts`)
+### 6.2 Queries
 ```ts
 qk.inventoryDocLines = (invoiceId: string) => ['inventoryDocLines', invoiceId] as const
 qk.invoiceOptions = ['invoiceOptions'] as const
+qk.inventorySourceInvoices = (type: InventoryDocType) => ['inventorySourceInvoices', type] as const
 useInventoryDocLines(invoiceId)   // enabled: !!invoiceId
-useInvoiceOptions()
-useCreateInventoryDocument()      // → useInvalidateWarehouses()
-useCancelInventoryDocument()      // → useInvalidateWarehouses()
+useInvoiceOptions() · useInventorySourceInvoices(type)
+useCreateInventoryDocument() · useCancelInventoryDocument()   // → useInvalidateWarehouses()
 ```
-`useInvalidateWarehouses` (L429-436) must additionally invalidate the bare prefix
-`['inventoryDocLines']` (same trick as `['receivableInvoices']` at L308) or a just-consumed line is
-re-offered when the modal reopens.
+`useInvalidateWarehouses` (L429-436) must also invalidate the bare prefixes `['inventoryDocLines']`
+and `['inventorySourceInvoices']`. `useInvalidateInvoices` gains `qk.invoiceOptions` (§4).
 
 ### 6.3 UI
-- `WarehousePage.tsx`: extend `TAB_KEYS` (L23) with a third key **`documents`**
-  (`warehouse.tabDocuments`) — the stock summary stays on `inventory`, and the documents table moves
-  to the new tab together with the create/cancel actions. `PageHeader.extra` (L204-214) gains
-  **New receipt** / **New issue** buttons when `tab === 'documents'`. Add an **actions column** with
-  a Cancel Popconfirm (matching the warehouses-tab idiom at L103-119) — today nothing can cancel a
-  doc from the UI. Replace the two full `useTradeInvoices` fetches (L40-41, L49-54) with the new
-  lightweight `useInvoiceOptions`.
-- **`InventoryDocFormModal.tsx` (new)** — closest pattern to copy is `AddItemsModal` (single `Form`
-  + `Form.List` keyed by a stable id, insert-all button, selected-count hint, `Empty` state):
-  warehouse Select (**active only**; handle the zero-active case that ConfirmInvoiceModal used to
-  own), invoice Select (filtered per §6.1), date, notes; then the invoice's lines with per-row
-  checkbox + qty. **Rows whose `alreadyUsed` is true are disabled** with a hint naming the document
-  (`warehouse.lineAlreadyUsed` with `{{docNumber}}`). Issue-only: a live "available" hint per line
-  from `useStockLevels` keyed on `product.trim().toLowerCase()` (same normalization as `stockOf`).
-  Map every api error code to a toast.
+- `WarehousePage.tsx`: add a third `TAB_KEYS` entry **`documents`**; the documents table moves there
+  with **New receipt** / **New issue** buttons in `PageHeader.extra` and a **Cancel** Popconfirm
+  actions column (nothing can cancel a doc today). Stock summary stays on `inventory`. Existing
+  `?tab=inventory` URLs keep resolving. Use `useInvoiceOptions` for the label map.
+- **`InventoryDocFormModal.tsx` (new)** — pattern: `AddItemsModal` (single `Form` + `Form.List`
+  keyed by a stable id, insert-all, selected-count, `Empty`). Warehouse Select (**active only**;
+  handle zero-active — the string `noActiveWarehouse` moves here from `tradeInvoices.*`), invoice
+  Select (from `useInventorySourceInvoices`), date, notes; then the lines with per-row checkbox and
+  **qty capped at `remainingMt`** (shown as `warehouse.remainingHint`). Exhausted rows are disabled
+  with `warehouse.lineAlreadyUsed` naming the consuming document(s). Issue-only: a live available
+  hint from `useStockLevels` keyed on `product.trim().toLowerCase()`. Every api code → a toast.
 
 ## 7. i18n
 
-New `warehouse.*` keys (following the block's existing grammar — nouns bare, `xPlaceholder`,
-past-participle toasts, `tabX`, `noX`): `tabDocuments, newReceipt, newIssue, receiptTitle,
-issueTitle, docDate, selectInvoice, invoicePlaceholder, noInvoiceLines, lineAlreadyUsed
-({{docNumber}}), duplicateLines ({{products}}), selectAtLeastOne, insertAllLines, selectedCount,
-docNotes, docCreated, docCancelled, cancelDocConfirm, cancelDoc`.
+New `warehouse.*`: `tabDocuments, newReceipt, newIssue, receiptTitle, issueTitle, docDate,
+selectInvoice, invoicePlaceholder, noInvoiceLines, lineAlreadyUsed ({{docNumbers}}), remainingHint
+({{mt}}), exceedsRemaining ({{product}},{{remaining}}), invalidQuantity, lineNotOnInvoice,
+invoiceNotConfirmed, invoiceSideMismatch, selectAtLeastOne, insertAllLines, selectedCount, docNotes,
+docCreated, docCancelled, cancelDocConfirm, cancelDoc`.
 
-**Moves** from `tradeInvoices.*` → `warehouse.*` (they describe warehouse rules now):
-`selectWarehouse`, `noActiveWarehouse`, `insufficientStock` ({{product}}, {{available}}),
-`cancelBlockedStock`. **Delete** `tradeInvoices.cancelBlockedStock` after the move; delete
-`warehouse.availableMt` only if the InvoiceDetailPage column is removed per §4 (it is).
+**Moves** `tradeInvoices.* → warehouse.*`: `selectWarehouse`, `noActiveWarehouse`,
+`insufficientStock` ({{product}},{{available}}), `cancelBlockedStock`. Delete
+`tradeInvoices.cancelBlockedStock` after the move.
 
-New `tradeInvoices.*`: `noContainerForGood`, `containerNotCarryingGood`,
-`containerApplyAllHint` (convert-modal hint). Rename `containers.shipmentDate` → `containers.loadDate`.
+**Keep `warehouse.availableMt`** — retargeted to the Issue-line available hint (§6.3). *(It is
+deleted from InvoiceDetailPage but still needed; the earlier draft deleted the key outright and left
+§6.3 with no key — an implementer would have hard-coded a string.)*
 
-All three locales stay key-identical with real ar/fa translations.
+New `tradeInvoices.*`: `noContainerForGood`, `containerNotCarryingGood`, `showAllContainers`,
+`containerAppliedToSome` ({{applied}},{{total}}). Rename `containers.shipmentDate` →
+`containers.loadDate`; reword `containers.subtitle`.
+
+All three locales key-identical, real ar/fa translations.
 
 ## 8. Out of scope
 
-Free-form (non-invoice) warehouse lines; product-id keyed stock (stock remains keyed on normalized
-product name — a renamed product still orphans historical stock into a second bucket); container
-quantity vs invoiced quantity capacity checks (the good filter proves carriage, not capacity);
-journal/accounting; multi-container per invoice line.
+Free-form (non-invoice) warehouse lines; product-id keyed stock (stock stays keyed on normalized
+product name, so renaming a product orphans historical stock); container capacity checks (carriage
+≠ capacity); journal/accounting; multi-container per invoice line.
 
 ## 9. Phases
 
-- **A — Data & determinism:** types, `seedUuid`/`newGuid`, seed ref-ids (chain-shared + GRN copy),
-  `loadDate` rename end-to-end, SCHEMA 4 + isCompatible, remove confirm/cancel warehouse coupling
-  (api + ConfirmInvoiceModal + InvoiceDetailPage + queries). Gate green.
-- **B — Pickers & style:** `ContainerOptionRow` widening, shared filtered picker helper across the
-  three modals (+ EditLineModal union), `optionLabelProp` fix, i18n.
-- **C — Warehouse documents:** api (create/cancel/lines/options + guards + helpers), queries, third
-  tab, `InventoryDocFormModal`, cancel action, i18n.
-- **D — Adversarial review + live verify:** the decisive test is **receive from a provisional, convert
-  it to final, and confirm the same lines are refused** (requirement 6), plus determinism
-  (`cust-am` 2,750,000), the convert ref-id survival assertion, stock guard on Issue, and all roles.
+- **A — Data & determinism:** types, `seedUuid` (prefixed salt) / `newGuid`, seed ref ids
+  (chain-shared + GRN copy), the ref-id reuse on re-add, `loadDate` rename end-to-end, SCHEMA 4 +
+  `isCompatible`. Gate green. *(No api warehouse deletions yet.)*
+- **B — Warehouse documents + decoupling (ONE commit):** §4's confirm/cancel deletions **together
+  with** §6.1's `createInventoryDocument`/`cancelInventoryDocument`/reads, queries, the third tab,
+  `InventoryDocFormModal`, cancel action, i18n. They must land together or `noUnusedLocals` breaks
+  the build.
+- **C — Pickers & style:** `ContainerOptionRow` widening, shared filtered picker + show-all toggle,
+  EditLineModal union, `applyContainerToAll` carriage fix, `optionLabelProp` fix, i18n.
+- **D — Adversarial review + live verify.**
 
-Each phase: `npm run typecheck && npm run lint && npm run build` green; own commit.
+**Phase D acceptance test — the seeded chain CANNOT be used** (review-verified): `inv-pp-0001`
+already has a successor so convert throws `has-successor`, and its only line is already consumed by
+the seeded GRN. The test must **build its own chain live**: create a `PURCHASE_PROVISIONAL` on a
+contract with uninvoiced qty → add items → assign containers → confirm → **receive part of a line**
+(verify the remainder is still offered) → **receive the rest** (verify the line goes exhausted) →
+**convert to final** → **assert every line is refused**. Plus: determinism (`cust-am` 2,750,000),
+the convert ref-id survival assertion, the Issue stock guard, cancel-then-re-receive, and all roles.
