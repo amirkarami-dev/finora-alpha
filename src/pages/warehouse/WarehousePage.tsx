@@ -369,11 +369,13 @@ export default function WarehousePage() {
         warehouse={formState.warehouse}
       />
 
-      <InventoryDocFormModal
-        open={docFormState.open}
-        onClose={() => setDocFormState((s) => ({ ...s, open: false }))}
-        type={docFormState.type}
-      />
+      {docFormState.open && (
+        <InventoryDocFormModal
+          open={docFormState.open}
+          onClose={() => setDocFormState((s) => ({ ...s, open: false }))}
+          type={docFormState.type}
+        />
+      )}
     </div>
   );
 }

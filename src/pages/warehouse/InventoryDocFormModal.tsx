@@ -88,12 +88,13 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
 
   const { data: invoiceLines, isLoading: linesLoading } = useInventoryDocLines(invoiceId ?? '');
 
-  // Reset the picked invoice/warehouse whenever the modal opens for a fresh document.
+  // Reset the picked invoice/warehouse on every open/close transition (not just `if (open)`)
+  // so stale selections can't survive a close — belt-and-braces alongside WarehousePage now
+  // unmounting this modal entirely while closed (mirrors InvoiceDetailPage's EditLineModal
+  // idiom), which is what actually clears this component's state between opens.
   useEffect(() => {
-    if (open) {
-      setInvoiceId(undefined);
-      setWarehouseId(undefined);
-    }
+    setInvoiceId(undefined);
+    setWarehouseId(undefined);
   }, [open, type]);
 
   const activeWarehouses = useMemo(() => (warehouses ?? []).filter((w) => w.active), [warehouses]);
