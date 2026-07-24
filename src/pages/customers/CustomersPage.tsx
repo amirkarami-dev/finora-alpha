@@ -53,6 +53,9 @@ export default function CustomersPage() {
               {!r.active && (
                 <Tag style={{ marginInlineStart: 8 }}>{t('common.inactive')}</Tag>
               )}
+              {r.portalAccount && (
+                <Tag color="blue" style={{ marginInlineStart: 8 }}>{t('customers.portalBadge')}</Tag>
+              )}
             </div>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {r.code} · {r.country}

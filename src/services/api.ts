@@ -35,8 +35,9 @@ import { contractValue, invoiceItemAmount, invoiceItemUnitPrice } from '@/utils/
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
-/** Deterministic "today" pin for the mock dataset (matches `src/mock/data.ts`'s seed anchor). */
-const TODAY = dayjs('2026-06-13');
+/** Live "today" — the single clock every derived read (overdue badges, aging, cashflow
+ *  windows) is computed against (spec §2.5: previously pinned to a fixed seed date). */
+const TODAY = dayjs();
 
 /**
  * Lookup indexes over the mock `db`. They are rebuilt by `reindex()` after any
@@ -173,6 +174,9 @@ export interface ReceivableInvoiceRow {
   /** Settlement tri-state — reuses the OPEN/PAID/OVERDUE union + `CONTAINER_STATUS_COLOR`
    *  for the badge (spec §6). */
   displayStatus: ContainerStatus;
+  /** `TODAY − dueDate` in days (>0 = overdue, ≤0 = due today/future) — computed once here so
+   *  every UI surface reads the SAME clock instead of each page pinning its own "today". */
+  overdueDays: number;
 }
 
 /**
@@ -208,6 +212,7 @@ export async function getReceivableInvoices(customerId?: string): Promise<Receiv
         dueDate: dueDate.toISOString(),
         paidUSD,
         displayStatus,
+        overdueDays: TODAY.startOf('day').diff(dueDate.startOf('day'), 'day'),
       };
     })
     .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
@@ -758,6 +763,16 @@ export interface CustomerInput {
   country?: string;
   paymentTermsDays: number;
   creditLimit: number;
+  /** Scopes the customer portal login to this customer (spec §3). At most one customer may
+   *  hold the flag — setting it here clears it from whichever other customer had it. */
+  portalAccount?: boolean;
+}
+
+/** At most one customer may hold `portalAccount` (spec §3) — clear it from every other
+ *  customer before assigning it here. No-op when `next` is falsy. */
+function assignPortalAccount(customers: Customer[], keepId: string, next: boolean | undefined): void {
+  if (!next) return;
+  for (const c of customers) if (c.id !== keepId) c.portalAccount = undefined;
 }
 
 export async function createCustomer(input: CustomerInput): Promise<Customer> {
@@ -765,6 +780,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
   const code = input.code.trim().toUpperCase();
   const id = `cust-${code.toLowerCase()}`;
   if (db.customers.some((c) => c.id === id)) throw new Error('duplicate-code');
+  assignPortalAccount(db.customers, id, input.portalAccount);
   const customer: Customer = {
     id,
     name: input.name.trim(),
@@ -777,6 +793,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
     country: input.country?.trim() || undefined,
     paymentTermsDays: input.paymentTermsDays,
     creditLimit: input.creditLimit,
+    portalAccount: input.portalAccount || undefined,
     active: true,
     createdAt: dayjs().toISOString(),
   };
@@ -790,6 +807,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
   await delay(200);
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
+  assignPortalAccount(db.customers, id, input.portalAccount);
   // id, code, createdAt are immutable — mutate the rest in place.
   customer.name = input.name.trim();
   customer.defaultCurrency = input.defaultCurrency;
@@ -800,6 +818,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
   customer.country = input.country?.trim() || undefined;
   customer.paymentTermsDays = input.paymentTermsDays;
   customer.creditLimit = input.creditLimit;
+  customer.portalAccount = input.portalAccount || undefined;
   reindex();
   persistDb();
   return customer;
@@ -810,6 +829,9 @@ export async function setCustomerActive(id: string, active: boolean): Promise<Cu
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
   customer.active = active;
+  // A deactivated customer can't be a live portal login — the flag would otherwise point the
+  // portal at an inactive record with no way to notice (spec §3).
+  if (!active) customer.portalAccount = undefined;
   persistDb();
   return customer;
 }
@@ -886,10 +908,12 @@ export interface CustomerPortalSummary {
  */
 export async function getCustomerPortalSummary(
   customerId: string,
-): Promise<CustomerPortalSummary | undefined> {
+): Promise<CustomerPortalSummary | null> {
   await delay(200);
   const account = computeAccounts().find((a) => a.id === customerId);
-  if (!account) return undefined;
+  // `null`, not `undefined` — TanStack Query rejects `undefined` query data (console error);
+  // `null` is a valid "resolved to nothing" result the portal page can render a 403 for.
+  if (!account) return null;
 
   const myContracts = buildContractRows().filter((c) => c.customerId === customerId);
 

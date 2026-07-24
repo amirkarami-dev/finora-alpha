@@ -47,7 +47,10 @@ export const USERS: SeededUser[] = [
   { email: 'ceo@finora.app', password: 'Ceo@2026', role: 'CEO', name: 'Khalid Al Mansoori', avatarColor: '#b87333' },
   { email: 'amir@finora.app', password: 'demo1234', role: 'Manager', name: 'Amir Karami', avatarColor: '#b87333' },
   { email: 'staff@finora.app', password: 'Staff@2026', role: 'Staff', name: 'Operations Desk', avatarColor: '#3b82f6' },
-  { email: 'portal@alcometal.ae', password: 'Alco@2026', role: 'Customer', name: 'Alco Metal Trading', avatarColor: '#b87333', customerId: 'cust-am' },
+  // Which customer this login sees is resolved dynamically via `Customer.portalAccount`
+  // (spec §3) — not hardcoded here, which used to double as an id-collision hole (a customer
+  // coded "AM" would otherwise inherit the portal scope; `api.ts` derives `id = cust-<code>`).
+  { email: 'portal@alcometal.ae', password: 'Alco@2026', role: 'Customer', name: 'Alco Metal Trading', avatarColor: '#b87333' },
 ];
 
 /** Coerce any persisted/legacy role value to a valid Role (defaults to Manager). */

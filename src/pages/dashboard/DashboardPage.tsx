@@ -33,7 +33,6 @@ import { BRAND, CHART_PALETTE, ROUTES } from '@/config/constants';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
-const TODAY = dayjs('2026-06-13');
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: BRAND.success,
@@ -341,7 +340,7 @@ export default function DashboardPage() {
               dataSource={upcomingDue}
               locale={{ emptyText: t('dashboard.noUpcoming') }}
               renderItem={(row) => {
-                const days = TODAY.startOf('day').diff(dayjs(row.dueDate).startOf('day'), 'day');
+                const days = row.overdueDays;
                 return (
                   <List.Item
                     onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}

@@ -197,6 +197,9 @@
     "termsLabel": "Payment terms (days)",
     "creditLimit": "Credit limit",
     "phone": "Phone",
+    "portalAccount": "Customer portal access",
+    "portalAccountHelp": "Lets this customer sign in to the customer portal. Only one customer can be linked at a time — enabling it here unlinks any other customer.",
+    "portalBadge": "Portal",
     "editCustomer": "Edit customer",
     "created": "Customer created",
     "updated": "Customer updated",
@@ -542,8 +545,10 @@
     "companyName": "Company name",
     "saved": "Settings saved",
     "danger": "Danger zone",
-    "resetData": "Reset demo data",
-    "resetDataDesc": "Restore all demo customers, contracts and payments to their defaults."
+    "loadSample": "Load sample data",
+    "loadSampleDesc": "Fill the workspace with a realistic demo dataset (customers, contracts, invoices, payments) centered on today. Overwrites anything already in the app.",
+    "resetData": "Wipe all data",
+    "resetDataDesc": "Permanently deletes every customer, contract, container, invoice and payment you've entered. This cannot be undone."
   },
   "status": {
     "ACTIVE": "Active",

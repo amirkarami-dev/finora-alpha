@@ -22,6 +22,9 @@ export const qk = {
   aging: ['aging'] as const,
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
+  /** The single customer resolved to the customer-portal login (spec §3), independent of
+   *  which id it currently is. */
+  portalCustomer: ['portalCustomer'] as const,
   receivableInvoices: (customerId?: string) => ['receivableInvoices', customerId ?? 'all'] as const,
   partners: ['partners'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
@@ -84,6 +87,21 @@ export const useCustomerPortal = (id: string) =>
     queryKey: qk.customerPortal(id),
     queryFn: () => api.getCustomerPortalSummary(id),
     enabled: !!id,
+  });
+
+/**
+ * Resolves the customer this login's portal is scoped to (spec §3): the customer whose
+ * `portalAccount` flag is set AND is `active`. A query, not a synchronous read off the auth
+ * user — the flag lives on the customer record now, so it can move between customers (or be
+ * cleared entirely) without a re-login.
+ */
+export const usePortalCustomer = () =>
+  useQuery({
+    queryKey: qk.portalCustomer,
+    queryFn: async () => {
+      const customers = await api.getCustomers();
+      return customers.find((c) => c.portalAccount && c.active) ?? null;
+    },
   });
 
 export const useReceivableInvoices = (customerId?: string) =>
@@ -195,6 +213,10 @@ function useInvalidateCustomers() {
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    // Unconditional: moving `portalAccount` from customer A to B (or deactivating the
+    // flagged customer) changes WHO the portal resolves to, not just the edited customer's
+    // own cache — a bare `if (id)` here would leave the other customer's link stale.
+    qc.invalidateQueries({ queryKey: qk.portalCustomer });
     if (id) {
       qc.invalidateQueries({ queryKey: qk.account(id) });
       qc.invalidateQueries({ queryKey: qk.customerPortal(id) });

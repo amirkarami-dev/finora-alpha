@@ -61,6 +61,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'finora-auth',
+      version: 1,
+      // Without this, a version mismatch with no `migrate` logs a console.error and DROPS the
+      // persisted state entirely (zustand's default behaviour) — which fails `npm run smoke`
+      // (screenshots redirect to /login, and the console.error trips the failure check).
+      // Migrating to a logged-out state is the safe default for an auth store.
+      migrate: () => ({ user: null, token: null, isAuthenticated: false }),
       // Coerce any legacy/persisted role (e.g. 'Finance Manager') to a valid Role.
       merge: (persisted, current) => {
         const merged = { ...current, ...(persisted as Partial<AuthState>) } as AuthState;

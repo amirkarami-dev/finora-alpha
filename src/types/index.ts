@@ -55,6 +55,10 @@ export interface Customer {
   customerType: CustomerType;
   active: boolean;
   createdAt: string;
+  /** Scopes the customer portal login to this customer. At most one customer may hold this
+   *  flag at a time (enforced in `createCustomer`/`updateCustomer`); cleared automatically
+   *  when the customer is deactivated (`setCustomerActive`). */
+  portalAccount?: boolean;
 }
 
 export interface Item {

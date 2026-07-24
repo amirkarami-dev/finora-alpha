@@ -37,7 +37,9 @@ async function seed(ctx, { theme = 'light', locale = 'en', auth = false } = {}) 
               token: 'demo-token',
               isAuthenticated: true,
             },
-            version: 0,
+            // Must match useAuthStore's persist `version` (currently 1) — a mismatch triggers
+            // zustand's `migrate`, which logs the seeded user straight back out.
+            version: 1,
           }),
         );
       }
@@ -70,7 +72,9 @@ async function shot(ctx, path, file, tag, wait = 1600) {
   await seed(ctx, { theme: 'dark', locale: 'en', auth: true });
   await shot(ctx, '/app/dashboard', '03-dashboard-dark.png', 'dashboard');
   await shot(ctx, '/app/contracts', '04-contracts.png', 'contracts');
-  await shot(ctx, '/app/contracts/AM-P-251101156', '05-contract-detail.png', 'contract-detail');
+  // Not a specific id — the app starts EMPTY (no seeded contracts), so a hardcoded contract
+  // detail path like the old 'AM-P-251101156' (only present in the sample dataset) would 404.
+  await shot(ctx, '/app/settings', '05-settings.png', 'settings');
   await shot(ctx, '/app/customers', '06-customers.png', 'customers');
   await shot(ctx, '/app/reports', '07-reports.png', 'reports');
   await ctx.close();
