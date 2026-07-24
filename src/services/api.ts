@@ -143,6 +143,11 @@ export function computeAccounts(): CustomerAccount[] {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+// 3-decimal rounding for the warehouse ledger: InvoiceItem.quantityMt routinely carries 3
+// decimals (unlike money, which is 2dp), so a 2dp `round()` there can round a line's remaining
+// quantity ABOVE its actual quantityMt — letting a receipt/issue over-consume by up to 0.005 MT
+// or strand a fully-used line as "remaining". Mirrors recomputeAllRemaining's existing 3dp math.
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 export async function getAccounts(): Promise<CustomerAccount[]> {
   await delay();
@@ -1097,10 +1102,13 @@ function nextInventoryDocId(): string {
 }
 
 /** `<GRN|GDN>-<YYYY>-<NNNN>`; the year comes from the document's own `date` (the user picks
- *  it), NOT `TODAY` — a receipt/issue backdated into a prior year must number into that year. */
+ *  it), NOT `TODAY` — a receipt/issue backdated into a prior year must number into that year.
+ *  Falls back to today's year when `date` is missing/invalid, so a bad date can't produce a
+ *  literal "Invalid Date" inside the document number. */
 function nextInventoryDocNumber(type: InventoryDocType, date: string): string {
   const prefix = type === 'IN' ? 'GRN' : 'GDN';
-  const year = dayjs(date).format('YYYY');
+  const parsed = dayjs(date);
+  const year = (parsed.isValid() ? parsed : dayjs()).format('YYYY');
   const taken = new Set(db.inventoryDocs.map((d) => d.docNumber));
   for (let n = 1; n <= 9999; n++) {
     const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
@@ -1164,6 +1172,12 @@ function invoiceChain(invoice: Invoice): Invoice[] {
  */
 function chainReferenceDocumentItemId(invoice: Invoice, contractItemId: string): string | undefined {
   if (!invoice.refInvoiceId) return undefined;
+  // A second line for the same good on this document is genuinely additional goods (spec §3
+  // explicitly allows multiple lines per contract item on one document) → mint a fresh id so
+  // the ledger doesn't bucket two distinct lines under one referenceDocumentItemId. The reuse
+  // below only applies to close the delete+re-add bypass, which requires this document to have
+  // NO line for the item yet.
+  if (invoice.items.some((it) => it.contractItemId === contractItemId)) return undefined;
   for (const inv of invoiceChain(invoice)) {
     const match = inv.items.find((it) => it.contractItemId === contractItemId);
     if (match) return match.referenceDocumentItemId;
@@ -1673,7 +1687,12 @@ export async function confirmInvoice(id: string): Promise<Invoice> {
  * Throws `'cancel-blocked-successor'` when a non-cancelled successor exists (spec §5).
  * Cancelling an invoice no longer touches warehouse documents (warehouse spec §4) — any
  * inventory receipt/issue created against this invoice survives and must be cancelled
- * separately via `cancelInventoryDocument`, which carries its own stock guard.
+ * separately via `cancelInventoryDocument`, which carries its own stock guard. Throws
+ * `'cancel-blocked-inventory-doc'` when a live (non-cancelled) inventory document still
+ * references this invoice: without this guard, cancelling would free the contract's
+ * remaining qty (recomputeAllRemaining) while the warehouse doc keeps its consumed-qty claim,
+ * so a replacement invoice could mint a fresh referenceDocumentItemId and receive/issue the
+ * same physical goods a second time.
  */
 export async function cancelInvoice(id: string): Promise<Invoice> {
   await delay(180);
@@ -1682,6 +1701,9 @@ export async function cancelInvoice(id: string): Promise<Invoice> {
 
   if (findSuccessor(invoice.id)) {
     throw new Error('cancel-blocked-successor');
+  }
+  if (db.inventoryDocs.some((d) => d.invoiceId === invoice.id && d.status !== 'CANCELLED')) {
+    throw new Error('cancel-blocked-inventory-doc');
   }
 
   invoice.status = 'CANCELLED';
@@ -1740,7 +1762,7 @@ export async function getInvoiceLinesForInventory(invoiceId: string): Promise<In
   const invoice = findInvoiceOrThrow(invoiceId);
   const used = usedQtyByReferenceDocumentItemId();
   return invoice.items.map((it) => {
-    const usedMt = round(used.get(it.referenceDocumentItemId) ?? 0);
+    const usedMt = round3(used.get(it.referenceDocumentItemId) ?? 0);
     const usedInDocNumbers = db.inventoryDocs
       .filter(
         (d) =>
@@ -1754,7 +1776,7 @@ export async function getInvoiceLinesForInventory(invoiceId: string): Promise<In
       product: it.product,
       quantityMt: it.quantityMt,
       usedMt,
-      remainingMt: round(Math.max(it.quantityMt - usedMt, 0)),
+      remainingMt: round3(Math.max(it.quantityMt - usedMt, 0)),
       containerId: it.containerId,
       usedInDocNumbers,
     };
@@ -1848,16 +1870,20 @@ export async function createInventoryDocument(input: InventoryDocInput): Promise
   for (const line of input.items) {
     const invoiceItem = lineByRefId.get(line.referenceDocumentItemId);
     if (!invoiceItem) throw new Error('line-not-on-invoice');
-    if (line.quantityMt <= 0) throw new Error('invalid-quantity');
+    if (!Number.isFinite(line.quantityMt) || line.quantityMt <= 0) throw new Error('invalid-quantity');
 
     const usedMt = used.get(line.referenceDocumentItemId) ?? 0;
-    const remainingMt = round(Math.max(invoiceItem.quantityMt - usedMt, 0));
+    const remainingMt = round3(Math.max(invoiceItem.quantityMt - usedMt, 0));
     if (line.quantityMt > remainingMt + 1e-9) {
       const err = new Error('exceeds-remaining') as Error & { product?: string; remaining?: number };
       err.product = invoiceItem.product;
       err.remaining = remainingMt;
       throw err;
     }
+    // Accumulate into the running ledger (mirrors the OUT stock guard's stockByKey below) so
+    // two input lines sharing one referenceDocumentItemId are checked jointly, not each against
+    // a stale pre-loop snapshot.
+    used.set(line.referenceDocumentItemId, usedMt + line.quantityMt);
 
     if (levels) {
       const productKey = invoiceItem.product.trim().toLowerCase();
@@ -1900,9 +1926,11 @@ export async function createInventoryDocument(input: InventoryDocInput): Promise
 
 /**
  * Sets `status = 'CANCELLED'`. For an IN doc, throws `'cancel-blocked-stock'` (err.product)
- * when reversing it would drive any of its products' stock negative anywhere it's stocked —
- * checked with the same running-accumulation map as `createInventoryDocument`'s OUT guard, so
- * two lines of the same product within this one doc can't each pass against a stale snapshot.
+ * when reversing it would drive any of its products' stock negative in the document's OWN
+ * warehouse (a receipt only ever credited that one warehouse, so the check is correctly scoped
+ * to `doc.warehouseId` rather than every warehouse the product is stocked in) — checked with
+ * the same running-accumulation map as `createInventoryDocument`'s OUT guard, so two lines of
+ * the same product within this one doc can't each pass against a stale snapshot.
  */
 export async function cancelInventoryDocument(id: string): Promise<InventoryDocument> {
   await delay(180);

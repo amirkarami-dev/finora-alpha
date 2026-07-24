@@ -377,6 +377,7 @@
     "cancelConfirm": "إلغاء هذا المستند؟",
     "cancelled": "تم إلغاء المستند",
     "cancelBlockedSuccessor": "لا يمكن الإلغاء — يوجد مستند محوَّل منه بالفعل",
+    "cancelBlockedInventoryDoc": "ألغِ مستند المستودع المرتبط أولاً.",
     "convert": "تحويل",
     "converted": "تم تحويل المستند",
     "hasSuccessor": "يوجد مستند محوَّل منه بالفعل",

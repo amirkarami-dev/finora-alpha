@@ -377,6 +377,7 @@
     "cancelConfirm": "Cancel this document?",
     "cancelled": "Document cancelled",
     "cancelBlockedSuccessor": "Cannot cancel — a converted document already exists",
+    "cancelBlockedInventoryDoc": "Cancel the linked warehouse document first.",
     "convert": "Convert",
     "converted": "Document converted",
     "hasSuccessor": "A converted document already exists",

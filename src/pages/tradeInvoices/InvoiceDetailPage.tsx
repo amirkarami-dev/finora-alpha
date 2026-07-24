@@ -174,6 +174,7 @@ export default function InvoiceDetailPage() {
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
       if (code === 'cancel-blocked-successor') message.error(t('tradeInvoices.cancelBlockedSuccessor'));
+      else if (code === 'cancel-blocked-inventory-doc') message.error(t('tradeInvoices.cancelBlockedInventoryDoc'));
       else message.error(t('common.saveFailed'));
     }
   };

@@ -305,6 +305,12 @@ function useInvalidateInvoices() {
       qc.invalidateQueries({ queryKey: ['contractRemaining', opts.contractId, opts.side] });
     }
     qc.invalidateQueries({ queryKey: qk.invoiceOptions });
+    // Bare prefixes: confirming/cancelling/converting changes which invoices are chain-leaf
+    // CONFIRMED, which is exactly what the Receipt/Issue invoice picker and its line list are
+    // keyed on (getInventorySourceInvoices / getInvoiceLinesForInventory) — without these the
+    // picker can keep offering a just-converted predecessor for up to its 60s staleTime.
+    qc.invalidateQueries({ queryKey: ['inventorySourceInvoices'] });
+    qc.invalidateQueries({ queryKey: ['inventoryDocLines'] });
     qc.invalidateQueries({ queryKey: qk.payments });
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });

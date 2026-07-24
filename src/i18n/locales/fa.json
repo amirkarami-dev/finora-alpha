@@ -377,6 +377,7 @@
     "cancelConfirm": "این سند لغو شود؟",
     "cancelled": "سند لغو شد",
     "cancelBlockedSuccessor": "لغو ممکن نیست — سند تبدیل‌شده‌ای از این سند موجود است",
+    "cancelBlockedInventoryDoc": "ابتدا سند انبار مرتبط را لغو کنید.",
     "convert": "تبدیل",
     "converted": "سند تبدیل شد",
     "hasSuccessor": "سند تبدیل‌شده‌ای از این سند موجود است",
