@@ -1205,6 +1205,50 @@ function chainLeafDocs(
   );
 }
 
+/**
+ * Confirmed claims by contract item for `side`, one count per independent chain (FIX — closes a
+ * hole bigger than Hole A/B: `findSuccessor`/`chainLeafDocs` treat ANY non-cancelled successor,
+ * INCLUDING A DRAFT, as reason to drop a document from the "leaf" set. So the instant a CONFIRMED
+ * doc is converted to a DRAFT, its still-live CONFIRMED claim used to vanish from the ceiling,
+ * letting a third document re-claim the same quantity. Fix: walk each chain ONCE and count its
+ * *deepest CONFIRMED member* (not "is it a leaf") — a confirmed provisional converted to a
+ * confirmed final then counts once (the final supersedes the provisional), never twice. Every
+ * document belonging to `excludeInvoiceId`'s OWN chain is skipped entirely — that document's own
+ * claim is handled separately by the caller (`onThisDocMt` / the live hint), not folded in here.
+ */
+function confirmedClaimsByItem(side: InvoiceSide, excludeInvoiceId?: string): Map<string, number> {
+  const ownChainIds = new Set<string>();
+  if (excludeInvoiceId !== undefined) {
+    const own = findInvoice(excludeInvoiceId);
+    if (own) {
+      for (const inv of invoiceChain(own)) ownChainIds.add(inv.id);
+    } else {
+      ownChainIds.add(excludeInvoiceId);
+    }
+  }
+
+  const claimed = new Map<string, number>();
+  const visitedRoots = new Set<string>();
+  for (const inv of db.invoices) {
+    if (!isSide(inv.invoiceType, side) || inv.status === 'CANCELLED' || ownChainIds.has(inv.id)) continue;
+    const chain = invoiceChain(inv);
+    const rootId = chain[0].id;
+    if (visitedRoots.has(rootId)) continue;
+    visitedRoots.add(rootId);
+    // Deepest CONFIRMED member: the last CONFIRMED doc walking root → leaf. A DRAFT successor
+    // (converted-but-not-yet-confirmed) does not supersede it; a later CONFIRMED successor does.
+    let deepestConfirmed: Invoice | undefined;
+    for (const c of chain) {
+      if (c.status === 'CONFIRMED') deepestConfirmed = c;
+    }
+    if (!deepestConfirmed) continue;
+    for (const it of deepestConfirmed.items) {
+      claimed.set(it.contractItemId, round3((claimed.get(it.contractItemId) ?? 0) + it.quantityMt));
+    }
+  }
+  return claimed;
+}
+
 /** Σ `InvoiceItem.quantityMt` for `contractItemId` across BOTH sides' chain-leaf, non-cancelled,
  *  draft-or-confirmed priced documents (spec §5 — "shipped" = chain-once, draft+confirmed). */
 function shippedMtForItem(contractItemId: string): number {
@@ -1302,8 +1346,11 @@ export interface ContractRemainingRow {
   uninvoicedMt: number;
 }
 
-/** Per contract item: quantityMt minus chain-leaf CONFIRMED docs of `side`, optionally
- *  excluding one invoice's own claim (the doc currently being edited) (spec §5/§8). */
+/** Per contract item: quantityMt minus CONFIRMED claims of `side` (one per chain, via
+ *  `confirmedClaimsByItem` — see its docstring for why a raw chain-leaf filter is wrong),
+ *  optionally excluding one invoice's own chain (the doc currently being edited) (spec §5/§8).
+ *  Rounded to 3dp (`round3`), matching `checkContractQty`'s guard — a 2dp `round()` here used to
+ *  round UP, so the UI hint / input `max` could exceed the API ceiling and be rejected outright. */
 export async function getContractRemaining(
   contractId: string,
   side: InvoiceSide,
@@ -1312,18 +1359,12 @@ export async function getContractRemaining(
   await delay(120);
   const contract = contractById.get(contractId);
   if (!contract) return [];
-  const leaves = chainLeafDocs(side, { excludeInvoiceId }).filter((inv) => inv.contractId === contractId);
-  const claimedByItem = new Map<string, number>();
-  for (const inv of leaves) {
-    for (const it of inv.items) {
-      claimedByItem.set(it.contractItemId, (claimedByItem.get(it.contractItemId) ?? 0) + it.quantityMt);
-    }
-  }
+  const claimedByItem = confirmedClaimsByItem(side, excludeInvoiceId);
   return contract.items.map((item) => ({
     itemId: item.id,
     product: item.product,
     quantityMt: item.quantityMt,
-    uninvoicedMt: round(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
+    uninvoicedMt: round3(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
   }));
 }
 
@@ -1501,25 +1542,20 @@ interface CheckContractQtyArgs {
 /**
  * Single source of truth for the contract-quantity guard (spec §3.1), replacing the ad-hoc math
  * that used to live at each of the three call sites (two of which were wrong — see design doc
- * "Hole A"/"Hole B"). `alreadyInvoicedMt` is CONFIRMED-only via `chainLeafDocs`'s default — a
- * DRAFT never reserves contract quantity (spec §1 user decision; do not change this default).
+ * "Hole A"/"Hole B"). `alreadyInvoicedMt` is CONFIRMED-only, one count per OTHER chain via
+ * `confirmedClaimsByItem` (see its docstring) — a DRAFT never reserves contract quantity (spec §1
+ * user decision; do not change that), but a CONFIRMED claim stays counted even after its document
+ * is converted to a DRAFT successor (FIX — previously it vanished the instant conversion
+ * happened, via the raw chain-leaf notion; `confirmedClaimsByItem` walks each chain once and
+ * takes its deepest CONFIRMED member instead).
  */
 function checkContractQty(args: CheckContractQtyArgs): ContractQtyCheck {
   const { contract, contractItemId, side, invoiceId, requestedMt, excludeInvoiceItemId, extraOnDocMt = 0 } = args;
   const contractItem = findContractItem(contract, contractItemId);
   const contractQuantityMt = contractItem?.quantityMt ?? 0;
 
-  const leaves = chainLeafDocs(side, { excludeInvoiceId: invoiceId });
-  const alreadyInvoicedMt = round3(
-    leaves.reduce(
-      (s, inv) =>
-        s +
-        inv.items
-          .filter((it) => it.contractItemId === contractItemId)
-          .reduce((s2, it) => s2 + it.quantityMt, 0),
-      0,
-    ),
-  );
+  const claimed = confirmedClaimsByItem(side, invoiceId);
+  const alreadyInvoicedMt = round3(claimed.get(contractItemId) ?? 0);
 
   const excludeIds = new Set(
     excludeInvoiceItemId === undefined
@@ -1570,30 +1606,36 @@ export async function addInvoiceItems(
   if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
   const side = invoiceSide(invoice.invoiceType);
 
+  // Round once at the boundary (FIX — the guard validated round3(requestedMt) but both call sites
+  // used to STORE the caller's raw value, so up to +0.0005 MT per line the guard never saw could
+  // accumulate across lines). `roundedQty[i]` is the single value both validated AND stored.
+  const roundedQty = items.map((input) => round3(input.quantityMt));
+
   // Pass 1: validate EVERY entry before mutating the draft at all (atomicity fix — a multi-entry
   // call that would fail partway used to leave the earlier entries pushed). `extraByItem`
   // accumulates entries staged earlier in this same call so they still count against later
   // entries for the same contract item.
   const extraByItem = new Map<string, number>();
-  for (const input of items) {
+  items.forEach((input, i) => {
     const contractItem = findContractItem(contract, input.contractItemId);
     if (!contractItem) throw new Error(`Contract item ${input.contractItemId} not found`);
+    const q = roundedQty[i];
     const check = checkContractQty({
       contract,
       contractItemId: contractItem.id,
       side,
       invoiceId: invoice.id,
-      requestedMt: input.quantityMt,
+      requestedMt: q,
       extraOnDocMt: extraByItem.get(contractItem.id) ?? 0,
     });
     if (check.exceeds) throwQtyExceeds(check, contractItem.product);
-    extraByItem.set(contractItem.id, round3((extraByItem.get(contractItem.id) ?? 0) + input.quantityMt));
-  }
+    extraByItem.set(contractItem.id, round3((extraByItem.get(contractItem.id) ?? 0) + q));
+  });
 
   // Pass 2: every entry is now known-valid — build and push lines in order. This mirrors the
   // original per-line loop so `chainReferenceDocumentItemId` (which reads `invoice.items` as it
   // fills in) still sees each entry pushed before the next is evaluated.
-  for (const input of items) {
+  items.forEach((input, i) => {
     const contractItem = findContractItem(contract, input.contractItemId)!;
     const newItem: InvoiceItem = {
       id: nextInvoiceItemId(),
@@ -1603,7 +1645,7 @@ export async function addInvoiceItems(
       // spec §3); mint a fresh one only when this contract item has no prior chain line.
       referenceDocumentItemId: chainReferenceDocumentItemId(invoice, contractItem.id) ?? newGuid(),
       product: contractItem.product,
-      quantityMt: input.quantityMt,
+      quantityMt: roundedQty[i],
       lmePercent: contractItem.lmePercent,
       lmeFixed: contractItem.lmeFixed,
       fixedPrice: contractItem.fixedLmePrice,
@@ -1614,7 +1656,7 @@ export async function addInvoiceItems(
     };
     recomputeItemAmount(newItem);
     invoice.items.push(newItem);
-  }
+  });
   recomputeInvoiceTotals(invoice);
   recomputeAllRemaining();
   persistDb();
@@ -1640,22 +1682,33 @@ export async function updateInvoiceItem(
   if (!item) throw new Error(`Invoice item ${itemId} not found`);
 
   if (patch.quantityMt !== undefined) {
-    const side = invoiceSide(invoice.invoiceType);
-    const contract = contractById.get(invoice.contractId);
-    if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
-    // excludeInvoiceItemId: item.id — this line's own current quantity must NOT count against
-    // itself (Hole A: the old formula added it back even though chainLeafDocs, CONFIRMED-only,
-    // never subtracted it as a draft in the first place, inflating the ceiling).
-    const check = checkContractQty({
-      contract,
-      contractItemId: item.contractItemId,
-      side,
-      invoiceId: invoice.id,
-      requestedMt: patch.quantityMt,
-      excludeInvoiceItemId: item.id,
-    });
-    if (check.exceeds) throwQtyExceeds(check, item.product);
-    item.quantityMt = patch.quantityMt;
+    // Round once at the boundary (FIX 6 — see addInvoiceItems) so the stored value is exactly
+    // what the guard validated, never +0.0005 MT more.
+    const q = round3(patch.quantityMt);
+    // Only guard genuine INCREASES (FIX 3): EditLineModal always resubmits quantityMt alongside
+    // container/discount/description, so guarding every patch rejected a container-only edit the
+    // instant a rival document shrank the ceiling below this line's unchanged quantity — and
+    // because the throw happened before any field was applied, the container/discount/
+    // description patch was silently discarded too. A non-increasing edit cannot worsen an
+    // overshoot (confirmInvoice's group check remains the backstop), so it's always allowed.
+    if (q > item.quantityMt + 1e-9) {
+      const side = invoiceSide(invoice.invoiceType);
+      const contract = contractById.get(invoice.contractId);
+      if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
+      // excludeInvoiceItemId: item.id — this line's own current quantity must NOT count against
+      // itself (Hole A: the old formula added it back even though chainLeafDocs, CONFIRMED-only,
+      // never subtracted it as a draft in the first place, inflating the ceiling).
+      const check = checkContractQty({
+        contract,
+        contractItemId: item.contractItemId,
+        side,
+        invoiceId: invoice.id,
+        requestedMt: q,
+        excludeInvoiceItemId: item.id,
+      });
+      if (check.exceeds) throwQtyExceeds(check, item.product);
+    }
+    item.quantityMt = q;
   }
   if (patch.containerId !== undefined) item.containerId = patch.containerId || undefined;
   if (patch.description !== undefined) item.description = patch.description.trim() || undefined;

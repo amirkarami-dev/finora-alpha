@@ -20,15 +20,20 @@ export function qtyExceedsContractParams(
     e.product === undefined ||
     e.contractQuantityMt === undefined ||
     e.alreadyInvoicedMt === undefined ||
+    e.onThisDocMt === undefined ||
     e.remainingMt === undefined ||
     e.requestedMt === undefined
   ) {
     return undefined;
   }
+  // `alreadyInvoicedMt` alone omits this document's own other lines for the same contract item
+  // (`onThisDocMt`), which the API's `remainingMt` DOES subtract — so the displayed "already
+  // invoiced" must fold both in, or contract − invoiced ≠ remaining with no explanation, in
+  // exactly the multi-line scenario this dialog exists to explain.
   return {
     product: e.product,
     contract: formatMt(e.contractQuantityMt),
-    invoiced: formatMt(e.alreadyInvoicedMt),
+    invoiced: formatMt(e.alreadyInvoicedMt + e.onThisDocMt),
     remaining: formatMt(e.remainingMt),
     requested: formatMt(e.requestedMt),
   };
