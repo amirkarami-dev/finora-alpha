@@ -1,5 +1,6 @@
 import type { Role } from '@/types';
 import { ROUTES } from '@/config/constants';
+import { useAuthStore } from '@/store/useAuthStore';
 
 /** Route keys that can be role-guarded / shown in the sidebar. */
 export type RouteKey = Exclude<keyof typeof ROUTES, 'landing' | 'login' | 'app'>;
@@ -13,14 +14,29 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'contracts',
     'partners',
     'containers',
+    'costCentres',
     'purchase',
     'sale',
     'warehouse',
     'payments',
+    'expenses',
     'reports',
     'settings',
   ],
-  Staff: ['dashboard', 'customers', 'contracts', 'partners', 'containers', 'purchase', 'sale', 'warehouse'],
+  // Cost Centres: Manager + Staff (spec §5). Expenses: Manager ONLY (spec §6.4) — `payments` is
+  // Manager-only too, not Manager+CEO, and CEO can't even reach invoice detail; a create/edit
+  // page would contradict an otherwise read-only role.
+  Staff: [
+    'dashboard',
+    'customers',
+    'contracts',
+    'partners',
+    'containers',
+    'costCentres',
+    'purchase',
+    'sale',
+    'warehouse',
+  ],
   Customer: ['portal'],
 };
 
@@ -79,9 +95,22 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'partners', route: ROUTES.partners, icon: 'apartment', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },
   { key: 'warehouse', route: ROUTES.warehouse, icon: 'gold', group: 'operations' },
+  { key: 'costCentres', route: ROUTES.costCentres, icon: 'cluster', group: 'operations' },
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
+  { key: 'expenses', route: ROUTES.expenses, icon: 'accountbook', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];
+
+/**
+ * The app's first in-page RBAC gate (spec §6.3, CRITICAL): a route guard
+ * (`routes/index.tsx`'s `RoleRoute`) controls whether a whole PAGE is reachable, but Staff can
+ * reach invoice detail (guarded with `['purchase','sale']`, both of which Staff holds) while
+ * still being barred from the Expenses module itself. `useHasAccess('expenses')` lets a page
+ * conditionally render a fragment (the invoice's Expenses card) without a full route guard.
+ */
+export function useHasAccess(key: RouteKey): boolean {
+  return ROLE_ACCESS[normalizeRole(useAuthStore((s) => s.user?.role))].includes(key);
+}

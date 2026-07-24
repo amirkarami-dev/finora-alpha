@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ExpenseType, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -38,6 +38,11 @@ export const qk = {
   inventoryDocLines: (invoiceId: string) => ['inventoryDocLines', invoiceId] as const,
   invoiceOptions: ['invoiceOptions'] as const,
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
+  // ---- Cost centres + expenses (spec §5/§6) ----
+  costCentres: ['costCentres'] as const,
+  expenses: (type?: ExpenseType) => ['expenses', type ?? 'all'] as const,
+  expensesForInvoice: (invoiceId: string) => ['expensesForInvoice', invoiceId] as const,
+  expenseSourceInvoices: (side: InvoiceSide) => ['expenseSourceInvoices', side] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -538,5 +543,94 @@ export const useCreatePayment = () => {
         invoiceId: payment.invoiceId,
         customerId: payment.customerId,
       }),
+  });
+};
+
+/* ---------------------- Cost centres + expenses (spec §5/§6) --------------------- */
+
+export const useCostCentres = () =>
+  useQuery({ queryKey: qk.costCentres, queryFn: api.getCostCentres });
+
+function useInvalidateCostCentres() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: qk.costCentres });
+}
+
+export const useCreateCostCentre = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: (input: api.CostCentreInput) => api.createCostCentre(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateCostCentre = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.CostCentreInput }) =>
+      api.updateCostCentre(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetCostCentreActive = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setCostCentreActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+export const useExpenseSourceInvoices = (side: InvoiceSide) =>
+  useQuery({
+    queryKey: qk.expenseSourceInvoices(side),
+    queryFn: () => api.getExpenseSourceInvoices(side),
+  });
+
+export const useExpenses = (type?: ExpenseType) =>
+  useQuery({ queryKey: qk.expenses(type), queryFn: () => api.getExpenses(type) });
+
+export const useExpensesForInvoice = (invoiceId: string) =>
+  useQuery({
+    queryKey: qk.expensesForInvoice(invoiceId),
+    queryFn: () => api.getExpensesForInvoice(invoiceId),
+    enabled: !!invoiceId,
+  });
+
+/** An expense mutation changes its own tab's list (any `type`), the linked invoice's Expenses
+ *  card (chain-scoped, so keyed on invoiceId, not the invoice's own id), and — since amountUSD
+ *  feeds no dashboard aggregate today — nothing beyond those two. Bare `['expenses']` prefix
+ *  matches every type-scoped variant. */
+function useInvalidateExpenses() {
+  const qc = useQueryClient();
+  return (invoiceId?: string) => {
+    qc.invalidateQueries({ queryKey: ['expenses'] });
+    if (invoiceId) qc.invalidateQueries({ queryKey: ['expensesForInvoice'] });
+  };
+}
+
+export const useCreateExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: (input: api.ExpenseInput) => api.createExpense(input),
+    onSuccess: (expense) => invalidate(expense.invoiceId),
+  });
+};
+
+export const useUpdateExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ExpenseInput }) =>
+      api.updateExpense(id, input),
+    onSuccess: (expense) => invalidate(expense.invoiceId),
+  });
+};
+
+export const useCancelExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelExpense(id),
+    onSuccess: (expense) => invalidate(expense.invoiceId),
   });
 };

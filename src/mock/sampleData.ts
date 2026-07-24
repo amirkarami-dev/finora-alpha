@@ -965,6 +965,11 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     warehouses,
     invoices,
     inventoryDocs,
+    // Out of scope for the sample dataset (spec §7 "editing the sample dataset") — cost centres
+    // and expenses are a Phase C addition the demo generator doesn't populate; empty arrays keep
+    // the return shape satisfying `Db`.
+    costCentres: [],
+    expenses: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

@@ -1,7 +1,9 @@
 import type {
   Container,
   Contract,
+  CostCentre,
   Customer,
+  Expense,
   InventoryDocument,
   Invoice,
   Partner,
@@ -53,6 +55,8 @@ const seed = {
   warehouses: [] as Warehouse[],
   invoices: [] as Invoice[],
   inventoryDocs: [] as InventoryDocument[],
+  costCentres: [] as CostCentre[],
+  expenses: [] as Expense[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -67,6 +71,12 @@ function isCompatible(d: unknown): d is typeof seed {
   }
   if (!Array.isArray(o.containers) || !Array.isArray(o.payments)) return false;
   if (typeof o.fxRate !== 'number') return false;
+  // Phase C (cost centres + expenses) reuses schema v5 rather than bumping — so a blob persisted
+  // before this change shipped won't have these two arrays AT ALL. Missing is fine (backfilled
+  // in `loadDb` below); PRESENT-but-wrong-shape is the only thing that should reject the whole
+  // blob, so a corrupt/foreign value here can't silently masquerade as an empty list.
+  if (o.costCentres !== undefined && !Array.isArray(o.costCentres)) return false;
+  if (o.expenses !== undefined && !Array.isArray(o.expenses)) return false;
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -136,7 +146,14 @@ function loadDb(): typeof seed {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (isCompatible(parsed)) return parsed;
+      if (isCompatible(parsed)) {
+        // Backfill Phase C's two additive arrays for a blob persisted before they existed
+        // (schema v5 wasn't bumped for them) — never silently wipe the customers/contracts
+        // already in that blob just because two new lists aren't there yet.
+        if (!Array.isArray(parsed.costCentres)) parsed.costCentres = [];
+        if (!Array.isArray(parsed.expenses)) parsed.expenses = [];
+        return parsed;
+      }
     }
   } catch {
     /* corrupt or unavailable — fall back to the (empty) seed */
