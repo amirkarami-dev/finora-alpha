@@ -315,7 +315,13 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
           if (qty < 0.5) break;
           shippedSoFar += qty;
 
-          const loadDate = dayjs(contract.date).add(intBetween(5, 60), 'day');
+          // Clamp to `anchor` (spec C0 fix): a recent contract date + up to 60 days can spill
+          // PAST anchor, pushing this shipment's invoice date into the NEXT calendar month —
+          // which sits outside every rolling 12-month window while the CURRENT month goes
+          // empty (observed: current month $0, next month non-zero, both against `anchor`).
+          // Deriving arrival/due from the clamped value (not the raw one) keeps them consistent.
+          const rawLoadDate = dayjs(contract.date).add(intBetween(5, 60), 'day');
+          const loadDate = rawLoadDate.isAfter(anchor) ? anchor : rawLoadDate;
           const arrival = loadDate.add(intBetween(10, 35), 'day');
           const due = arrival.add(customer.paymentTermsDays, 'day');
           const invoice = round(containerInvoice({ quantityMt: qty, lmePrice: price, premium: 0 }), 2);
