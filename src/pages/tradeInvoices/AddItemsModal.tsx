@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import type { InvoiceItemInput } from '@/services/api';
 import { formatMt } from '@/utils/format';
-import { buildContainerOptions } from './containerOptions';
+import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
 import type { Invoice, InvoiceSide } from '@/types';
 
 const { Text } = Typography;
@@ -72,7 +72,10 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   }, [remaining, invoice.items]);
 
   useEffect(() => {
-    if (open) form.setFieldsValue({ rows });
+    if (open) {
+      form.setFieldsValue({ rows });
+      setShowAllContainers(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, rows]);
 
@@ -248,6 +251,16 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                             />
                           }
                           disabled={!included}
+                          labelRender={({ label }) => (
+                            <span dir="ltr" style={ltrTruncateStyle}>
+                              {label}
+                            </span>
+                          )}
+                          optionRender={(o) => (
+                            <span dir="ltr" style={ltrTruncateStyle}>
+                              {o.label}
+                            </span>
+                          )}
                         />
                       </Form.Item>
                     </div>

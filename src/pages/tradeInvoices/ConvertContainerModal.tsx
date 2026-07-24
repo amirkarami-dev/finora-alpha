@@ -3,7 +3,7 @@ import { App, Modal, Select, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useApplyContainerToAll, useContainerOptions, useConvertInvoice } from '@/services/queries';
-import { buildContainerOptions } from './containerOptions';
+import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
 import type { Invoice, InvoiceType } from '@/types';
 
 const { Text } = Typography;
@@ -44,11 +44,13 @@ export function ConvertContainerModal({ open, onClose, invoice, targetType }: Co
           invoiceId: created.id,
           containerId,
         });
-        message.success(
-          applied < total
-            ? t('tradeInvoices.containerAppliedToSome', { applied, total })
-            : t('tradeInvoices.converted'),
-        );
+        if (applied === 0) {
+          message.warning(t('tradeInvoices.containerAppliedToNone'));
+        } else if (applied < total) {
+          message.success(t('tradeInvoices.containerAppliedToSome', { applied, total }));
+        } else {
+          message.success(t('tradeInvoices.converted'));
+        }
       } else {
         message.success(t('tradeInvoices.converted'));
       }
@@ -87,6 +89,16 @@ export function ConvertContainerModal({ open, onClose, invoice, targetType }: Co
         value={containerId}
         onChange={setContainerId}
         options={containerSelectOptions}
+        labelRender={({ label }) => (
+          <span dir="ltr" style={ltrTruncateStyle}>
+            {label}
+          </span>
+        )}
+        optionRender={(o) => (
+          <span dir="ltr" style={ltrTruncateStyle}>
+            {o.label}
+          </span>
+        )}
       />
     </Modal>
   );

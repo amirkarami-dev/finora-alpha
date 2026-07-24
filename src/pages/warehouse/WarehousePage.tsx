@@ -338,13 +338,25 @@ export default function WarehousePage() {
             expandable={{
               rowExpandable: (r) => r.items.length > 0,
               expandedRowRender: (r) => (
-                <Table<InventoryDocumentItem>
-                  rowKey="id"
-                  columns={itemColumns}
-                  dataSource={r.items}
-                  pagination={false}
-                  size="small"
-                />
+                <>
+                  {r.notes && (
+                    <div style={{ marginBottom: 12 }}>
+                      <Text strong style={{ fontSize: 12 }}>
+                        {t('warehouse.docNotes')}
+                      </Text>
+                      <div>
+                        <Text type="secondary">{r.notes}</Text>
+                      </div>
+                    </div>
+                  )}
+                  <Table<InventoryDocumentItem>
+                    rowKey="id"
+                    columns={itemColumns}
+                    dataSource={r.items}
+                    pagination={false}
+                    size="small"
+                  />
+                </>
               ),
             }}
           />

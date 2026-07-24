@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   Alert,
   App,
@@ -30,6 +30,19 @@ import type { InventoryDocType } from '@/types';
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+// RTL fix (spec §5.3, mirrors tradeInvoices/containerOptions.ts): a bare `dir="ltr"` span does
+// NOT change which side an ancestor's own `direction:rtl` + `overflow:hidden;text-overflow:
+// ellipsis` box clips from — the ancestor still right-anchors the overflowing content and clips
+// the LEADING token (verified empirically). Giving the LTR span its own block box + overflow/
+// ellipsis makes it the truncating box instead, clipping the TRAILING (customer) token.
+const ltrTruncateStyle: CSSProperties = {
+  display: 'block',
+  direction: 'ltr',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
 
 interface DocLineFormRow {
   referenceDocumentItemId: string;
@@ -261,6 +274,16 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
               optionFilterProp="label"
               placeholder={t('warehouse.invoicePlaceholder')}
               options={invoiceSelectOptions}
+              labelRender={({ label }) => (
+                <span dir="ltr" style={ltrTruncateStyle}>
+                  {label}
+                </span>
+              )}
+              optionRender={(o) => (
+                <span dir="ltr" style={ltrTruncateStyle}>
+                  {o.label}
+                </span>
+              )}
             />
           </Form.Item>
           <Form.Item
@@ -295,16 +318,25 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
               {(fields) => (
                 <Space direction="vertical" style={{ width: '100%' }} size={8}>
                   {fields.map((field) => {
+                    // Guard against the one-frame mismatch where `Form.List`'s keyed remount
+                    // (new invoice picked) has already swapped `fields` in from rc-field-form's
+                    // store while `lines` (derived from the query) still reflects the previous
+                    // invoice for this index — see linesKey remount note above. Self-corrects on
+                    // the next commit; skipping the render here avoids the crash entirely.
                     const row = lines[field.name];
+                    if (!row) return null;
                     const watchedRow = watchedLines[field.name];
                     const included = watchedRow?.include;
                     const exhausted = row.remainingMt <= 1e-9;
                     const productKey = row.product.trim().toLowerCase();
                     const availableStock =
-                      type === 'OUT' ? stockByProductKey.get(productKey) ?? 0 : undefined;
+                      type === 'OUT' && warehouseId ? stockByProductKey.get(productKey) ?? 0 : undefined;
                     const requestedQty = watchedRow?.quantityMt ?? 0;
                     const overStock =
-                      type === 'OUT' && availableStock !== undefined && requestedQty > availableStock + 1e-9;
+                      type === 'OUT' &&
+                      !!warehouseId &&
+                      availableStock !== undefined &&
+                      requestedQty > availableStock + 1e-9;
 
                     return (
                       <div
@@ -344,9 +376,15 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
                           </div>
                           {type === 'OUT' && !exhausted && (
                             <div>
-                              <Text type={overStock ? 'warning' : 'secondary'} style={{ fontSize: 12 }}>
-                                {t('warehouse.availableMt')}: {formatMt(availableStock ?? 0)}
-                              </Text>
+                              {warehouseId ? (
+                                <Text type={overStock ? 'warning' : 'secondary'} style={{ fontSize: 12 }}>
+                                  {t('warehouse.availableHint', { mt: formatMt(availableStock ?? 0) })}
+                                </Text>
+                              ) : (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                  {t('warehouse.selectWarehouse')}
+                                </Text>
+                              )}
                             </div>
                           )}
                         </div>

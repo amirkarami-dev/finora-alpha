@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { App, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
-import { buildContainerOptions, withSelectedContainer } from './containerOptions';
+import { buildContainerOptions, ltrTruncateStyle, withSelectedContainer } from './containerOptions';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
@@ -132,6 +132,16 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
             notFoundContent={
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('tradeInvoices.noContainerForGood')} />
             }
+            labelRender={({ label }) => (
+              <span dir="ltr" style={ltrTruncateStyle}>
+                {label}
+              </span>
+            )}
+            optionRender={(o) => (
+              <span dir="ltr" style={ltrTruncateStyle}>
+                {o.label}
+              </span>
+            )}
           />
         </Form.Item>
         <Form.Item name="discountPercent" label={t('tradeInvoices.discountPercent')}>
