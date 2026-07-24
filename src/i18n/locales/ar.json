@@ -400,6 +400,7 @@
     "noItems": "أضف بندًا واحدًا على الأقل قبل التأكيد",
     "missingLmePrice": "حدد سعر LME لجميع البنود ذات السعر العائم قبل التأكيد",
     "qtyExceedsRemaining": "الكمية تتجاوز الكمية غير المفوترة المتبقية من العقد",
+    "qtyExceedsContract": "{{product}}: كمية العقد {{contract}}، المفوتر بالفعل {{invoiced}}، المتبقي {{remaining}} — المطلوب {{requested}}",
     "confirmed": "تم تأكيد المستند",
     "uninvoicedAlertTitle": "كمية غير مفوترة متبقية على هذا العقد",
     "uninvoicedMt": "{{product}} — {{remaining}} غير مفوترة",

@@ -3,6 +3,8 @@ import { App, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Typ
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
 import { buildContainerOptions, ltrTruncateStyle, withSelectedContainer } from './containerOptions';
+import { qtyExceedsContractParams } from './qtyExceedsContract';
+import { formatMt } from '@/utils/format';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
@@ -23,7 +25,7 @@ interface EditLineModalProps {
   side: InvoiceSide;
 }
 
-/** DRAFT-only line editor: quantity (capped at uninvoiced + this line's own claim), container, discount, desc. */
+/** DRAFT-only line editor: quantity (capped at uninvoiced, excluding this doc's other lines for the same good), container, discount, desc. */
 export function EditLineModal({ open, onClose, invoice, item, side }: EditLineModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -53,9 +55,14 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const otherLinesQty = invoice.items
     .filter((it) => it.id !== item.id && it.contractItemId === item.contractItemId)
     .reduce((s, it) => s + it.quantityMt, 0);
-  const maxQty = remainingRow
-    ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) + item.quantityMt
-    : item.quantityMt;
+  // The true ceiling for a NEW value on this line — may sit below the field's current value once
+  // a rival document has confirmed and shrunk the remaining amount.
+  const ceilingMt = remainingRow ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) : item.quantityMt;
+  // The InputNumber's `max` must never sit below the field's initial value: rc-input-number
+  // clamps an out-of-range value to `max` on blur and fires onChange, so `max < item.quantityMt`
+  // silently rewrote the line to the (too-low) ceiling with no message. The real ceiling is
+  // enforced below via an inline validator instead, which can show an error and reject the save.
+  const maxQty = Math.max(ceilingMt, item.quantityMt);
 
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
@@ -86,8 +93,10 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
       onClose();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
-      if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
-      else message.error(t('common.saveFailed'));
+      if (code === 'qty-exceeds-remaining') {
+        const params = qtyExceedsContractParams(err);
+        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else message.error(t('common.saveFailed'));
     }
   };
 
@@ -107,9 +116,20 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         <Form.Item
           name="quantityMt"
           label={t('items.quantityMt')}
-          rules={[{ required: true, message: t('common.required') }]}
+          rules={[
+            { required: true, message: t('common.required') },
+            {
+              validator: async (_, v) => {
+                if (v === undefined || v === null) return;
+                if (v <= 0) throw new Error(t('common.required'));
+                if (v > ceilingMt + 1e-9) {
+                  throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
+                }
+              },
+            },
+          ]}
         >
-          <InputNumber min={0.01} max={maxQty} precision={2} style={{ width: '100%' }} />
+          <InputNumber min={0.01} max={maxQty} precision={3} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
           name="containerId"
