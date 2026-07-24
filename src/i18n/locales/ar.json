@@ -283,6 +283,7 @@
     "subtitle": "الشحنات وتفاصيلها اللوجستية",
     "newContainer": "حاوية جديدة",
     "reference": "الحاوية",
+    "referencePlaceholder": "مثال: MSNU8018095",
     "quantityMt": "الكمية (طن)",
     "loadDate": "تاريخ التحميل",
     "arrivalDate": "الوصول",

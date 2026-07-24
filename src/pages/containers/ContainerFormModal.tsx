@@ -196,7 +196,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
               label={t('containers.reference')}
               rules={[{ required: true, message: t('common.required') }]}
             >
-              <Input placeholder="MSNU8018095" />
+              <Input placeholder={t('containers.referencePlaceholder')} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12} />
