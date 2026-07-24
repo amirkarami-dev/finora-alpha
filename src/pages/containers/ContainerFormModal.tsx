@@ -19,7 +19,7 @@ interface ContainerGoodRow {
 
 interface ContainerFormValues {
   reference: string;
-  shipmentDate: Dayjs;
+  loadDate: Dayjs;
   arrivalDate?: Dayjs;
   grossWeightKg?: number;
   netWeightKg?: number;
@@ -83,7 +83,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
   const initialValues: Partial<ContainerFormValues> = container
     ? {
         reference: container.reference,
-        shipmentDate: dayjs(container.shipmentDate),
+        loadDate: dayjs(container.loadDate),
         arrivalDate: container.arrivalDate ? dayjs(container.arrivalDate) : undefined,
         grossWeightKg: container.grossWeightKg,
         netWeightKg: container.netWeightKg,
@@ -92,7 +92,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
         sealNumber: container.sealNumber ?? '',
         goods: container.goods.map((g) => ({ contractItemId: g.contractItemId, quantityMt: g.quantityMt })),
       }
-    : { shipmentDate: dayjs(), goods: [{}] };
+    : { loadDate: dayjs(), goods: [{}] };
 
   /**
    * Removal guard (spec §4): a row whose good is on the persisted container is checked
@@ -135,7 +135,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
     }
     const input: ContainerInput = {
       reference: values.reference.trim(),
-      shipmentDate: values.shipmentDate.toISOString(),
+      loadDate: values.loadDate.toISOString(),
       arrivalDate: values.arrivalDate ? values.arrivalDate.toISOString() : undefined,
       grossWeightKg: values.grossWeightKg,
       netWeightKg: values.netWeightKg,
@@ -203,8 +203,8 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
 
           <Col xs={24} sm={12}>
             <Form.Item
-              name="shipmentDate"
-              label={t('containers.shipmentDate')}
+              name="loadDate"
+              label={t('containers.loadDate')}
               rules={[{ required: true, message: t('common.required') }]}
             >
               <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
@@ -261,6 +261,7 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
                       <Select
                         showSearch
                         optionFilterProp="label"
+                        optionLabelProp="label"
                         placeholder={t('containers.goods')}
                       >
                         {(contracts ?? []).map((c) => (

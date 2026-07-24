@@ -106,7 +106,7 @@ export interface Container {
   reference: string;
   /** One or more contract goods lines this container carries. */
   goods: ContainerGood[];
-  shipmentDate: string;
+  loadDate: string;
   arrivalDate?: string;
   grossWeightKg?: number;
   netWeightKg?: number;
@@ -154,6 +154,11 @@ export interface InvoiceItem {
   invoiceId: string;
   /** Source goods line on the contract. */
   contractItemId: string;
+  /** Chain-stable identity that survives provisional→final conversion (`convertInvoice`'s
+   *  `...it` spread carries it) and re-add-after-delete (`addInvoiceItems` reuses the chain's
+   *  existing id instead of minting a new one). Warehouse documents dedupe/consume against this,
+   *  not `id` (spec docs/superpowers/specs/2026-07-24-warehouse-docs-refdocitem-design.md §2/§3). */
+  referenceDocumentItemId: string;
   product: string;
   quantityMt: number;
   // Copied from the contract item at insertion; read-only in ALL document types:
@@ -222,6 +227,10 @@ export interface InventoryDocumentItem {
   id: string;
   documentId: string;
   invoiceItemId?: string;
+  /** Chain-stable identity of the invoice line this movement receives/issues against — the
+   *  dedupe key (differs from `invoiceItemId`, which points at one concrete row; see
+   *  `InvoiceItem.referenceDocumentItemId`). */
+  referenceDocumentItemId: string;
   product: string;
   quantityMt: number;
 }

@@ -37,7 +37,7 @@ interface RawContainerSeed {
   quantityMt: number;
   lmePrice: number;
   premium: number;
-  shipmentDate: string;
+  loadDate: string;
   arrivalDate?: string;
   dueDate: string;
   invoiceUSD: number;
@@ -271,8 +271,8 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
         if (qty < 0.5) break;
         shippedSoFar += qty;
 
-        const shipmentDate = dayjs(contract.date).add(intBetween(5, 60), 'day');
-        const arrival = shipmentDate.add(intBetween(10, 35), 'day');
+        const loadDate = dayjs(contract.date).add(intBetween(5, 60), 'day');
+        const arrival = loadDate.add(intBetween(10, 35), 'day');
         const due = arrival.add(customer.paymentTermsDays, 'day');
         const invoice = round(containerInvoice({ quantityMt: qty, lmePrice: price, premium: 0 }), 2);
 
@@ -293,7 +293,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
           quantityMt: qty,
           lmePrice: round(price, 2),
           premium: 0,
-          shipmentDate: shipmentDate.toISOString(),
+          loadDate: loadDate.toISOString(),
           arrivalDate: arrival.toISOString(),
           dueDate: due.toISOString(),
           invoiceUSD: invoice,
@@ -375,7 +375,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     quantityMt: 27.705,
     lmePrice: 11071.9,
     premium: 0,
-    shipmentDate: dayjs('2025-12-15').toISOString(),
+    loadDate: dayjs('2025-12-15').toISOString(),
     arrivalDate: dayjs('2025-12-17').toISOString(),
     dueDate: dayjs('2025-12-20').toISOString(),
     invoiceUSD: 306736.95,
@@ -392,7 +392,7 @@ CUSTOMER_SEEDS.forEach((seed, ci) => {
     quantityMt: 27.935,
     lmePrice: 11071.9,
     premium: 0,
-    shipmentDate: dayjs('2025-12-15').toISOString(),
+    loadDate: dayjs('2025-12-15').toISOString(),
     arrivalDate: dayjs('2025-12-17').toISOString(),
     dueDate: dayjs('2025-12-20').toISOString(),
     invoiceUSD: 309283.4,
@@ -494,11 +494,35 @@ function nextInvoiceItemId(): string {
   return `invitem-${invoiceItemCounter}`;
 }
 
-/** Build one InvoiceItem snapshot from a contract goods line (spec §2/§11). */
+/* ------------------------------------------------------------------ *
+ * Deterministic UUID-shaped ids for `referenceDocumentItemId` (spec §3).
+ * Zero PRNG draws — pure hash of a caller-supplied key. The salt is
+ * PREFIXED (not appended) so the four FNV-1a passes are independent;
+ * appending makes FNV-1a suffix-extend and collapses effective strength
+ * to 32 bits (a real collision was demonstrated with an appended salt).
+ * ------------------------------------------------------------------ */
+function fnv1a(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+const hex8 = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
+/** Deterministic UUID-shaped id (~120-bit). Version+variant nibbles forced to '0' → can never
+ *  equal a runtime v4 GUID. Salt is PREFIXED so the four passes are independent. */
+function seedUuid(key: string): string {
+  const h = hex8(fnv1a(`0|finora-ref|${key}`)) + hex8(fnv1a(`1|finora-ref|${key}`))
+          + hex8(fnv1a(`2|finora-ref|${key}`)) + hex8(fnv1a(`3|finora-ref|${key}`));
+  return [h.slice(0,8), h.slice(8,12), '0'+h.slice(13,16), '0'+h.slice(17,20), h.slice(20,32)].join('-');
+}
+
+/** Build one InvoiceItem snapshot from a contract goods line (spec §2/§11). `refKey` seeds
+ *  `referenceDocumentItemId` via `seedUuid` — callers that must SHARE one id across a chain
+ *  (PO/PP/PI) pass the same key at every call site (spec §3). */
 function makeInvoiceItem(
   invoiceId: string,
   contractItem: Item,
   opts: { lmeDate?: string; lmePrice?: number; discountPercent?: number },
+  refKey: string,
 ): InvoiceItem {
   const quantityMt = contractItem.quantityMt;
   const lmePercent = contractItem.lmePercent;
@@ -516,6 +540,7 @@ function makeInvoiceItem(
     id: nextInvoiceItemId(),
     invoiceId,
     contractItemId: contractItem.id,
+    referenceDocumentItemId: seedUuid(refKey),
     product: contractItem.product,
     quantityMt,
     lmePercent,
@@ -557,7 +582,8 @@ if (firstPurchaseContract) {
 
   // PO-2026-0001: unpriced, full qty per item.
   const poId = 'inv-po-0001';
-  const poItems = contract.items.map((item) => makeInvoiceItem(poId, item, {}));
+  // PO/PP/PI SHARE one referenceDocumentItemId per contract item (spec §3 requirement 5).
+  const poItems = contract.items.map((item) => makeInvoiceItem(poId, item, {}, `${poId}|${item.id}`));
   const poTotals = invoiceTotals(poItems);
   const po: Invoice = {
     id: poId,
@@ -580,7 +606,12 @@ if (firstPurchaseContract) {
   // PP-2026-0001: lmeDate on ALL items, lmePrice 2450 on FLOATING items only, discount 0.
   const ppId = 'inv-pp-0001';
   const ppItems = contract.items.map((item) =>
-    makeInvoiceItem(ppId, item, { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 }),
+    makeInvoiceItem(
+      ppId,
+      item,
+      { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 },
+      `${poId}|${item.id}`,
+    ),
   );
   const ppTotals = invoiceTotals(ppItems);
   const pp: Invoice = {
@@ -605,7 +636,12 @@ if (firstPurchaseContract) {
   // PI-2026-0001: same prices as PP (ref PP).
   const piId = 'inv-pi-0001';
   const piItems = contract.items.map((item) =>
-    makeInvoiceItem(piId, item, { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 }),
+    makeInvoiceItem(
+      piId,
+      item,
+      { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 },
+      `${poId}|${item.id}`,
+    ),
   );
   const piTotals = invoiceTotals(piItems);
   const pi: Invoice = {
@@ -641,6 +677,8 @@ if (firstPurchaseContract) {
       id: `idocitem-${idx + 1}`,
       documentId: grnId,
       invoiceItemId: it.id,
+      // Copy — never mint — so the GRN's dedupe key matches the PI line it receives (spec §3).
+      referenceDocumentItemId: it.referenceDocumentItemId,
       product: it.product,
       quantityMt: it.quantityMt,
     })),
@@ -673,7 +711,7 @@ if (firstSellContract && firstSellContract.items.length > 0) {
   const firstItem = contract.items[0];
   const soId = 'inv-so-0001';
   const halfQtyItem: Item = { ...firstItem, quantityMt: round(firstItem.quantityMt * 0.5, 2) };
-  const soItems = [makeInvoiceItem(soId, halfQtyItem, {})];
+  const soItems = [makeInvoiceItem(soId, halfQtyItem, {}, `${soId}|${firstItem.id}`)];
   const soTotals = invoiceTotals(soItems);
   const so: Invoice = {
     id: soId,
@@ -708,7 +746,7 @@ const containers: Container[] = rawContainers.map((raw) => ({
   id: raw.id,
   reference: raw.reference,
   goods: [{ contractItemId: raw.itemId, quantityMt: raw.quantityMt }],
-  shipmentDate: raw.shipmentDate,
+  loadDate: raw.loadDate,
   arrivalDate: raw.arrivalDate,
   blNumber: raw.blNumber,
   bookingNumber: raw.bookingNumber,
@@ -768,6 +806,7 @@ function makeHistoricalInvoiceItem(invoiceId: string, raw: RawContainerSeed): In
     id: nextInvoiceItemId(),
     invoiceId,
     contractItemId: raw.itemId,
+    referenceDocumentItemId: seedUuid(raw.id),
     product: contractItem.product,
     quantityMt,
     lmePercent,
@@ -775,7 +814,7 @@ function makeHistoricalInvoiceItem(invoiceId: string, raw: RawContainerSeed): In
     fixedPrice,
     premium,
     lmePrice,
-    lmeDate: raw.shipmentDate,
+    lmeDate: raw.loadDate,
     discountPercent,
     amount,
     containerId: raw.id,
@@ -796,8 +835,8 @@ for (const contract of contracts) {
   const totals = invoiceTotals(items);
   const invoiceDate = raws
     .reduce(
-      (latest, raw) => (dayjs(raw.shipmentDate).isAfter(latest) ? dayjs(raw.shipmentDate) : latest),
-      dayjs(raws[0].shipmentDate),
+      (latest, raw) => (dayjs(raw.loadDate).isAfter(latest) ? dayjs(raw.loadDate) : latest),
+      dayjs(raws[0].loadDate),
     )
     .toISOString();
 
@@ -871,8 +910,12 @@ for (const item of itemById.values()) {
  * crash the app after a schema change. As a safety net,
  * `isCompatible()` also probes representative fields and falls back
  * to the seed when they're missing.
+ *
+ * Schema v4 (2026-07-24): `Container.shipmentDate` → `loadDate`; `InvoiceItem` and
+ * `InventoryDocumentItem` both gain a required `referenceDocumentItemId`
+ * (docs/superpowers/specs/2026-07-24-warehouse-docs-refdocitem-design.md §2).
  * ------------------------------------------------------------------ */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
@@ -901,6 +944,32 @@ function isCompatible(d: unknown): d is typeof seed {
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
   if (o.containers.length && !Array.isArray((o.containers[0] as Record<string, unknown> | undefined)?.goods)) {
+    return false;
+  }
+  // Schema v4: Container.shipmentDate → loadDate.
+  if (o.containers.length && typeof (o.containers[0] as Record<string, unknown> | undefined)?.loadDate !== 'string') {
+    return false;
+  }
+  // Schema v4: InvoiceItem/InventoryDocumentItem gain a required referenceDocumentItemId.
+  // `.find()` for the first entity that actually HAS items — never index [0].items[0] blindly:
+  // createInvoice produces empty-items DRAFTs, and a leading empty draft would false-negative
+  // this probe and silently wipe user data.
+  const invWithItems = (o.invoices as Array<Record<string, unknown>>).find(
+    (i) => Array.isArray(i?.items) && (i.items as unknown[]).length > 0,
+  );
+  if (
+    invWithItems &&
+    typeof (invWithItems.items as Array<Record<string, unknown>>)[0].referenceDocumentItemId !== 'string'
+  ) {
+    return false;
+  }
+  const docWithItems = (o.inventoryDocs as Array<Record<string, unknown>>).find(
+    (d) => Array.isArray(d?.items) && (d.items as unknown[]).length > 0,
+  );
+  if (
+    docWithItems &&
+    typeof (docWithItems.items as Array<Record<string, unknown>>)[0].referenceDocumentItemId !== 'string'
+  ) {
     return false;
   }
   // Probe representative fields added over time (belt-and-braces vs. SCHEMA_VERSION).

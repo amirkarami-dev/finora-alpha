@@ -57,10 +57,10 @@ export default function ContainersPage() {
       render: (v?: number) => (v != null ? v.toLocaleString() : <Text type="secondary">—</Text>),
     },
     {
-      title: t('containers.shipmentDate'),
-      dataIndex: 'shipmentDate',
+      title: t('containers.loadDate'),
+      dataIndex: 'loadDate',
       width: 130,
-      sorter: (a, b) => dayjs(a.shipmentDate).valueOf() - dayjs(b.shipmentDate).valueOf(),
+      sorter: (a, b) => dayjs(a.loadDate).valueOf() - dayjs(b.loadDate).valueOf(),
       render: (v) => formatDate(v),
     },
     {
