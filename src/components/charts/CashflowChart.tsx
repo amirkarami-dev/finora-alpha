@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { TimeSeriesPoint } from '@/types';
 import { formatCompactCurrency } from '@/utils/format';
@@ -18,6 +19,16 @@ import { useChartTheme } from './chartTheme';
 export function CashflowChart({ data, height = 300 }: { data: TimeSeriesPoint[]; height?: number }) {
   const c = useChartTheme();
   const { t } = useTranslation();
+
+  // Empty when there's no data at all, OR both series are zero across every point (spec §4) —
+  // otherwise the chart draws a flat line under a fake money axis with fabricated tick values.
+  if (data.length === 0 || data.every((d) => d.invoiced === 0 && d.collected === 0)) {
+    return (
+      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.noData')} />
+      </div>
+    );
+  }
 
   return (
     <ResponsiveContainer width="100%" height={height}>

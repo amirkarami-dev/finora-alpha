@@ -79,7 +79,11 @@ export default function CustomerPortalPage() {
     return <Result status="403" title={t('portal.noAccessTitle')} subTitle={t('portal.noAccess')} />;
   }
 
-  const standingGood = (data?.overdue ?? 0) <= 0;
+  // No invoicing history at all (spec §4) → the standing badge and on-time stat must render
+  // neutrally rather than a green "Good standing"/100% that reads as an earned clean record.
+  const hasHistory = (data?.totalInvoiced ?? 0) > 0;
+  const standingGood = hasHistory && (data?.overdue ?? 0) <= 0;
+  const onTimeSharePct = data?.onTimeSharePct;
   const utilization = Math.round(data?.creditUtilizationPct ?? 0);
   const utilColor =
     utilization > 90 ? token.colorError : utilization > 75 ? BRAND.warning : token.colorPrimary;
@@ -202,10 +206,14 @@ export default function CustomerPortalPage() {
         extra={
           !isLoading && data ? (
             <Tag
-              color={standingGood ? 'success' : 'error'}
+              color={!hasHistory ? 'default' : standingGood ? 'success' : 'error'}
               style={{ borderRadius: 6, fontWeight: 600, padding: '4px 12px' }}
             >
-              {standingGood ? t('portal.standingGood') : t('portal.standingAttention')}
+              {!hasHistory
+                ? t('portal.standingNone')
+                : standingGood
+                  ? t('portal.standingGood')
+                  : t('portal.standingAttention')}
             </Tag>
           ) : undefined
         }
@@ -284,10 +292,13 @@ export default function CustomerPortalPage() {
           <Card variant="borderless" className="soft-card" style={{ height: '100%' }} loading={isLoading}>
             <Statistic
               title={t('portal.onTimeShare')}
-              value={data?.onTimeSharePct ?? 0}
-              precision={0}
-              suffix="%"
-              valueStyle={{ fontWeight: 700, color: token.colorSuccess }}
+              value={onTimeSharePct ?? '—'}
+              precision={onTimeSharePct !== undefined ? 0 : undefined}
+              suffix={onTimeSharePct !== undefined ? '%' : undefined}
+              valueStyle={{
+                fontWeight: 700,
+                color: onTimeSharePct !== undefined ? token.colorSuccess : token.colorTextTertiary,
+              }}
             />
             <Text type="secondary" style={{ fontSize: 12 }}>
               {formatCompactCurrency(data?.totalPaid ?? 0)} {t('invoices.totalPaid').toLowerCase()}

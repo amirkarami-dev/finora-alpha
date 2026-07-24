@@ -467,8 +467,10 @@ export interface ExecutiveSummary {
   outstanding: number;
   overdue: number;
   collectionRate: number;
-  invoicedGrowthPct: number;
-  collectedGrowthPct: number;
+  /** `undefined` when there's no prior period to compare against, or the prior period was
+   *  zero (spec §4) — StatCard hides the trend badge rather than render a misleading ↑0%. */
+  invoicedGrowthPct: number | undefined;
+  collectedGrowthPct: number | undefined;
   activeContracts: number;
   customers: number;
 }
@@ -483,11 +485,14 @@ export async function getExecutiveSummary(): Promise<ExecutiveSummary> {
   const collectionRate = invoiced > 0 ? round((collected / invoiced) * 100) : 0;
 
   const series = await getCashflowSeries();
-  const growth = (sel: (p: TimeSeriesPoint) => number) => {
-    if (series.length < 2) return 0;
+  // `undefined` (not 0) whenever there's no meaningful prior-period comparison — either too
+  // few points, or a zero prior period, which would otherwise divide-by-(0||1) into a bogus
+  // ±100%/0% badge (spec §4). StatCard already hides the trend badge when `trend` is undefined.
+  const growth = (sel: (p: TimeSeriesPoint) => number): number | undefined => {
+    if (series.length < 2) return undefined;
     const last = sel(series[series.length - 1]);
     const prev = sel(series[series.length - 2]);
-    return prev > 0 ? round(((last - prev) / prev) * 100) : 0;
+    return prev > 0 ? round(((last - prev) / prev) * 100) : undefined;
   };
 
   return {
@@ -888,8 +893,10 @@ export interface CustomerPortalSummary {
   settlementRatePct: number;
   /** (outstanding / invoiced) * 365 */
   dsoDays: number;
-  /** current-bucket / outstanding * 100 */
-  onTimeSharePct: number;
+  /** current-bucket / outstanding * 100 — `undefined` when there's no invoicing history at
+   *  all (spec §4): a customer with zero invoices has no "on time" record to report, and
+   *  showing a green 100% would misleadingly read as a clean payment history. */
+  onTimeSharePct: number | undefined;
   creditLimit: number;
   /** outstanding / creditLimit * 100 */
   creditUtilizationPct: number;
@@ -987,7 +994,8 @@ export async function getCustomerPortalSummary(
     overdue,
     settlementRatePct: totalInvoiced > 0 ? round((totalPaid / totalInvoiced) * 100) : 0,
     dsoDays: totalInvoiced > 0 ? Math.round((outstanding / totalInvoiced) * 365) : 0,
-    onTimeSharePct: outstanding > 0 ? round((buckets.current / outstanding) * 100) : 100,
+    onTimeSharePct:
+      totalInvoiced === 0 ? undefined : outstanding > 0 ? round((buckets.current / outstanding) * 100) : 100,
     creditLimit,
     creditUtilizationPct: creditLimit > 0 ? round((outstanding / creditLimit) * 100) : 0,
     availableCredit: round(Math.max(creditLimit - outstanding, 0)),
