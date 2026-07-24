@@ -1,9 +1,11 @@
 import { type ReactNode } from 'react';
 import { Menu, type MenuProps } from 'antd';
 import {
+  AccountBookOutlined,
   ApartmentOutlined,
   AppstoreOutlined,
   BarChartOutlined,
+  ClusterOutlined,
   ContainerOutlined,
   CreditCardOutlined,
   CrownOutlined,
@@ -41,6 +43,8 @@ const ICONS: Record<string, ReactNode> = {
   shoppingcart: <ShoppingCartOutlined />,
   tags: <TagsOutlined />,
   gold: <GoldOutlined />,
+  cluster: <ClusterOutlined />,
+  accountbook: <AccountBookOutlined />,
 };
 
 const GROUP_ORDER: NavGroup[] = ['main', 'operations', 'finance', 'system'];

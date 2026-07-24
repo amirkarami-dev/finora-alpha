@@ -55,6 +55,10 @@ export interface Customer {
   customerType: CustomerType;
   active: boolean;
   createdAt: string;
+  /** Scopes the customer portal login to this customer. At most one customer may hold this
+   *  flag at a time (enforced in `createCustomer`/`updateCustomer`); cleared automatically
+   *  when the customer is deactivated (`setCustomerActive`). */
+  portalAccount?: boolean;
 }
 
 export interface Item {
@@ -275,3 +279,42 @@ export interface StatusBreakdown {
 export type Locale = 'en' | 'ar' | 'fa';
 export type ThemeMode = 'light' | 'dark';
 export type Role = 'CEO' | 'Manager' | 'Staff' | 'Customer';
+
+/* ------------------------------------------------------------------ *
+ * Cost Centres + Expense management — see
+ * docs/superpowers/specs/2026-07-24-empty-seed-and-expenses-design.md §5/§6.
+ * ------------------------------------------------------------------ */
+
+export interface CostCentre {
+  id: string;      // 'cc-0001', max-scanning
+  name: string;
+  code: string;     // trimmed + uppercased; immutable after create
+  description?: string;
+  active: boolean;
+}
+
+export type ExpenseType = 'INVOICE' | 'GENERAL' | 'CLAIM';
+export type ClaimType = 'SUPPLIER' | 'CUSTOMER';
+export type InvoiceExpenseCategory =
+  'FREIGHT' | 'CUSTOMS' | 'SHIPPING' | 'LOADING_UNLOADING' | 'INSURANCE' | 'PACKAGING';
+export type GeneralExpenseCategory =
+  'SALARY' | 'OFFICE' | 'RENT' | 'ELECTRICITY' | 'INTERNET' | 'FUEL' | 'MAINTENANCE';
+
+export interface Expense {
+  id: string;                 // 'exp-0001', max-scanning
+  title: string;
+  expenseType: ExpenseType;
+  category?: InvoiceExpenseCategory | GeneralExpenseCategory;  // none for CLAIM
+  claimType?: ClaimType;      // CLAIM only
+  partyId?: string;           // CLAIM only
+  invoiceId?: string;         // INVOICE + CLAIM — the document it was BOOKED on, not the chain leaf
+  amount: number;             // in `currency`
+  currency: Currency;
+  fxRate: number;             // AED per USD; 1 for USD
+  amountUSD: number;          // computed server-side
+  date: string;
+  costCentreId?: string;
+  description?: string;
+  status: 'ACTIVE' | 'CANCELLED';   // see api.ts's cancelExpense — no hard delete
+  createdAt: string;
+}

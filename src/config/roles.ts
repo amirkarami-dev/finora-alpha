@@ -13,14 +13,29 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'contracts',
     'partners',
     'containers',
+    'costCentres',
     'purchase',
     'sale',
     'warehouse',
     'payments',
+    'expenses',
     'reports',
     'settings',
   ],
-  Staff: ['dashboard', 'customers', 'contracts', 'partners', 'containers', 'purchase', 'sale', 'warehouse'],
+  // Cost Centres: Manager + Staff (spec §5). Expenses: Manager ONLY (spec §6.4) — `payments` is
+  // Manager-only too, not Manager+CEO, and CEO can't even reach invoice detail; a create/edit
+  // page would contradict an otherwise read-only role.
+  Staff: [
+    'dashboard',
+    'customers',
+    'contracts',
+    'partners',
+    'containers',
+    'costCentres',
+    'purchase',
+    'sale',
+    'warehouse',
+  ],
   Customer: ['portal'],
 };
 
@@ -38,8 +53,6 @@ export interface SeededUser {
   role: Role;
   name: string;
   avatarColor: string;
-  /** For Customer-role users: the customer record they may view. */
-  customerId?: string;
 }
 
 /** Seeded demo accounts (mock, non-production). */
@@ -47,7 +60,10 @@ export const USERS: SeededUser[] = [
   { email: 'ceo@finora.app', password: 'Ceo@2026', role: 'CEO', name: 'Khalid Al Mansoori', avatarColor: '#b87333' },
   { email: 'amir@finora.app', password: 'demo1234', role: 'Manager', name: 'Amir Karami', avatarColor: '#b87333' },
   { email: 'staff@finora.app', password: 'Staff@2026', role: 'Staff', name: 'Operations Desk', avatarColor: '#3b82f6' },
-  { email: 'portal@alcometal.ae', password: 'Alco@2026', role: 'Customer', name: 'Alco Metal Trading', avatarColor: '#b87333', customerId: 'cust-am' },
+  // Which customer this login sees is resolved dynamically via `Customer.portalAccount`
+  // (spec §3) — not hardcoded here, which used to double as an id-collision hole (a customer
+  // coded "AM" would otherwise inherit the portal scope; `api.ts` derives `id = cust-<code>`).
+  { email: 'portal@alcometal.ae', password: 'Alco@2026', role: 'Customer', name: 'Alco Metal Trading', avatarColor: '#b87333' },
 ];
 
 /** Coerce any persisted/legacy role value to a valid Role (defaults to Manager). */
@@ -76,9 +92,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'partners', route: ROUTES.partners, icon: 'apartment', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },
   { key: 'warehouse', route: ROUTES.warehouse, icon: 'gold', group: 'operations' },
+  { key: 'costCentres', route: ROUTES.costCentres, icon: 'cluster', group: 'operations' },
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
+  { key: 'expenses', route: ROUTES.expenses, icon: 'accountbook', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];

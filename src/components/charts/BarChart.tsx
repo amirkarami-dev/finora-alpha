@@ -8,6 +8,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Empty } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { CHART_PALETTE } from '@/config/constants';
 import { useChartTheme } from './chartTheme';
 
@@ -34,7 +36,18 @@ export function BarChart({
   formatter = (v) => String(v),
 }: Props) {
   const c = useChartTheme();
+  const { t } = useTranslation();
   const isVertical = layout === 'vertical';
+
+  // Empty when there's no data at all, OR every row is zero (spec §4) — a length-only guard
+  // would miss fixed-length-but-all-zero series (e.g. the portal's 5 aging rows).
+  if (data.length === 0 || data.every((d) => d.value === 0)) {
+    return (
+      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.noData')} />
+      </div>
+    );
+  }
 
   return (
     <ResponsiveContainer width="100%" height={height}>

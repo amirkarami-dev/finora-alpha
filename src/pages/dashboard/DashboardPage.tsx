@@ -33,7 +33,6 @@ import { BRAND, CHART_PALETTE, ROUTES } from '@/config/constants';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
-const TODAY = dayjs('2026-06-13');
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: BRAND.success,
@@ -85,9 +84,15 @@ export default function DashboardPage() {
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
-    if (!d || d.length < 2) return undefined;
-    const last = d[d.length - 1].collected;
-    const prev = d[d.length - 2].collected || 1;
+    // Compare the last two COMPLETE months — `d`'s final point is the current, still-partial
+    // month, so comparing against it manufactures a fake decline every day that isn't the 1st.
+    if (!d || d.length < 3) return undefined;
+    const last = d[d.length - 2].collected;
+    const prev = d[d.length - 3].collected;
+    // No prior-period (or current-period) collections to compare against — suppress the trend
+    // rather than let `0 || 1` manufacture a bogus red ↓100% (spec §4). StatCard hides the
+    // badge when `trend` is undefined.
+    if (prev === 0 || last === 0) return undefined;
     return Math.round(((last - prev) / prev) * 100);
   }, [cashflow.data]);
 
@@ -315,7 +320,7 @@ export default function DashboardPage() {
             <List
               size="small"
               dataSource={recentInvoices}
-              locale={{ emptyText: t('dashboard.noUpcoming') }}
+              locale={{ emptyText: t('dashboard.noInvoices') }}
               renderItem={(row) => (
                 <List.Item
                   onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}
@@ -341,7 +346,7 @@ export default function DashboardPage() {
               dataSource={upcomingDue}
               locale={{ emptyText: t('dashboard.noUpcoming') }}
               renderItem={(row) => {
-                const days = TODAY.startOf('day').diff(dayjs(row.dueDate).startOf('day'), 'day');
+                const days = row.overdueDays;
                 return (
                   <List.Item
                     onClick={() => navigate(`/app/invoices/${encodeURIComponent(row.id)}`)}

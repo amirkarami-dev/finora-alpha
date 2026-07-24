@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ExpenseType, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -22,6 +22,9 @@ export const qk = {
   aging: ['aging'] as const,
   executiveSummary: ['executiveSummary'] as const,
   customerPortal: (id: string) => ['customerPortal', id] as const,
+  /** The single customer resolved to the customer-portal login (spec §3), independent of
+   *  which id it currently is. */
+  portalCustomer: ['portalCustomer'] as const,
   receivableInvoices: (customerId?: string) => ['receivableInvoices', customerId ?? 'all'] as const,
   partners: ['partners'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
@@ -35,6 +38,11 @@ export const qk = {
   inventoryDocLines: (invoiceId: string) => ['inventoryDocLines', invoiceId] as const,
   invoiceOptions: ['invoiceOptions'] as const,
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
+  // ---- Cost centres + expenses (spec §5/§6) ----
+  costCentres: ['costCentres'] as const,
+  expenses: (type?: ExpenseType) => ['expenses', type ?? 'all'] as const,
+  expensesForInvoice: (invoiceId: string) => ['expensesForInvoice', invoiceId] as const,
+  expenseSourceInvoices: (side: InvoiceSide) => ['expenseSourceInvoices', side] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -84,6 +92,21 @@ export const useCustomerPortal = (id: string) =>
     queryKey: qk.customerPortal(id),
     queryFn: () => api.getCustomerPortalSummary(id),
     enabled: !!id,
+  });
+
+/**
+ * Resolves the customer this login's portal is scoped to (spec §3): the customer whose
+ * `portalAccount` flag is set AND is `active`. A query, not a synchronous read off the auth
+ * user — the flag lives on the customer record now, so it can move between customers (or be
+ * cleared entirely) without a re-login.
+ */
+export const usePortalCustomer = () =>
+  useQuery({
+    queryKey: qk.portalCustomer,
+    queryFn: async () => {
+      const customers = await api.getCustomers();
+      return customers.find((c) => c.portalAccount && c.active) ?? null;
+    },
   });
 
 export const useReceivableInvoices = (customerId?: string) =>
@@ -195,6 +218,10 @@ function useInvalidateCustomers() {
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
     qc.invalidateQueries({ queryKey: qk.executiveSummary });
+    // Unconditional: moving `portalAccount` from customer A to B (or deactivating the
+    // flagged customer) changes WHO the portal resolves to, not just the edited customer's
+    // own cache — a bare `if (id)` here would leave the other customer's link stale.
+    qc.invalidateQueries({ queryKey: qk.portalCustomer });
     if (id) {
       qc.invalidateQueries({ queryKey: qk.account(id) });
       qc.invalidateQueries({ queryKey: qk.customerPortal(id) });
@@ -516,5 +543,103 @@ export const useCreatePayment = () => {
         invoiceId: payment.invoiceId,
         customerId: payment.customerId,
       }),
+  });
+};
+
+/* ---------------------- Cost centres + expenses (spec §5/§6) --------------------- */
+
+export const useCostCentres = () =>
+  useQuery({ queryKey: qk.costCentres, queryFn: api.getCostCentres });
+
+function useInvalidateCostCentres() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: qk.costCentres });
+}
+
+export const useCreateCostCentre = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: (input: api.CostCentreInput) => api.createCostCentre(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateCostCentre = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.CostCentreInput }) =>
+      api.updateCostCentre(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetCostCentreActive = () => {
+  const invalidate = useInvalidateCostCentres();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setCostCentreActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+export const useExpenseSourceInvoices = (side: InvoiceSide) =>
+  useQuery({
+    queryKey: qk.expenseSourceInvoices(side),
+    queryFn: () => api.getExpenseSourceInvoices(side),
+  });
+
+export const useExpenses = (type?: ExpenseType) =>
+  useQuery({ queryKey: qk.expenses(type), queryFn: () => api.getExpenses(type) });
+
+export const useExpensesForInvoice = (invoiceId: string) =>
+  useQuery({
+    queryKey: qk.expensesForInvoice(invoiceId),
+    queryFn: () => api.getExpensesForInvoice(invoiceId),
+    enabled: !!invoiceId,
+  });
+
+/** An expense mutation changes its own tab's list (any `type`), the linked invoice's Expenses
+ *  card (chain-scoped, so keyed on invoiceId, not the invoice's own id), and — since amountUSD
+ *  feeds no dashboard aggregate today — nothing beyond those two. Bare `['expenses']` prefix
+ *  matches every type-scoped variant.
+ *
+ * Always invalidates the bare `['expensesForInvoice']` prefix — NOT conditionally on the passed
+ * `invoiceId`. Callers pass `expense.invoiceId` from the mutation RESULT, and the API strips
+ * `invoiceId` for GENERAL expenses: converting an Invoice-Expense/Claim into a General expense
+ * (or cancelling one) yields `undefined` for that argument, so a guard here would skip
+ * invalidating the invoice it used to be linked to — that invoice's Expenses card would keep
+ * listing and totalling it until `staleTime` (60s) lapses. TanStack matches query keys
+ * element-by-element, so this bare prefix also correctly covers every `['expensesForInvoice',
+ * id]` variant regardless of which specific id changed. */
+function useInvalidateExpenses() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['expenses'] });
+    qc.invalidateQueries({ queryKey: ['expensesForInvoice'] });
+  };
+}
+
+export const useCreateExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: (input: api.ExpenseInput) => api.createExpense(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ExpenseInput }) =>
+      api.updateExpense(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelExpense = () => {
+  const invalidate = useInvalidateExpenses();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelExpense(id),
+    onSuccess: invalidate,
   });
 };

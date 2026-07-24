@@ -1,22 +1,28 @@
 import dayjs from 'dayjs';
 import { db, persistDb } from '@/mock/data';
 import type {
+  ClaimType,
   Container,
   ContainerGood,
   ContainerStatus,
   Contract,
   ContractStatus,
   ContractType,
+  CostCentre,
   Currency,
   Customer,
   CustomerAccount,
   CustomerType,
   DashboardKpis,
+  Expense,
+  ExpenseType,
+  GeneralExpenseCategory,
   Incoterm,
   Invoice,
   InventoryDocument,
   InventoryDocumentItem,
   InventoryDocType,
+  InvoiceExpenseCategory,
   InvoiceItem,
   InvoiceSide,
   InvoiceStatus,
@@ -35,8 +41,9 @@ import { contractValue, invoiceItemAmount, invoiceItemUnitPrice } from '@/utils/
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
-/** Deterministic "today" pin for the mock dataset (matches `src/mock/data.ts`'s seed anchor). */
-const TODAY = dayjs('2026-06-13');
+/** Live "today" — the single clock every derived read (overdue badges, aging, cashflow
+ *  windows) is computed against (spec §2.5: previously pinned to a fixed seed date). */
+const TODAY = dayjs();
 
 /**
  * Lookup indexes over the mock `db`. They are rebuilt by `reindex()` after any
@@ -173,6 +180,9 @@ export interface ReceivableInvoiceRow {
   /** Settlement tri-state — reuses the OPEN/PAID/OVERDUE union + `CONTAINER_STATUS_COLOR`
    *  for the badge (spec §6). */
   displayStatus: ContainerStatus;
+  /** `TODAY − dueDate` in days (>0 = overdue, ≤0 = due today/future) — computed once here so
+   *  every UI surface reads the SAME clock instead of each page pinning its own "today". */
+  overdueDays: number;
 }
 
 /**
@@ -208,6 +218,7 @@ export async function getReceivableInvoices(customerId?: string): Promise<Receiv
         dueDate: dueDate.toISOString(),
         paidUSD,
         displayStatus,
+        overdueDays: TODAY.startOf('day').diff(dueDate.startOf('day'), 'day'),
       };
     })
     .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
@@ -462,8 +473,10 @@ export interface ExecutiveSummary {
   outstanding: number;
   overdue: number;
   collectionRate: number;
-  invoicedGrowthPct: number;
-  collectedGrowthPct: number;
+  /** `undefined` when there's no prior period to compare against, or the prior period was
+   *  zero (spec §4) — StatCard hides the trend badge rather than render a misleading ↑0%. */
+  invoicedGrowthPct: number | undefined;
+  collectedGrowthPct: number | undefined;
   activeContracts: number;
   customers: number;
 }
@@ -478,11 +491,18 @@ export async function getExecutiveSummary(): Promise<ExecutiveSummary> {
   const collectionRate = invoiced > 0 ? round((collected / invoiced) * 100) : 0;
 
   const series = await getCashflowSeries();
-  const growth = (sel: (p: TimeSeriesPoint) => number) => {
-    if (series.length < 2) return 0;
-    const last = sel(series[series.length - 1]);
-    const prev = sel(series[series.length - 2]);
-    return prev > 0 ? round(((last - prev) / prev) * 100) : 0;
+  // `undefined` (not 0) whenever there's no meaningful prior-period comparison — too few
+  // points, or either period is zero, which would otherwise divide-by-(0||1) or diff-against-0
+  // into a bogus ±100%/0% badge (spec §4). StatCard already hides the trend badge when `trend`
+  // is undefined. Compares the last two COMPLETE months — `series`'s final point is the
+  // current, still-partial month, so comparing against it manufactures a fake decline every
+  // day that isn't the 1st (proven: a sample dataset that merely aged from day 0 to day +20/+75
+  // reported ↓100%, purely from the partial-month denominator shrinking as the month rolled).
+  const growth = (sel: (p: TimeSeriesPoint) => number): number | undefined => {
+    if (series.length < 3) return undefined;
+    const last = sel(series[series.length - 2]);
+    const prev = sel(series[series.length - 3]);
+    return prev > 0 && last > 0 ? round(((last - prev) / prev) * 100) : undefined;
   };
 
   return {
@@ -758,6 +778,16 @@ export interface CustomerInput {
   country?: string;
   paymentTermsDays: number;
   creditLimit: number;
+  /** Scopes the customer portal login to this customer (spec §3). At most one customer may
+   *  hold the flag — setting it here clears it from whichever other customer had it. */
+  portalAccount?: boolean;
+}
+
+/** At most one customer may hold `portalAccount` (spec §3) — clear it from every other
+ *  customer before assigning it here. No-op when `next` is falsy. */
+function assignPortalAccount(customers: Customer[], keepId: string, next: boolean | undefined): void {
+  if (!next) return;
+  for (const c of customers) if (c.id !== keepId) c.portalAccount = undefined;
 }
 
 export async function createCustomer(input: CustomerInput): Promise<Customer> {
@@ -765,6 +795,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
   const code = input.code.trim().toUpperCase();
   const id = `cust-${code.toLowerCase()}`;
   if (db.customers.some((c) => c.id === id)) throw new Error('duplicate-code');
+  assignPortalAccount(db.customers, id, input.portalAccount);
   const customer: Customer = {
     id,
     name: input.name.trim(),
@@ -777,6 +808,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
     country: input.country?.trim() || undefined,
     paymentTermsDays: input.paymentTermsDays,
     creditLimit: input.creditLimit,
+    portalAccount: input.portalAccount || undefined,
     active: true,
     createdAt: dayjs().toISOString(),
   };
@@ -790,6 +822,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
   await delay(200);
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
+  assignPortalAccount(db.customers, id, input.portalAccount);
   // id, code, createdAt are immutable — mutate the rest in place.
   customer.name = input.name.trim();
   customer.defaultCurrency = input.defaultCurrency;
@@ -800,6 +833,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
   customer.country = input.country?.trim() || undefined;
   customer.paymentTermsDays = input.paymentTermsDays;
   customer.creditLimit = input.creditLimit;
+  customer.portalAccount = input.portalAccount || undefined;
   reindex();
   persistDb();
   return customer;
@@ -810,6 +844,9 @@ export async function setCustomerActive(id: string, active: boolean): Promise<Cu
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
   customer.active = active;
+  // A deactivated customer can't be a live portal login — the flag would otherwise point the
+  // portal at an inactive record with no way to notice (spec §3).
+  if (!active) customer.portalAccount = undefined;
   persistDb();
   return customer;
 }
@@ -866,8 +903,10 @@ export interface CustomerPortalSummary {
   settlementRatePct: number;
   /** (outstanding / invoiced) * 365 */
   dsoDays: number;
-  /** current-bucket / outstanding * 100 */
-  onTimeSharePct: number;
+  /** current-bucket / outstanding * 100 — `undefined` when there's no invoicing history at
+   *  all (spec §4): a customer with zero invoices has no "on time" record to report, and
+   *  showing a green 100% would misleadingly read as a clean payment history. */
+  onTimeSharePct: number | undefined;
   creditLimit: number;
   /** outstanding / creditLimit * 100 */
   creditUtilizationPct: number;
@@ -886,10 +925,12 @@ export interface CustomerPortalSummary {
  */
 export async function getCustomerPortalSummary(
   customerId: string,
-): Promise<CustomerPortalSummary | undefined> {
+): Promise<CustomerPortalSummary | null> {
   await delay(200);
   const account = computeAccounts().find((a) => a.id === customerId);
-  if (!account) return undefined;
+  // `null`, not `undefined` — TanStack Query rejects `undefined` query data (console error);
+  // `null` is a valid "resolved to nothing" result the portal page can render a 403 for.
+  if (!account) return null;
 
   const myContracts = buildContractRows().filter((c) => c.customerId === customerId);
 
@@ -963,7 +1004,8 @@ export async function getCustomerPortalSummary(
     overdue,
     settlementRatePct: totalInvoiced > 0 ? round((totalPaid / totalInvoiced) * 100) : 0,
     dsoDays: totalInvoiced > 0 ? Math.round((outstanding / totalInvoiced) * 365) : 0,
-    onTimeSharePct: outstanding > 0 ? round((buckets.current / outstanding) * 100) : 100,
+    onTimeSharePct:
+      totalInvoiced === 0 ? undefined : outstanding > 0 ? round((buckets.current / outstanding) * 100) : 100,
     creditLimit,
     creditUtilizationPct: creditLimit > 0 ? round((outstanding / creditLimit) * 100) : 0,
     availableCredit: round(Math.max(creditLimit - outstanding, 0)),
@@ -2254,6 +2296,286 @@ export async function setWarehouseActive(id: string, active: boolean): Promise<W
   return warehouse;
 }
 
+/* -------------------------- Cost Centre CRUD --------------------------- *
+ * Mirrors the Warehouse master exactly (spec §5): code trimmed+uppercased and immutable after
+ * create, 'duplicate-code' guard, active/inactive toggle. Inactive centres are excluded from
+ * pickers but retained on already-saved expenses (the picker filters client-side; the id itself
+ * is never invalidated here).
+ * ------------------------------------------------------------------ */
+
+export interface CostCentreInput {
+  name: string;
+  code: string;
+  description?: string;
+}
+
+function nextCostCentreId(): string {
+  let max = 0;
+  for (const cc of db.costCentres) {
+    const match = /^cc-(\d+)$/.exec(cc.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `cc-${String(max + 1).padStart(4, '0')}`;
+}
+
+export async function getCostCentres(): Promise<CostCentre[]> {
+  await delay(120);
+  return [...db.costCentres];
+}
+
+export async function createCostCentre(input: CostCentreInput): Promise<CostCentre> {
+  await delay(180);
+  const code = input.code.trim().toUpperCase();
+  if (db.costCentres.some((cc) => cc.code === code)) throw new Error('duplicate-code');
+  const costCentre: CostCentre = {
+    id: nextCostCentreId(),
+    name: input.name.trim(),
+    code,
+    description: input.description?.trim() || undefined,
+    active: true,
+  };
+  db.costCentres.push(costCentre);
+  persistDb();
+  return costCentre;
+}
+
+export async function updateCostCentre(id: string, input: CostCentreInput): Promise<CostCentre> {
+  await delay(160);
+  const costCentre = db.costCentres.find((cc) => cc.id === id);
+  if (!costCentre) throw new Error(`Cost centre ${id} not found`);
+  costCentre.name = input.name.trim(); // code immutable on edit
+  costCentre.description = input.description?.trim() || undefined;
+  persistDb();
+  return costCentre;
+}
+
+export async function setCostCentreActive(id: string, active: boolean): Promise<CostCentre> {
+  await delay(140);
+  const costCentre = db.costCentres.find((cc) => cc.id === id);
+  if (!costCentre) throw new Error(`Cost centre ${id} not found`);
+  costCentre.active = active;
+  persistDb();
+  return costCentre;
+}
+
+/* ---------------------------- Expense module ---------------------------- *
+ * Invoice Expense / General Expense / Claim (Supplier/Claim) — see spec §6.
+ * No hard delete: `cancelExpense` sets status = 'CANCELLED'; cancelled rows are excluded from
+ * every total/listing that matters (getExpenses still returns them so the UI can show them
+ * struck-through/tagged, but getExpensesForInvoice excludes them per spec).
+ * ------------------------------------------------------------------ */
+
+export interface ExpenseSourceInvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  invoiceDate: string;
+  customerId: string;
+  customerName: string;
+}
+
+/** Chain-leaf, CONFIRMED, priced documents of `side` — the ONLY universe an expense/claim may
+ *  attach to (spec §6.2). Never use `getTradeInvoices`/`useTradeInvoices` for this: it returns
+ *  DRAFT, CANCELLED and unpriced order documents unfiltered. */
+export async function getExpenseSourceInvoices(side: InvoiceSide): Promise<ExpenseSourceInvoiceRow[]> {
+  await delay(140);
+  return chainLeafDocs(side)
+    .filter((inv) => isPricedType(inv.invoiceType))
+    .map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceType: inv.invoiceType,
+      invoiceDate: inv.invoiceDate,
+      customerId: inv.customerId,
+      customerName: customerById.get(inv.customerId)?.name ?? '—',
+    }))
+    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
+}
+
+export async function getExpenses(type?: ExpenseType): Promise<Expense[]> {
+  await delay(140);
+  return db.expenses
+    .filter((e) => !type || e.expenseType === type)
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+/**
+ * Resolves over the invoice's full conversion CHAIN (spec §6.2, CRITICAL) — mirrors
+ * `getTradeInvoice`'s payment aggregation exactly: an expense booked on a provisional must not
+ * vanish the instant that provisional converts to a final invoice, since the final (not the
+ * provisional) becomes the new chain leaf and the two never share an id. Excludes CANCELLED
+ * expenses from the total.
+ */
+export async function getExpensesForInvoice(invoiceId: string): Promise<Expense[]> {
+  await delay(140);
+  const invoice = findInvoiceOrThrow(invoiceId);
+  // Seed with the queried document itself: `invoiceChain` walks up to the root then back down
+  // via `findSuccessor`, which SKIPS cancelled documents — so a CANCELLED document that has a
+  // parent is not a member of its own chain per that walk, and its own expenses would otherwise
+  // disappear from its page the moment it's cancelled, while still showing on the Expenses page.
+  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
+  return db.expenses
+    .filter((e) => e.invoiceId && chainIds.has(e.invoiceId) && e.status !== 'CANCELLED')
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+function nextExpenseId(): string {
+  let max = 0;
+  for (const e of db.expenses) {
+    const match = /^exp-(\d+)$/.exec(e.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `exp-${String(max + 1).padStart(4, '0')}`;
+}
+
+export interface ExpenseInput {
+  title: string;
+  expenseType: ExpenseType;
+  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
+  claimType?: ClaimType;
+  partyId?: string;
+  invoiceId?: string;
+  amount: number;
+  currency: Currency;
+  fxRate: number;
+  date: string;
+  costCentreId?: string;
+  description?: string;
+}
+
+/**
+ * Guards IN ORDER (spec §6.2): 'title-required' → 'invalid-amount' → 'invalid-fx' →
+ * 'category-required' (INVOICE/GENERAL) → 'invoice-required' (INVOICE/CLAIM) →
+ * 'invoice-not-found' → 'invoice-not-confirmed' (must be a chain-leaf CONFIRMED priced document)
+ * → 'claim-type-required' (CLAIM) → 'party-required' (CLAIM) → 'party-invoice-mismatch' (the
+ * invoice must belong to the chosen party AND match the side: SUPPLIER→PURCHASE, CUSTOMER→SALE).
+ *
+ * `currentInvoiceId` — the expense's OWN `invoiceId` as already persisted (booked-on document,
+ * not the chain leaf; see `getExpensesForInvoice`) — skips the chain-leaf-CONFIRMED check when
+ * the input re-submits that same id unchanged. Without this, editing so much as the title of an
+ * expense booked on a document that has since been converted throws forever: the booked document
+ * is no longer a chain leaf, but the expense was never meant to require re-pointing at one just
+ * to be edited. A genuinely different `invoiceId` still goes through the full check.
+ *
+ * Returns the fields the SERVER decided to keep, normalized rather than trusting the client
+ * (mirrors `createInventoryDocument`'s refusal to trust client-supplied product/ceilings):
+ * `category` is stripped for CLAIM; `claimType`/`partyId` are stripped for INVOICE/GENERAL;
+ * `invoiceId` is stripped for GENERAL.
+ */
+function validateAndNormalizeExpense(
+  input: ExpenseInput,
+  currentInvoiceId?: string,
+): {
+  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
+  claimType?: ClaimType;
+  partyId?: string;
+  invoiceId?: string;
+  invoice?: Invoice;
+} {
+  if (!input.title.trim()) throw new Error('title-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+  if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
+
+  const isInvoiceType = input.expenseType === 'INVOICE';
+  const isGeneralType = input.expenseType === 'GENERAL';
+  const isClaimType = input.expenseType === 'CLAIM';
+
+  if ((isInvoiceType || isGeneralType) && !input.category) throw new Error('category-required');
+  if ((isInvoiceType || isClaimType) && !input.invoiceId) throw new Error('invoice-required');
+
+  let invoice: Invoice | undefined;
+  if (isInvoiceType || isClaimType) {
+    invoice = findInvoice(input.invoiceId!);
+    if (!invoice) throw new Error('invoice-not-found');
+    const isUnchangedBookedInvoice = currentInvoiceId !== undefined && input.invoiceId === currentInvoiceId;
+    if (!isUnchangedBookedInvoice) {
+      const side = invoiceSide(invoice.invoiceType);
+      const isChainLeafConfirmed =
+        isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice!.id);
+      if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+    }
+  }
+
+  if (isClaimType) {
+    if (input.claimType !== 'SUPPLIER' && input.claimType !== 'CUSTOMER') throw new Error('claim-type-required');
+    if (!input.partyId) throw new Error('party-required');
+    const expectedSide: InvoiceSide = input.claimType === 'SUPPLIER' ? 'PURCHASE' : 'SALE';
+    if (invoice!.customerId !== input.partyId || invoiceSide(invoice!.invoiceType) !== expectedSide) {
+      throw new Error('party-invoice-mismatch');
+    }
+  }
+
+  return {
+    category: isClaimType ? undefined : input.category,
+    claimType: isClaimType ? input.claimType : undefined,
+    partyId: isClaimType ? input.partyId : undefined,
+    invoiceId: isGeneralType ? undefined : input.invoiceId,
+    invoice,
+  };
+}
+
+export async function createExpense(input: ExpenseInput): Promise<Expense> {
+  await delay(200);
+  const normalized = validateAndNormalizeExpense(input);
+  // amountUSD computed ONCE server-side with `round` (2dp) — `round3` is for quantities.
+  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
+  const expense: Expense = {
+    id: nextExpenseId(),
+    title: input.title.trim(),
+    expenseType: input.expenseType,
+    category: normalized.category,
+    claimType: normalized.claimType,
+    partyId: normalized.partyId,
+    invoiceId: normalized.invoiceId,
+    amount: input.amount,
+    currency: input.currency,
+    fxRate: input.fxRate,
+    amountUSD,
+    date: input.date,
+    costCentreId: input.costCentreId,
+    description: input.description?.trim() || undefined,
+    status: 'ACTIVE',
+    createdAt: dayjs().toISOString(),
+  };
+  db.expenses.push(expense);
+  persistDb();
+  return expense;
+}
+
+export async function updateExpense(id: string, input: ExpenseInput): Promise<Expense> {
+  await delay(200);
+  const expense = db.expenses.find((e) => e.id === id);
+  if (!expense) throw new Error(`Expense ${id} not found`);
+  const normalized = validateAndNormalizeExpense(input, expense.invoiceId);
+  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
+  expense.title = input.title.trim();
+  expense.expenseType = input.expenseType;
+  expense.category = normalized.category;
+  expense.claimType = normalized.claimType;
+  expense.partyId = normalized.partyId;
+  expense.invoiceId = normalized.invoiceId;
+  expense.amount = input.amount;
+  expense.currency = input.currency;
+  expense.fxRate = input.fxRate;
+  expense.amountUSD = amountUSD;
+  expense.date = input.date;
+  expense.costCentreId = input.costCentreId;
+  expense.description = input.description?.trim() || undefined;
+  persistDb();
+  return expense;
+}
+
+/** No hard delete (spec §6.2) — sets `status = 'CANCELLED'`; cancelled expenses are excluded
+ *  from `getExpensesForInvoice` and every UI total. */
+export async function cancelExpense(id: string): Promise<Expense> {
+  await delay(160);
+  const expense = db.expenses.find((e) => e.id === id);
+  if (!expense) throw new Error(`Expense ${id} not found`);
+  expense.status = 'CANCELLED';
+  persistDb();
+  return expense;
+}
+
 /* --------------------------- Payment mutations ------------------------- */
 
 export interface PaymentInput {
@@ -2282,6 +2604,12 @@ function nextPaymentId(): string {
  */
 export async function createPayment(input: PaymentInput): Promise<Payment> {
   await delay(180);
+  // Guard the same unguarded `amount / fxRate` division `createExpense` closes (spec §6.2) — an
+  // AED payment recorded with fxRate 0 (or NaN/negative) would otherwise silently produce an
+  // Infinity/NaN amountUSD that then poisons every aggregate that sums payments.
+  if (input.currency !== 'USD' && (!Number.isFinite(input.fxRate) || input.fxRate <= 0)) {
+    throw new Error('invalid-fx');
+  }
   const linkedInvoice = input.invoiceId ? findInvoice(input.invoiceId) : undefined;
   const direction: 'IN' | 'OUT' =
     linkedInvoice && invoiceSide(linkedInvoice.invoiceType) === 'PURCHASE' ? 'OUT' : 'IN';

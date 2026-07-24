@@ -1,4 +1,4 @@
-import { App, Col, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
+import { App, Col, Form, Input, InputNumber, Modal, Row, Select, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useCreateCustomer, useUpdateCustomer } from '@/services/queries';
 import { CURRENCIES } from '@/config/constants';
@@ -18,6 +18,7 @@ interface CustomerFormValues {
   country?: string;
   paymentTermsDays: number;
   creditLimit: number;
+  portalAccount?: boolean;
 }
 
 interface CustomerFormModalProps {
@@ -47,8 +48,9 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
         country: customer.country,
         paymentTermsDays: customer.paymentTermsDays,
         creditLimit: customer.creditLimit,
+        portalAccount: customer.portalAccount ?? false,
       }
-    : { defaultCurrency: 'AED', customerType: 'BUYER', paymentTermsDays: 30, creditLimit: 0 };
+    : { defaultCurrency: 'AED', customerType: 'BUYER', paymentTermsDays: 30, creditLimit: 0, portalAccount: false };
 
   const submit = async () => {
     let values: CustomerFormValues;
@@ -68,6 +70,7 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
       country: values.country?.trim() || undefined,
       paymentTermsDays: values.paymentTermsDays,
       creditLimit: values.creditLimit,
+      portalAccount: values.portalAccount ?? false,
     };
     try {
       if (isEdit && customer) {
@@ -157,6 +160,16 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
           <Col xs={24} sm={12}>
             <Form.Item name="creditLimit" label={t('customers.creditLimit')} rules={[{ required: true, message: t('common.required') }]}>
               <InputNumber min={0} step={1000} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <Form.Item
+              name="portalAccount"
+              label={t('customers.portalAccount')}
+              valuePropName="checked"
+              extra={t('customers.portalAccountHelp')}
+            >
+              <Switch />
             </Form.Item>
           </Col>
         </Row>

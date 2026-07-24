@@ -14,7 +14,8 @@ import {
   Typography,
 } from 'antd';
 import { BgColorsOutlined, GlobalOutlined, MoonOutlined, SaveOutlined, SunOutlined } from '@ant-design/icons';
-import { resetDb } from '@/mock/data';
+import { db, persistDb, resetDb } from '@/mock/data';
+import { buildSampleData } from '@/mock/sampleData';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useUiStore } from '@/store/useUiStore';
@@ -60,8 +61,19 @@ export default function SettingsPage() {
 
   const save = () => message.success(t('settings.saved'));
 
-  // Clears persisted data and reloads → the deterministic seed regenerates.
+  // Wipes all persisted data and reloads → the app starts EMPTY again (the demo dataset lives
+  // behind "Load sample data" below, not in the seed itself).
   const resetData = () => resetDb();
+
+  // Overwrites the current (possibly empty) db with a fresh demo dataset centred on today,
+  // then reloads. The reload is required, not cosmetic: api.ts holds module-level
+  // customerById/contractById/itemProduct indexes that would be stale against the swapped
+  // arrays otherwise.
+  const loadSampleData = () => {
+    Object.assign(db, buildSampleData());
+    persistDb();
+    window.location.reload();
+  };
 
   return (
     <div className="fade-in" style={{ maxWidth: 880, margin: '0 auto' }}>
@@ -137,6 +149,17 @@ export default function SettingsPage() {
       <Card variant="borderless" style={{ borderColor: 'rgba(229,72,77,0.3)' }}>
         <Title level={5} type="danger" style={{ marginTop: 0 }}>{t('settings.danger')}</Title>
         <Divider style={{ margin: '8px 0 12px' }} />
+        <SettingRow title={t('settings.loadSample')} description={t('settings.loadSampleDesc')}>
+          <Popconfirm
+            title={t('settings.loadSample')}
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
+            onConfirm={loadSampleData}
+          >
+            <Button>{t('settings.loadSample')}</Button>
+          </Popconfirm>
+        </SettingRow>
+        <Divider style={{ margin: 0 }} />
         <SettingRow title={t('settings.resetData')} description={t('settings.resetDataDesc')}>
           <Popconfirm title={t('settings.resetData')} okText={t('common.confirm')} cancelText={t('common.cancel')} onConfirm={resetData}>
             <Button danger>{t('settings.resetData')}</Button>

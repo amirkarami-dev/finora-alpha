@@ -9,8 +9,6 @@ export interface AuthUser {
   email: string;
   role: Role;
   avatarColor: string;
-  /** Set only for Customer-role logins — scopes the portal to one customer. */
-  customerId?: string;
 }
 
 interface AuthState {
@@ -43,7 +41,6 @@ export const useAuthStore = create<AuthState>()(
             email: seeded.email,
             role: seeded.role,
             avatarColor: seeded.avatarColor,
-            customerId: seeded.customerId,
           };
           set({ user, token: 'demo-token', isAuthenticated: true });
           return user;
@@ -61,6 +58,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'finora-auth',
+      version: 1,
+      // Without this, a version mismatch with no `migrate` logs a console.error and DROPS the
+      // persisted state entirely (zustand's default behaviour) — which fails `npm run smoke`
+      // (screenshots redirect to /login, and the console.error trips the failure check).
+      // Migrating to a logged-out state is the safe default for an auth store.
+      migrate: () => ({ user: null, token: null, isAuthenticated: false }),
       // Coerce any legacy/persisted role (e.g. 'Finance Manager') to a valid Role.
       merge: (persisted, current) => {
         const merged = { ...current, ...(persisted as Partial<AuthState>) } as AuthState;

@@ -297,32 +297,36 @@ export default function WarehousePage() {
             <Typography.Title level={5} style={{ marginBottom: 12 }}>
               {t('warehouse.stockTitle')}
             </Typography.Title>
-            <Row gutter={[16, 16]}>
-              {(warehouses ?? []).map((w) => {
-                const rows = stockByWarehouse.get(w.id) ?? [];
-                return (
-                  <Col xs={24} sm={12} lg={8} key={w.id}>
-                    <Card size="small" title={w.name} loading={stockLoading}>
-                      {rows.length === 0 ? (
-                        <Text type="secondary">{t('warehouse.noStock')}</Text>
-                      ) : (
-                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                          {rows.map((r) => (
-                            <div
-                              key={r.productKey}
-                              style={{ display: 'flex', justifyContent: 'space-between' }}
-                            >
-                              <Text>{r.product}</Text>
-                              <Text strong>{formatMt(r.mt)}</Text>
-                            </div>
-                          ))}
-                        </Space>
-                      )}
-                    </Card>
-                  </Col>
-                );
-              })}
-            </Row>
+            {!warehousesLoading && (warehouses ?? []).length === 0 ? (
+              <Empty description={t('common.noData')} />
+            ) : (
+              <Row gutter={[16, 16]}>
+                {(warehouses ?? []).map((w) => {
+                  const rows = stockByWarehouse.get(w.id) ?? [];
+                  return (
+                    <Col xs={24} sm={12} lg={8} key={w.id}>
+                      <Card size="small" title={w.name} loading={stockLoading}>
+                        {rows.length === 0 ? (
+                          <Text type="secondary">{t('warehouse.noStock')}</Text>
+                        ) : (
+                          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                            {rows.map((r) => (
+                              <div
+                                key={r.productKey}
+                                style={{ display: 'flex', justifyContent: 'space-between' }}
+                              >
+                                <Text>{r.product}</Text>
+                                <Text strong>{formatMt(r.mt)}</Text>
+                              </div>
+                            ))}
+                          </Space>
+                        )}
+                      </Card>
+                    </Col>
+                  );
+                })}
+              </Row>
+            )}
           </div>
         )}
 

@@ -22,7 +22,6 @@ import {
   WalletOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
 import { Money } from '@/components/common/Money';
@@ -30,14 +29,12 @@ import { StatusTag, PaymentMethodTag } from '@/components/common/StatusTag';
 import { BarChart } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { CashflowChart } from '@/components/charts/CashflowChart';
-import { useCustomerPortal } from '@/services/queries';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useCustomerPortal, usePortalCustomer } from '@/services/queries';
 import type { ContractRow, PaymentRow, ReceivableInvoiceRow } from '@/services/api';
 import { formatCompactCurrency, formatDate, formatMt, formatPercent } from '@/utils/format';
 import { BRAND } from '@/config/constants';
 
 const { Text } = Typography;
-const PINNED_TODAY = dayjs('2026-06-13');
 
 function ChartCard({
   title,
@@ -66,19 +63,27 @@ function ChartCard({
 export default function CustomerPortalPage() {
   const { t } = useTranslation();
   const { token } = theme.useToken();
-  const customerId = useAuthStore((s) => s.user?.customerId) ?? '';
-  const { data, isLoading } = useCustomerPortal(customerId);
+  // Resolution is a query, not a synchronous read off the auth user (spec §3) — the portal
+  // scope now lives on the customer record (`portalAccount`), which can change (or vanish)
+  // without a re-login.
+  const { data: portalCustomer, isLoading: isResolving } = usePortalCustomer();
+  const resolvedId = portalCustomer?.id;
+  const { data, isLoading: isLoadingSummary } = useCustomerPortal(resolvedId ?? '');
+  const isLoading = isResolving || isLoadingSummary;
 
-  if (!customerId) {
+  // Never the 404: no link at all, or a dangling one (flagged customer no longer resolves to
+  // a summary — e.g. deactivated between resolution and this render), both render the same
+  // translated 403.
+  const noAccess = (!isResolving && !resolvedId) || (!!resolvedId && !isLoadingSummary && !data);
+  if (noAccess) {
     return <Result status="403" title={t('portal.noAccessTitle')} subTitle={t('portal.noAccess')} />;
   }
-  if (!isLoading && !data) {
-    return (
-      <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />
-    );
-  }
 
-  const standingGood = (data?.overdue ?? 0) <= 0;
+  // No invoicing history at all (spec §4) → the standing badge and on-time stat must render
+  // neutrally rather than a green "Good standing"/100% that reads as an earned clean record.
+  const hasHistory = (data?.totalInvoiced ?? 0) > 0;
+  const standingGood = hasHistory && (data?.overdue ?? 0) <= 0;
+  const onTimeSharePct = data?.onTimeSharePct;
   const utilization = Math.round(data?.creditUtilizationPct ?? 0);
   const utilColor =
     utilization > 90 ? token.colorError : utilization > 75 ? BRAND.warning : token.colorPrimary;
@@ -112,13 +117,10 @@ export default function CustomerPortalPage() {
     { title: t('portal.dueDate'), dataIndex: 'dueDate', render: (v) => formatDate(v) },
     {
       title: t('portal.daysOverdue'),
-      dataIndex: 'dueDate',
+      dataIndex: 'overdueDays',
       key: 'overdue',
       align: 'right',
-      render: (v: string) => {
-        const days = PINNED_TODAY.startOf('day').diff(dayjs(v).startOf('day'), 'day');
-        return days > 0 ? <Text type="danger">{days}</Text> : <Text type="secondary">—</Text>;
-      },
+      render: (days: number) => (days > 0 ? <Text type="danger">{days}</Text> : <Text type="secondary">—</Text>),
     },
     {
       title: t('invoices.status'),
@@ -204,10 +206,14 @@ export default function CustomerPortalPage() {
         extra={
           !isLoading && data ? (
             <Tag
-              color={standingGood ? 'success' : 'error'}
+              color={!hasHistory ? 'default' : standingGood ? 'success' : 'error'}
               style={{ borderRadius: 6, fontWeight: 600, padding: '4px 12px' }}
             >
-              {standingGood ? t('portal.standingGood') : t('portal.standingAttention')}
+              {!hasHistory
+                ? t('portal.standingNone')
+                : standingGood
+                  ? t('portal.standingGood')
+                  : t('portal.standingAttention')}
             </Tag>
           ) : undefined
         }
@@ -286,10 +292,13 @@ export default function CustomerPortalPage() {
           <Card variant="borderless" className="soft-card" style={{ height: '100%' }} loading={isLoading}>
             <Statistic
               title={t('portal.onTimeShare')}
-              value={data?.onTimeSharePct ?? 0}
-              precision={0}
-              suffix="%"
-              valueStyle={{ fontWeight: 700, color: token.colorSuccess }}
+              value={onTimeSharePct ?? '—'}
+              precision={onTimeSharePct !== undefined ? 0 : undefined}
+              suffix={onTimeSharePct !== undefined ? '%' : undefined}
+              valueStyle={{
+                fontWeight: 700,
+                color: onTimeSharePct !== undefined ? token.colorSuccess : token.colorTextTertiary,
+              }}
             />
             <Text type="secondary" style={{ fontSize: 12 }}>
               {formatCompactCurrency(data?.totalPaid ?? 0)} {t('invoices.totalPaid').toLowerCase()}

@@ -28,17 +28,6 @@ export function contractRemainingMt(contract: Contract): number {
   return contract.items.reduce((sum, it) => sum + it.remainingMt, 0);
 }
 
-/**
- * Historical shipment-invoice value: lmePrice already net of % in the workbook + premium.
- * Used only by the seed's `RawContainerSeed` pass (`src/mock/data.ts`) — containers
- * themselves carry no money since the schema-v3 logistics reshape (see spec §2/§3).
- */
-export function containerInvoice(
-  container: { quantityMt: number; lmePrice: number; premium: number },
-): number {
-  return (container.lmePrice + container.premium) * container.quantityMt;
-}
-
 export function aedToUsd(aed: number, fxRate: number): number {
   return fxRate > 0 ? aed / fxRate : 0;
 }
