@@ -400,6 +400,7 @@
     "noItems": "پیش از تأیید حداقل یک قلم اضافه کنید",
     "missingLmePrice": "پیش از تأیید، قیمت LME را برای همهٔ اقلام شناور تعیین کنید",
     "qtyExceedsRemaining": "مقدار از باقیمانده فاکتورنشدهٔ قرارداد بیشتر است",
+    "qtyExceedsContract": "{{product}}: مقدار قرارداد {{contract}}، فاکتورشدهٔ قبلی {{invoiced}}، باقیمانده {{remaining}} — درخواستی {{requested}}",
     "confirmed": "سند تأیید شد",
     "uninvoicedAlertTitle": "مقدار فاکتورنشدهٔ باقی‌مانده در این قرارداد",
     "uninvoicedMt": "{{product}} — {{remaining}} فاکتورنشده",

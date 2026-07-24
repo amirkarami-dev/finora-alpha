@@ -3,6 +3,7 @@ import { App, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Typ
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
 import { buildContainerOptions, ltrTruncateStyle, withSelectedContainer } from './containerOptions';
+import { qtyExceedsContractParams } from './qtyExceedsContract';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
@@ -23,7 +24,7 @@ interface EditLineModalProps {
   side: InvoiceSide;
 }
 
-/** DRAFT-only line editor: quantity (capped at uninvoiced + this line's own claim), container, discount, desc. */
+/** DRAFT-only line editor: quantity (capped at uninvoiced, excluding this doc's other lines for the same good), container, discount, desc. */
 export function EditLineModal({ open, onClose, invoice, item, side }: EditLineModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -53,9 +54,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const otherLinesQty = invoice.items
     .filter((it) => it.id !== item.id && it.contractItemId === item.contractItemId)
     .reduce((s, it) => s + it.quantityMt, 0);
-  const maxQty = remainingRow
-    ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) + item.quantityMt
-    : item.quantityMt;
+  const maxQty = remainingRow ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) : item.quantityMt;
 
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
@@ -86,8 +85,10 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
       onClose();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
-      if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
-      else message.error(t('common.saveFailed'));
+      if (code === 'qty-exceeds-remaining') {
+        const params = qtyExceedsContractParams(err);
+        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else message.error(t('common.saveFailed'));
     }
   };
 

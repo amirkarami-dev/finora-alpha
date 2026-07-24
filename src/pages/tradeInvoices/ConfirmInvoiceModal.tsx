@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
 import { formatMt } from '@/utils/format';
 import { useConfirmInvoice } from '@/services/queries';
+import { qtyExceedsContractParams } from './qtyExceedsContract';
 import type { Invoice } from '@/types';
 
 interface ConfirmInvoiceModalProps {
@@ -34,8 +35,10 @@ export function ConfirmInvoiceModal({ open, onClose, invoice, onConfirmed }: Con
       else if (code === 'missing-lme-price') message.error(t('tradeInvoices.missingLmePrice'));
       else if (code === 'missing-container') {
         message.error(t('tradeInvoices.missingContainer', { products: (error.products ?? []).join(', ') }));
-      } else if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
-      else message.error(t('common.saveFailed'));
+      } else if (code === 'qty-exceeds-remaining') {
+        const params = qtyExceedsContractParams(error);
+        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else message.error(t('common.saveFailed'));
     }
   };
 

@@ -400,6 +400,7 @@
     "noItems": "Add at least one item before confirming",
     "missingLmePrice": "Set the LME price for all floating-price lines before confirming",
     "qtyExceedsRemaining": "Quantity exceeds the contract's remaining uninvoiced amount",
+    "qtyExceedsContract": "{{product}}: contract {{contract}}, already invoiced {{invoiced}}, remaining {{remaining}} — requested {{requested}}",
     "confirmed": "Document confirmed",
     "uninvoicedAlertTitle": "Uninvoiced quantity remaining on this contract",
     "uninvoicedMt": "{{product}} — {{remaining}} uninvoiced",

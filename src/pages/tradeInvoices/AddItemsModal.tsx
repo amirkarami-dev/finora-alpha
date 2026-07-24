@@ -5,6 +5,7 @@ import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@
 import type { InvoiceItemInput } from '@/services/api';
 import { formatMt } from '@/utils/format';
 import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
+import { qtyExceedsContractParams } from './qtyExceedsContract';
 import type { Invoice, InvoiceSide } from '@/types';
 
 const { Text } = Typography;
@@ -125,8 +126,10 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       onClose();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
-      if (code === 'qty-exceeds-remaining') message.error(t('tradeInvoices.qtyExceedsRemaining'));
-      else message.error(t('common.saveFailed'));
+      if (code === 'qty-exceeds-remaining') {
+        const params = qtyExceedsContractParams(err);
+        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else message.error(t('common.saveFailed'));
     }
   };
 
