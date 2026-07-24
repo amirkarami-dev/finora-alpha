@@ -601,12 +601,21 @@ export const useExpensesForInvoice = (invoiceId: string) =>
 /** An expense mutation changes its own tab's list (any `type`), the linked invoice's Expenses
  *  card (chain-scoped, so keyed on invoiceId, not the invoice's own id), and — since amountUSD
  *  feeds no dashboard aggregate today — nothing beyond those two. Bare `['expenses']` prefix
- *  matches every type-scoped variant. */
+ *  matches every type-scoped variant.
+ *
+ * Always invalidates the bare `['expensesForInvoice']` prefix — NOT conditionally on the passed
+ * `invoiceId`. Callers pass `expense.invoiceId` from the mutation RESULT, and the API strips
+ * `invoiceId` for GENERAL expenses: converting an Invoice-Expense/Claim into a General expense
+ * (or cancelling one) yields `undefined` for that argument, so a guard here would skip
+ * invalidating the invoice it used to be linked to — that invoice's Expenses card would keep
+ * listing and totalling it until `staleTime` (60s) lapses. TanStack matches query keys
+ * element-by-element, so this bare prefix also correctly covers every `['expensesForInvoice',
+ * id]` variant regardless of which specific id changed. */
 function useInvalidateExpenses() {
   const qc = useQueryClient();
-  return (invoiceId?: string) => {
+  return () => {
     qc.invalidateQueries({ queryKey: ['expenses'] });
-    if (invoiceId) qc.invalidateQueries({ queryKey: ['expensesForInvoice'] });
+    qc.invalidateQueries({ queryKey: ['expensesForInvoice'] });
   };
 }
 
@@ -614,7 +623,7 @@ export const useCreateExpense = () => {
   const invalidate = useInvalidateExpenses();
   return useMutation({
     mutationFn: (input: api.ExpenseInput) => api.createExpense(input),
-    onSuccess: (expense) => invalidate(expense.invoiceId),
+    onSuccess: invalidate,
   });
 };
 
@@ -623,7 +632,7 @@ export const useUpdateExpense = () => {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: api.ExpenseInput }) =>
       api.updateExpense(id, input),
-    onSuccess: (expense) => invalidate(expense.invoiceId),
+    onSuccess: invalidate,
   });
 };
 
@@ -631,6 +640,6 @@ export const useCancelExpense = () => {
   const invalidate = useInvalidateExpenses();
   return useMutation({
     mutationFn: (id: string) => api.cancelExpense(id),
-    onSuccess: (expense) => invalidate(expense.invoiceId),
+    onSuccess: invalidate,
   });
 };

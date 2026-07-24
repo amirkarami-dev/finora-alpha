@@ -1,6 +1,5 @@
 import type { Role } from '@/types';
 import { ROUTES } from '@/config/constants';
-import { useAuthStore } from '@/store/useAuthStore';
 
 /** Route keys that can be role-guarded / shown in the sidebar. */
 export type RouteKey = Exclude<keyof typeof ROUTES, 'landing' | 'login' | 'app'>;
@@ -54,8 +53,6 @@ export interface SeededUser {
   role: Role;
   name: string;
   avatarColor: string;
-  /** For Customer-role users: the customer record they may view. */
-  customerId?: string;
 }
 
 /** Seeded demo accounts (mock, non-production). */
@@ -103,14 +100,3 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];
-
-/**
- * The app's first in-page RBAC gate (spec §6.3, CRITICAL): a route guard
- * (`routes/index.tsx`'s `RoleRoute`) controls whether a whole PAGE is reachable, but Staff can
- * reach invoice detail (guarded with `['purchase','sale']`, both of which Staff holds) while
- * still being barred from the Expenses module itself. `useHasAccess('expenses')` lets a page
- * conditionally render a fragment (the invoice's Expenses card) without a full route guard.
- */
-export function useHasAccess(key: RouteKey): boolean {
-  return ROLE_ACCESS[normalizeRole(useAuthStore((s) => s.user?.role))].includes(key);
-}

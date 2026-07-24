@@ -674,6 +674,7 @@
       "invoice-required": "اختر فاتورة",
       "invoice-not-found": "تعذر العثور على الفاتورة المحددة",
       "invoice-not-confirmed": "يجب أن تكون الفاتورة مستندًا مؤكدًا وطرفيًا في السلسلة",
+      "claim-type-required": "اختر نوع المطالبة",
       "party-required": "اختر طرفًا",
       "party-invoice-mismatch": "الفاتورة المحددة لا تخص هذا الطرف"
     }

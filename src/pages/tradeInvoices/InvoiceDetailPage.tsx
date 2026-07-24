@@ -53,7 +53,7 @@ import {
 import { invoiceItemUnitPrice } from '@/utils/calc';
 import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
-import { useHasAccess } from '@/config/roles';
+import { useHasAccess } from '@/hooks/useHasAccess';
 import type { Expense, InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
 import { CreateInvoiceModal } from './CreateInvoiceModal';
 import { AddItemsModal } from './AddItemsModal';

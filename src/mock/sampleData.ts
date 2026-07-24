@@ -356,16 +356,22 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
             paymentCounter += 1;
             const usePayCurrency: Currency = customer.defaultCurrency;
             const fx = usePayCurrency === 'AED' ? DEFAULT_FX_AED_PER_USD : 1;
+            // Clamp to `anchor` (same rationale as `loadDate` above): the `intBetween` draw
+            // must stay unconditional so the PRNG sequence — and `cust-am` creditLimit — is
+            // unchanged, but a payment computed from an already-clamped `due` can still land
+            // after `anchor`, which is a payment from the future.
+            const payDate = due.subtract(intBetween(0, 6), 'day');
             payments.push({
               id: `NIZ${String(paymentCounter).padStart(4, '0')}`,
               customerId: customer.id,
-              date: due.subtract(intBetween(0, 6), 'day').toISOString(),
+              date: (payDate.isAfter(anchor) ? anchor : payDate).toISOString(),
               currency: usePayCurrency,
               amount: round(invoice * fx, 2),
               fxRate: fx,
               amountUSD: invoice,
               method: pick(['TT', 'TT', 'TT', 'Cash', 'Cheque', 'Offset']),
               reference: container.reference,
+              direction: contract.contractType === 'PURCHASE' ? 'OUT' : 'IN',
               notes: '',
             });
           }

@@ -84,13 +84,15 @@ export default function DashboardPage() {
 
   const collectedTrend = useMemo(() => {
     const d = cashflow.data;
-    if (!d || d.length < 2) return undefined;
-    const last = d[d.length - 1].collected;
-    const prev = d[d.length - 2].collected;
-    // No prior-period collections to compare against — suppress the trend rather than let
-    // `0 || 1` manufacture a bogus red ↓100% (spec §4). StatCard hides the badge when
-    // `trend` is undefined.
-    if (prev === 0) return undefined;
+    // Compare the last two COMPLETE months — `d`'s final point is the current, still-partial
+    // month, so comparing against it manufactures a fake decline every day that isn't the 1st.
+    if (!d || d.length < 3) return undefined;
+    const last = d[d.length - 2].collected;
+    const prev = d[d.length - 3].collected;
+    // No prior-period (or current-period) collections to compare against — suppress the trend
+    // rather than let `0 || 1` manufacture a bogus red ↓100% (spec §4). StatCard hides the
+    // badge when `trend` is undefined.
+    if (prev === 0 || last === 0) return undefined;
     return Math.round(((last - prev) / prev) * 100);
   }, [cashflow.data]);
 

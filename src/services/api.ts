@@ -491,14 +491,18 @@ export async function getExecutiveSummary(): Promise<ExecutiveSummary> {
   const collectionRate = invoiced > 0 ? round((collected / invoiced) * 100) : 0;
 
   const series = await getCashflowSeries();
-  // `undefined` (not 0) whenever there's no meaningful prior-period comparison — either too
-  // few points, or a zero prior period, which would otherwise divide-by-(0||1) into a bogus
-  // ±100%/0% badge (spec §4). StatCard already hides the trend badge when `trend` is undefined.
+  // `undefined` (not 0) whenever there's no meaningful prior-period comparison — too few
+  // points, or either period is zero, which would otherwise divide-by-(0||1) or diff-against-0
+  // into a bogus ±100%/0% badge (spec §4). StatCard already hides the trend badge when `trend`
+  // is undefined. Compares the last two COMPLETE months — `series`'s final point is the
+  // current, still-partial month, so comparing against it manufactures a fake decline every
+  // day that isn't the 1st (proven: a sample dataset that merely aged from day 0 to day +20/+75
+  // reported ↓100%, purely from the partial-month denominator shrinking as the month rolled).
   const growth = (sel: (p: TimeSeriesPoint) => number): number | undefined => {
-    if (series.length < 2) return undefined;
-    const last = sel(series[series.length - 1]);
-    const prev = sel(series[series.length - 2]);
-    return prev > 0 ? round(((last - prev) / prev) * 100) : undefined;
+    if (series.length < 3) return undefined;
+    const last = sel(series[series.length - 2]);
+    const prev = sel(series[series.length - 3]);
+    return prev > 0 && last > 0 ? round(((last - prev) / prev) * 100) : undefined;
   };
 
   return {
@@ -2405,7 +2409,11 @@ export async function getExpenses(type?: ExpenseType): Promise<Expense[]> {
 export async function getExpensesForInvoice(invoiceId: string): Promise<Expense[]> {
   await delay(140);
   const invoice = findInvoiceOrThrow(invoiceId);
-  const chainIds = new Set(invoiceChain(invoice).map((c) => c.id));
+  // Seed with the queried document itself: `invoiceChain` walks up to the root then back down
+  // via `findSuccessor`, which SKIPS cancelled documents — so a CANCELLED document that has a
+  // parent is not a member of its own chain per that walk, and its own expenses would otherwise
+  // disappear from its page the moment it's cancelled, while still showing on the Expenses page.
+  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
   return db.expenses
     .filter((e) => e.invoiceId && chainIds.has(e.invoiceId) && e.status !== 'CANCELLED')
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
@@ -2439,15 +2447,25 @@ export interface ExpenseInput {
  * Guards IN ORDER (spec §6.2): 'title-required' → 'invalid-amount' → 'invalid-fx' →
  * 'category-required' (INVOICE/GENERAL) → 'invoice-required' (INVOICE/CLAIM) →
  * 'invoice-not-found' → 'invoice-not-confirmed' (must be a chain-leaf CONFIRMED priced document)
- * → 'party-required' (CLAIM) → 'party-invoice-mismatch' (the invoice must belong to the chosen
- * party AND match the side: SUPPLIER→PURCHASE, CUSTOMER→SALE).
+ * → 'claim-type-required' (CLAIM) → 'party-required' (CLAIM) → 'party-invoice-mismatch' (the
+ * invoice must belong to the chosen party AND match the side: SUPPLIER→PURCHASE, CUSTOMER→SALE).
+ *
+ * `currentInvoiceId` — the expense's OWN `invoiceId` as already persisted (booked-on document,
+ * not the chain leaf; see `getExpensesForInvoice`) — skips the chain-leaf-CONFIRMED check when
+ * the input re-submits that same id unchanged. Without this, editing so much as the title of an
+ * expense booked on a document that has since been converted throws forever: the booked document
+ * is no longer a chain leaf, but the expense was never meant to require re-pointing at one just
+ * to be edited. A genuinely different `invoiceId` still goes through the full check.
  *
  * Returns the fields the SERVER decided to keep, normalized rather than trusting the client
  * (mirrors `createInventoryDocument`'s refusal to trust client-supplied product/ceilings):
  * `category` is stripped for CLAIM; `claimType`/`partyId` are stripped for INVOICE/GENERAL;
  * `invoiceId` is stripped for GENERAL.
  */
-function validateAndNormalizeExpense(input: ExpenseInput): {
+function validateAndNormalizeExpense(
+  input: ExpenseInput,
+  currentInvoiceId?: string,
+): {
   category?: InvoiceExpenseCategory | GeneralExpenseCategory;
   claimType?: ClaimType;
   partyId?: string;
@@ -2469,13 +2487,17 @@ function validateAndNormalizeExpense(input: ExpenseInput): {
   if (isInvoiceType || isClaimType) {
     invoice = findInvoice(input.invoiceId!);
     if (!invoice) throw new Error('invoice-not-found');
-    const side = invoiceSide(invoice.invoiceType);
-    const isChainLeafConfirmed =
-      isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice!.id);
-    if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+    const isUnchangedBookedInvoice = currentInvoiceId !== undefined && input.invoiceId === currentInvoiceId;
+    if (!isUnchangedBookedInvoice) {
+      const side = invoiceSide(invoice.invoiceType);
+      const isChainLeafConfirmed =
+        isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice!.id);
+      if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+    }
   }
 
   if (isClaimType) {
+    if (input.claimType !== 'SUPPLIER' && input.claimType !== 'CUSTOMER') throw new Error('claim-type-required');
     if (!input.partyId) throw new Error('party-required');
     const expectedSide: InvoiceSide = input.claimType === 'SUPPLIER' ? 'PURCHASE' : 'SALE';
     if (invoice!.customerId !== input.partyId || invoiceSide(invoice!.invoiceType) !== expectedSide) {
@@ -2524,7 +2546,7 @@ export async function updateExpense(id: string, input: ExpenseInput): Promise<Ex
   await delay(200);
   const expense = db.expenses.find((e) => e.id === id);
   if (!expense) throw new Error(`Expense ${id} not found`);
-  const normalized = validateAndNormalizeExpense(input);
+  const normalized = validateAndNormalizeExpense(input, expense.invoiceId);
   const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
   expense.title = input.title.trim();
   expense.expenseType = input.expenseType;

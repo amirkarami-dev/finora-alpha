@@ -9,8 +9,6 @@ export interface AuthUser {
   email: string;
   role: Role;
   avatarColor: string;
-  /** Set only for Customer-role logins — scopes the portal to one customer. */
-  customerId?: string;
 }
 
 interface AuthState {
@@ -43,7 +41,6 @@ export const useAuthStore = create<AuthState>()(
             email: seeded.email,
             role: seeded.role,
             avatarColor: seeded.avatarColor,
-            customerId: seeded.customerId,
           };
           set({ user, token: 'demo-token', isAuthenticated: true });
           return user;

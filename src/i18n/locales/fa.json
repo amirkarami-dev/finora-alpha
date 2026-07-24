@@ -674,6 +674,7 @@
       "invoice-required": "یک فاکتور انتخاب کنید",
       "invoice-not-found": "فاکتور انتخاب‌شده یافت نشد",
       "invoice-not-confirmed": "فاکتور باید سندی تأییدشده و انتهای زنجیره باشد",
+      "claim-type-required": "نوع مطالبه را انتخاب کنید",
       "party-required": "یک طرف حساب انتخاب کنید",
       "party-invoice-mismatch": "فاکتور انتخاب‌شده متعلق به این طرف حساب نیست"
     }

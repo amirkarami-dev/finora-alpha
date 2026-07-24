@@ -674,6 +674,7 @@
       "invoice-required": "Select an invoice",
       "invoice-not-found": "The selected invoice could not be found",
       "invoice-not-confirmed": "The invoice must be a confirmed, chain-leaf document",
+      "claim-type-required": "Select a claim type",
       "party-required": "Select a party",
       "party-invoice-mismatch": "The selected invoice doesn't belong to this party"
     }

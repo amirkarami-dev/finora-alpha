@@ -14,6 +14,7 @@ import {
   useCreateExpense,
   useCustomers,
   useExpenseSourceInvoices,
+  useInvoiceOptions,
   useUpdateExpense,
 } from '@/services/queries';
 import type { ExpenseInput } from '@/services/api';
@@ -38,6 +39,7 @@ const KNOWN_ERROR_CODES = [
   'invoice-required',
   'invoice-not-found',
   'invoice-not-confirmed',
+  'claim-type-required',
   'party-required',
   'party-invoice-mismatch',
 ] as const;
@@ -78,6 +80,10 @@ export function ExpenseFormModal({ open, onClose, expense, defaultExpenseType }:
   const { data: saleInvoices } = useExpenseSourceInvoices('SALE');
   const { data: costCentres } = useCostCentres();
   const { data: customers } = useCustomers();
+  // ALL invoices (unfiltered — unlike the source lists above, which exclude converted/non-leaf
+  // documents by design), so the edit-mode escape hatch below can resolve a real invoice number
+  // instead of falling back to the raw id.
+  const { data: allInvoices } = useInvoiceOptions();
 
   const customerById = useMemo(() => {
     const map = new Map<string, Customer>();
@@ -144,16 +150,20 @@ export function ExpenseFormModal({ open, onClose, expense, defaultExpenseType }:
     const list = source.map((inv) => ({ value: inv.id, label: `${inv.invoiceNumber} — ${inv.customerName}` }));
     // Edit-mode escape hatch: an already-saved invoiceId might no longer be offered (converted,
     // cancelled, or the party/claimType changed) — keep it selectable so editing never silently
-    // blanks a value the record already has.
+    // blanks a value the record already has. Resolved against `allInvoices` (ALL invoices,
+    // unfiltered), not the source lists above — those exclude converted/non-leaf documents BY
+    // DESIGN, i.e. exactly the case this escape hatch exists to cover, so looking the id up
+    // there would always miss and fall back to the raw id (e.g. `inv-pp-0001` instead of
+    // `PP-2026-0001`).
     if (expense?.invoiceId && !list.some((o) => o.value === expense.invoiceId)) {
-      const known = [...(purchaseInvoices ?? []), ...(saleInvoices ?? [])].find((inv) => inv.id === expense.invoiceId);
+      const known = (allInvoices ?? []).find((inv) => inv.id === expense.invoiceId);
       list.unshift({
         value: expense.invoiceId,
-        label: known ? `${known.invoiceNumber} — ${known.customerName}` : expense.invoiceId,
+        label: known ? known.invoiceNumber : expense.invoiceId,
       });
     }
     return list;
-  }, [expenseType, claimSourceInvoices, partyId, purchaseInvoices, saleInvoices, expense]);
+  }, [expenseType, claimSourceInvoices, partyId, purchaseInvoices, saleInvoices, expense, allInvoices]);
 
   const categoryOptions = useMemo(() => {
     const cats = expenseType === 'INVOICE' ? INVOICE_EXPENSE_CATEGORIES : expenseType === 'GENERAL' ? GENERAL_EXPENSE_CATEGORIES : [];

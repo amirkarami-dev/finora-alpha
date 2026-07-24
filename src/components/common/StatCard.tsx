@@ -83,7 +83,7 @@ export function StatCard({
             {trendUp ? <ArrowUpOutlined /> : <ArrowDownOutlined />} {Math.abs(trend)}%
           </span>
         )}
-        {trendSuffix && !loading && (
+        {trend !== undefined && trendSuffix && !loading && (
           <Text style={{ color: token.colorTextTertiary, fontSize: 12 }}>{trendSuffix}</Text>
         )}
         {footer && !loading && footer}
