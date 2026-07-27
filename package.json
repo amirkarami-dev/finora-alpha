@@ -10,6 +10,8 @@
     "preview": "vite preview --port 4173",
     "lint": "eslint .",
     "typecheck": "tsc -b",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run i18n:check",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {

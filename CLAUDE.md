@@ -17,6 +17,8 @@ npm run build      # tsc -b && vite build → dist/
 npm run preview    # serve dist on :4173
 npm run lint       # ESLint flat config (must stay clean)
 npm run typecheck  # tsc -b
+npm run i18n:check # en/ar/fa key parity (fails on missing or extra keys)
+npm run verify     # lint + typecheck + i18n:check — run before every commit
 npm run smoke      # Playwright screenshots + console-error check (preview must be running)
 ```
 
@@ -97,7 +99,15 @@ page (`src/mock/data.ts`'s module-level lookup indexes must not go stale).
   `CHART_PALETTE`). Charts pull colors from `components/charts/chartTheme.ts`.
 - **Money/status/dates** render through `components/common/Money.tsx`,
   `StatusTag.tsx`, and `utils/format.ts` — reuse them, don't reformat inline.
-- Keep `npm run lint` and `npm run build` clean before committing.
+- Keep `npm run verify` and `npm run build` clean before committing.
+
+## Agent setup
+
+`.claude/skills/finora-ui/` holds the UI implementation rules and the verify loop —
+it loads on any work under `src/pages`, `src/components`, `src/theme`, or `src/i18n`.
+`.claude/agents/` has two subagents: `ui-reviewer` (audits a UI diff against these
+conventions) and `i18n-sync` (repairs `ar`/`fa` parity). Prompting patterns that work
+on this codebase are in `docs/claude-playbook.md`.
 
 ## Adding a page (pattern)
 
