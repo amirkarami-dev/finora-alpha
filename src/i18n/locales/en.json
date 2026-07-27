@@ -283,6 +283,7 @@
     "subtitle": "Shipments and their logistics details",
     "newContainer": "New container",
     "reference": "Container",
+    "referencePlaceholder": "e.g. MSNU8018095",
     "quantityMt": "Quantity (MT)",
     "loadDate": "Load date",
     "arrivalDate": "Arrival",

@@ -283,6 +283,7 @@
     "subtitle": "محموله‌ها و جزئیات لجستیکی آن‌ها",
     "newContainer": "کانتینر جدید",
     "reference": "کانتینر",
+    "referencePlaceholder": "مثلاً: MSNU8018095",
     "quantityMt": "مقدار (تن)",
     "loadDate": "تاریخ بارگیری",
     "arrivalDate": "ورود",

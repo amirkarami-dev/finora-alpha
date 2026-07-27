@@ -206,8 +206,6 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const rawContainers: RawContainerSeed[] = [];
   const payments: Payment[] = [];
 
-  let paymentCounter = 0;
-
   function makeContainerRef(): string {
     return `${pick(CONTAINER_PREFIXES)}${intBetween(1000000, 9999999)}`;
   }
@@ -352,28 +350,17 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
           };
           rawContainers.push(container);
 
+          // Collection-rate fix: this used to ALSO push an IN payment here (for `invoice`, the
+          // container-value formula) whenever `status === 'PAID'`. The historical-invoice pass
+          // further below derives a real SALE_INVOICE from `rawContainers` and settles every
+          // PAID container there too, from that invoice's own `invoiceItemAmount` totals — so
+          // both passes were paying for the same shipment and `collected` could exceed
+          // `invoiced`. Payment generation for PAID containers now lives solely in that later,
+          // invoice-linked pass. Both draws below are kept — unused — purely so the PRNG
+          // sequence (and `cust-am`'s creditLimit) stays byte-identical.
           if (status === 'PAID') {
-            paymentCounter += 1;
-            const usePayCurrency: Currency = customer.defaultCurrency;
-            const fx = usePayCurrency === 'AED' ? DEFAULT_FX_AED_PER_USD : 1;
-            // Clamp to `anchor` (same rationale as `loadDate` above): the `intBetween` draw
-            // must stay unconditional so the PRNG sequence — and `cust-am` creditLimit — is
-            // unchanged, but a payment computed from an already-clamped `due` can still land
-            // after `anchor`, which is a payment from the future.
-            const payDate = due.subtract(intBetween(0, 6), 'day');
-            payments.push({
-              id: `NIZ${String(paymentCounter).padStart(4, '0')}`,
-              customerId: customer.id,
-              date: (payDate.isAfter(anchor) ? anchor : payDate).toISOString(),
-              currency: usePayCurrency,
-              amount: round(invoice * fx, 2),
-              fxRate: fx,
-              amountUSD: invoice,
-              method: pick(['TT', 'TT', 'TT', 'Cash', 'Cheque', 'Offset']),
-              reference: container.reference,
-              direction: contract.contractType === 'PURCHASE' ? 'OUT' : 'IN',
-              notes: '',
-            });
+            intBetween(0, 6);
+            pick(['TT', 'TT', 'TT', 'Cash', 'Cheque', 'Offset']);
           }
         }
         item.remainingMt = round(Math.max(item.quantityMt - shippedSoFar, 0), 3);
@@ -878,7 +865,6 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
   // One CONFIRMED historical invoice per contract that has raw shipments — SALE_INVOICE for
   // SELL contracts, PURCHASE_INVOICE for PURCHASE — one line per raw container.
-  let saleHistoricalIndex = 0;
   for (const contract of contracts) {
     const raws = rawByContract.get(contract.id);
     if (!raws || raws.length === 0) continue;
@@ -915,18 +901,29 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
     // No warehouse docs are seeded for these historical invoices — seed-only shortcut.
     if (invoiceType === 'SALE_INVOICE') {
-      const idx = saleHistoricalIndex++;
-      if (idx % 2 === 0) {
-        // Deterministic partial IN payment on every OTHER historical sale invoice (60% of total).
-        const paymentAmount = round(invoice.totalAmount * 0.6, 2);
+      // Settle exactly the shipments that were already marked PAID back when their container
+      // was generated — deriving the amount from THIS invoice's own line totals (`item.amount`,
+      // i.e. `invoiceItemAmount`) rather than the container-value formula, and linking the
+      // payment to `invoice.id` so it can never be attributed to more than one document. Skip
+      // any container that already has an explicit payment recorded against it by `reference`
+      // (the Alco reference contract's containers are settled verbatim from the workbook,
+      // above) so the same shipment is never paid twice. This keeps collected <= invoiced for
+      // every invoice, and therefore for every customer and overall.
+      const paidAmount = round(
+        raws
+          .filter((raw) => raw.status === 'PAID' && !payments.some((p) => p.reference === raw.reference))
+          .reduce((s, raw) => s + (items.find((it) => it.containerId === raw.id)?.amount ?? 0), 0),
+        2,
+      );
+      if (paidAmount > 0) {
         payments.push({
           id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
           customerId: invoice.customerId,
           date: invoiceDate,
           currency: 'USD',
-          amount: paymentAmount,
+          amount: paidAmount,
           fxRate: 1,
-          amountUSD: paymentAmount,
+          amountUSD: paidAmount,
           method: 'TT',
           reference: invoice.invoiceNumber,
           invoiceId: invoice.id,

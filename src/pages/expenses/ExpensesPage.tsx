@@ -62,11 +62,14 @@ export default function ExpensesPage() {
   }, [invoiceOptions]);
 
   const rows = useMemo(() => data ?? [], [data]);
-  // Every aggregate sums amountUSD only, and never counts a cancelled expense.
-  const totalUSD = useMemo(
-    () => rows.filter((e) => e.status !== 'CANCELLED').reduce((s, e) => s + e.amountUSD, 0),
-    [rows],
-  );
+  // Deliberately NOT memoized on `rows`: `cancelExpense` (and other expense mutations) flip
+  // `status`/`amountUSD` on the SAME expense object `rows` already holds, synchronously —
+  // before the invalidated query's refetch resolves into a new array reference. A
+  // `useMemo(..., [rows])` here recomputed only once that new reference landed, so the tile sat
+  // one render behind the table (which reads `r.status` straight off the row objects and so
+  // always shows the current value). Summing on every render keeps the two in lockstep; the
+  // list is small enough that this costs nothing.
+  const totalUSD = rows.filter((e) => e.status !== 'CANCELLED').reduce((s, e) => s + e.amountUSD, 0);
 
   const cancelExpense = async (id: string) => {
     try {
@@ -79,7 +82,7 @@ export default function ExpensesPage() {
 
   const columns: ColumnsType<Expense> = [
     { title: t('expenses.date'), dataIndex: 'date', width: 130, sorter: (a, b) => a.date.localeCompare(b.date), defaultSortOrder: 'descend', render: (v) => formatDate(v) },
-    { title: t('expenses.expenseTitle'), dataIndex: 'title', render: (v, r) => (
+    { title: t('expenses.expenseTitle'), dataIndex: 'title', width: 260, ellipsis: true, render: (v, r) => (
         <Text strong delete={r.status === 'CANCELLED'} type={r.status === 'CANCELLED' ? 'secondary' : undefined}>
           {v}
         </Text>
@@ -240,7 +243,7 @@ export default function ExpensesPage() {
           loading={isLoading}
           columns={columns}
           dataSource={rows}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1500 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
         />
       </Card>
