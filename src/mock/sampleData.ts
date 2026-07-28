@@ -968,11 +968,14 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     warehouses,
     invoices,
     inventoryDocs,
-    // Out of scope for the sample dataset (spec §7 "editing the sample dataset") — cost centres
-    // and expenses are a Phase C addition the demo generator doesn't populate; empty arrays keep
-    // the return shape satisfying `Db`.
+    // Cost centres/charge categories/charge docs/claims (schema v6) aren't populated by the demo
+    // generator yet — real category + cost-centre seeding is deferred to the rework's Phase 8
+    // (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §7/§9). Empty
+    // arrays keep this return shape satisfying `Db` in the meantime.
     costCentres: [],
-    expenses: [],
+    chargeCategories: [],
+    chargeDocs: [],
+    claims: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

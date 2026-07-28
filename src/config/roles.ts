@@ -18,13 +18,13 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'sale',
     'warehouse',
     'payments',
-    'expenses',
     'reports',
     'settings',
   ],
-  // Cost Centres: Manager + Staff (spec §5). Expenses: Manager ONLY (spec §6.4) — `payments` is
-  // Manager-only too, not Manager+CEO, and CEO can't even reach invoice detail; a create/edit
-  // page would contradict an otherwise read-only role.
+  // Cost Centres: Manager + Staff (spec §5). The charges/revenues/claims/baseInfo rework
+  // (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md) re-adds an
+  // Expenses grant from Phase 2 onward — removed here in Phase 1 along with the route itself,
+  // since the flat expense module and its page are gone and there is nothing left to guard.
   Staff: [
     'dashboard',
     'customers',
@@ -96,7 +96,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
-  { key: 'expenses', route: ROUTES.expenses, icon: 'accountbook', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];

@@ -44,8 +44,6 @@ import {
   useCancelInvoice,
   useContainerOptions,
   useContractRemaining,
-  useCostCentres,
-  useExpensesForInvoice,
   useMarkInvoiceSent,
   useRemoveInvoiceItem,
   useTradeInvoice,
@@ -53,8 +51,7 @@ import {
 import { invoiceItemUnitPrice } from '@/utils/calc';
 import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
-import { useHasAccess } from '@/hooks/useHasAccess';
-import type { Expense, InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
+import type { InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
 import { CreateInvoiceModal } from './CreateInvoiceModal';
 import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
@@ -113,14 +110,6 @@ export default function InvoiceDetailPage() {
     data ? invoiceSide(data.invoice.invoiceType) : 'SALE',
   );
 
-  // Expenses card (spec §6.3, CRITICAL): Staff can reach this page (guarded with
-  // ['purchase','sale'], both of which Staff holds) but must not see expenses — gated with the
-  // app's first in-page RBAC check rather than a route guard. Hooks stay unconditional (rules of
-  // hooks); only the RENDER below is skipped for a role without access.
-  const canSeeExpenses = useHasAccess('expenses');
-  const { data: invoiceExpenses } = useExpensesForInvoice(invoiceId);
-  const { data: costCentres } = useCostCentres();
-
   if (!isLoading && !data) {
     return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />;
   }
@@ -145,11 +134,6 @@ export default function InvoiceDetailPage() {
   const isOverpaid = paidUSD > invoice.totalAmount;
   const progressPercent =
     invoice.totalAmount > 0 ? Math.min((paidUSD / invoice.totalAmount) * 100, 100) : 0;
-
-  // Expenses card data (Manager-only, see `canSeeExpenses` above): read-only, no create/edit
-  // affordance here — that lives on the Expenses module itself.
-  const costCentreById = new Map((costCentres ?? []).map((cc) => [cc.id, cc.name]));
-  const expensesTotalUSD = (invoiceExpenses ?? []).reduce((s, e) => s + e.amountUSD, 0);
 
   const convertTargets = CONVERT_TARGETS[invoice.invoiceType];
   const canConvert = isConfirmed && !successor && convertTargets.length > 0;
@@ -691,74 +675,6 @@ export default function InvoiceDetailPage() {
               {t('tradeInvoices.overpaidBy', { amount: formatCurrency(paidUSD - invoice.totalAmount, 'USD') })}
             </Text>
           )}
-        </Card>
-      )}
-
-      {/* Spec §6.3 CRITICAL: rendered ONLY when the role has access — never an empty card, since
-          an empty card would still tell Staff that expenses exist. */}
-      {canSeeExpenses && (
-        <Card
-          variant="borderless"
-          title={`${t('expenses.title')} · ${(invoiceExpenses ?? []).length}`}
-          style={{ marginTop: 16 }}
-          styles={{ body: { padding: 12 } }}
-        >
-          <Table<Expense>
-            rowKey="id"
-            pagination={false}
-            dataSource={invoiceExpenses ?? []}
-            locale={{ emptyText: <Empty description={t('expenses.noExpensesYet')} /> }}
-            columns={
-              [
-                { title: t('expenses.date'), dataIndex: 'date', width: 120, render: (v) => formatDate(v) },
-                { title: t('expenses.expenseTitle'), dataIndex: 'title' },
-                {
-                  title: t('expenses.typeCategory'),
-                  key: 'typeCategory',
-                  width: 160,
-                  render: (_, r) =>
-                    r.expenseType === 'CLAIM' ? (
-                      <Tag color="volcano">{r.claimType ? t(`claimTypes.${r.claimType}`) : '—'}</Tag>
-                    ) : r.category ? (
-                      <Tag>{t(`expenseCategories.${r.category}`)}</Tag>
-                    ) : (
-                      <Text type="secondary">—</Text>
-                    ),
-                },
-                {
-                  title: t('costCentres.title'),
-                  key: 'costCentre',
-                  width: 150,
-                  render: (_, r) =>
-                    r.costCentreId ? costCentreById.get(r.costCentreId) ?? '—' : <Text type="secondary">—</Text>,
-                },
-                {
-                  title: t('expenses.amount'),
-                  key: 'amount',
-                  width: 130,
-                  align: 'right',
-                  render: (_, r) => <Money value={r.amount} currency={r.currency} />,
-                },
-                {
-                  title: t('expenses.amountUsd'),
-                  dataIndex: 'amountUSD',
-                  width: 130,
-                  align: 'right',
-                  render: (v) => <Money value={v} strong />,
-                },
-              ] as ColumnsType<Expense>
-            }
-          />
-          <div style={{ marginTop: 16 }}>
-            <Statistic
-              key={expensesTotalUSD}
-              title={t('expenses.totalUsd')}
-              value={expensesTotalUSD}
-              prefix="$"
-              precision={0}
-              valueStyle={{ fontWeight: 600 }}
-            />
-          </div>
         </Card>
       )}
 

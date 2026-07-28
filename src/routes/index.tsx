@@ -24,7 +24,6 @@ import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
 import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
 import CostCentresPage from '@/pages/costCentres/CostCentresPage';
-import ExpensesPage from '@/pages/expenses/ExpensesPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -82,7 +81,6 @@ export function AppRoutes() {
         <Route path="cost-centres" element={<RoleRoute routeKey="costCentres"><CostCentresPage /></RoleRoute>} />
         <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
-        <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
         <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>

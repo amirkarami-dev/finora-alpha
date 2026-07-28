@@ -1,7 +1,6 @@
 import dayjs from 'dayjs';
 import { db, persistDb } from '@/mock/data';
 import type {
-  ClaimType,
   Container,
   ContainerGood,
   ContainerStatus,
@@ -14,15 +13,11 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
-  Expense,
-  ExpenseType,
-  GeneralExpenseCategory,
   Incoterm,
   Invoice,
   InventoryDocument,
   InventoryDocumentItem,
   InventoryDocType,
-  InvoiceExpenseCategory,
   InvoiceItem,
   InvoiceSide,
   InvoiceStatus,
@@ -2299,8 +2294,8 @@ export async function setWarehouseActive(id: string, active: boolean): Promise<W
 /* -------------------------- Cost Centre CRUD --------------------------- *
  * Mirrors the Warehouse master exactly (spec §5): code trimmed+uppercased and immutable after
  * create, 'duplicate-code' guard, active/inactive toggle. Inactive centres are excluded from
- * pickers but retained on already-saved expenses (the picker filters client-side; the id itself
- * is never invalidated here).
+ * pickers but retained on already-saved records that reference them (the picker filters
+ * client-side; the id itself is never invalidated here).
  * ------------------------------------------------------------------ */
 
 export interface CostCentreInput {
@@ -2358,224 +2353,6 @@ export async function setCostCentreActive(id: string, active: boolean): Promise<
   return costCentre;
 }
 
-/* ---------------------------- Expense module ---------------------------- *
- * Invoice Expense / General Expense / Claim (Supplier/Claim) — see spec §6.
- * No hard delete: `cancelExpense` sets status = 'CANCELLED'; cancelled rows are excluded from
- * every total/listing that matters (getExpenses still returns them so the UI can show them
- * struck-through/tagged, but getExpensesForInvoice excludes them per spec).
- * ------------------------------------------------------------------ */
-
-export interface ExpenseSourceInvoiceRow {
-  id: string;
-  invoiceNumber: string;
-  invoiceType: InvoiceType;
-  invoiceDate: string;
-  customerId: string;
-  customerName: string;
-}
-
-/** Chain-leaf, CONFIRMED, priced documents of `side` — the ONLY universe an expense/claim may
- *  attach to (spec §6.2). Never use `getTradeInvoices`/`useTradeInvoices` for this: it returns
- *  DRAFT, CANCELLED and unpriced order documents unfiltered. */
-export async function getExpenseSourceInvoices(side: InvoiceSide): Promise<ExpenseSourceInvoiceRow[]> {
-  await delay(140);
-  return chainLeafDocs(side)
-    .filter((inv) => isPricedType(inv.invoiceType))
-    .map((inv) => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      invoiceType: inv.invoiceType,
-      invoiceDate: inv.invoiceDate,
-      customerId: inv.customerId,
-      customerName: customerById.get(inv.customerId)?.name ?? '—',
-    }))
-    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
-}
-
-export async function getExpenses(type?: ExpenseType): Promise<Expense[]> {
-  await delay(140);
-  return db.expenses
-    .filter((e) => !type || e.expenseType === type)
-    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
-}
-
-/**
- * Resolves over the invoice's full conversion CHAIN (spec §6.2, CRITICAL) — mirrors
- * `getTradeInvoice`'s payment aggregation exactly: an expense booked on a provisional must not
- * vanish the instant that provisional converts to a final invoice, since the final (not the
- * provisional) becomes the new chain leaf and the two never share an id. Excludes CANCELLED
- * expenses from the total.
- */
-export async function getExpensesForInvoice(invoiceId: string): Promise<Expense[]> {
-  await delay(140);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  // Seed with the queried document itself: `invoiceChain` walks up to the root then back down
-  // via `findSuccessor`, which SKIPS cancelled documents — so a CANCELLED document that has a
-  // parent is not a member of its own chain per that walk, and its own expenses would otherwise
-  // disappear from its page the moment it's cancelled, while still showing on the Expenses page.
-  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
-  return db.expenses
-    .filter((e) => e.invoiceId && chainIds.has(e.invoiceId) && e.status !== 'CANCELLED')
-    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
-}
-
-function nextExpenseId(): string {
-  let max = 0;
-  for (const e of db.expenses) {
-    const match = /^exp-(\d+)$/.exec(e.id);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `exp-${String(max + 1).padStart(4, '0')}`;
-}
-
-export interface ExpenseInput {
-  title: string;
-  expenseType: ExpenseType;
-  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
-  claimType?: ClaimType;
-  partyId?: string;
-  invoiceId?: string;
-  amount: number;
-  currency: Currency;
-  fxRate: number;
-  date: string;
-  costCentreId?: string;
-  description?: string;
-}
-
-/**
- * Guards IN ORDER (spec §6.2): 'title-required' → 'invalid-amount' → 'invalid-fx' →
- * 'category-required' (INVOICE/GENERAL) → 'invoice-required' (INVOICE/CLAIM) →
- * 'invoice-not-found' → 'invoice-not-confirmed' (must be a chain-leaf CONFIRMED priced document)
- * → 'claim-type-required' (CLAIM) → 'party-required' (CLAIM) → 'party-invoice-mismatch' (the
- * invoice must belong to the chosen party AND match the side: SUPPLIER→PURCHASE, CUSTOMER→SALE).
- *
- * `currentInvoiceId` — the expense's OWN `invoiceId` as already persisted (booked-on document,
- * not the chain leaf; see `getExpensesForInvoice`) — skips the chain-leaf-CONFIRMED check when
- * the input re-submits that same id unchanged. Without this, editing so much as the title of an
- * expense booked on a document that has since been converted throws forever: the booked document
- * is no longer a chain leaf, but the expense was never meant to require re-pointing at one just
- * to be edited. A genuinely different `invoiceId` still goes through the full check.
- *
- * Returns the fields the SERVER decided to keep, normalized rather than trusting the client
- * (mirrors `createInventoryDocument`'s refusal to trust client-supplied product/ceilings):
- * `category` is stripped for CLAIM; `claimType`/`partyId` are stripped for INVOICE/GENERAL;
- * `invoiceId` is stripped for GENERAL.
- */
-function validateAndNormalizeExpense(
-  input: ExpenseInput,
-  currentInvoiceId?: string,
-): {
-  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
-  claimType?: ClaimType;
-  partyId?: string;
-  invoiceId?: string;
-  invoice?: Invoice;
-} {
-  if (!input.title.trim()) throw new Error('title-required');
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
-  if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
-
-  const isInvoiceType = input.expenseType === 'INVOICE';
-  const isGeneralType = input.expenseType === 'GENERAL';
-  const isClaimType = input.expenseType === 'CLAIM';
-
-  if ((isInvoiceType || isGeneralType) && !input.category) throw new Error('category-required');
-  if ((isInvoiceType || isClaimType) && !input.invoiceId) throw new Error('invoice-required');
-
-  let invoice: Invoice | undefined;
-  if (isInvoiceType || isClaimType) {
-    invoice = findInvoice(input.invoiceId!);
-    if (!invoice) throw new Error('invoice-not-found');
-    const isUnchangedBookedInvoice = currentInvoiceId !== undefined && input.invoiceId === currentInvoiceId;
-    if (!isUnchangedBookedInvoice) {
-      const side = invoiceSide(invoice.invoiceType);
-      const isChainLeafConfirmed =
-        isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice!.id);
-      if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
-    }
-  }
-
-  if (isClaimType) {
-    if (input.claimType !== 'SUPPLIER' && input.claimType !== 'CUSTOMER') throw new Error('claim-type-required');
-    if (!input.partyId) throw new Error('party-required');
-    const expectedSide: InvoiceSide = input.claimType === 'SUPPLIER' ? 'PURCHASE' : 'SALE';
-    if (invoice!.customerId !== input.partyId || invoiceSide(invoice!.invoiceType) !== expectedSide) {
-      throw new Error('party-invoice-mismatch');
-    }
-  }
-
-  return {
-    category: isClaimType ? undefined : input.category,
-    claimType: isClaimType ? input.claimType : undefined,
-    partyId: isClaimType ? input.partyId : undefined,
-    invoiceId: isGeneralType ? undefined : input.invoiceId,
-    invoice,
-  };
-}
-
-export async function createExpense(input: ExpenseInput): Promise<Expense> {
-  await delay(200);
-  const normalized = validateAndNormalizeExpense(input);
-  // amountUSD computed ONCE server-side with `round` (2dp) — `round3` is for quantities.
-  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
-  const expense: Expense = {
-    id: nextExpenseId(),
-    title: input.title.trim(),
-    expenseType: input.expenseType,
-    category: normalized.category,
-    claimType: normalized.claimType,
-    partyId: normalized.partyId,
-    invoiceId: normalized.invoiceId,
-    amount: input.amount,
-    currency: input.currency,
-    fxRate: input.fxRate,
-    amountUSD,
-    date: input.date,
-    costCentreId: input.costCentreId,
-    description: input.description?.trim() || undefined,
-    status: 'ACTIVE',
-    createdAt: dayjs().toISOString(),
-  };
-  db.expenses.push(expense);
-  persistDb();
-  return expense;
-}
-
-export async function updateExpense(id: string, input: ExpenseInput): Promise<Expense> {
-  await delay(200);
-  const expense = db.expenses.find((e) => e.id === id);
-  if (!expense) throw new Error(`Expense ${id} not found`);
-  const normalized = validateAndNormalizeExpense(input, expense.invoiceId);
-  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
-  expense.title = input.title.trim();
-  expense.expenseType = input.expenseType;
-  expense.category = normalized.category;
-  expense.claimType = normalized.claimType;
-  expense.partyId = normalized.partyId;
-  expense.invoiceId = normalized.invoiceId;
-  expense.amount = input.amount;
-  expense.currency = input.currency;
-  expense.fxRate = input.fxRate;
-  expense.amountUSD = amountUSD;
-  expense.date = input.date;
-  expense.costCentreId = input.costCentreId;
-  expense.description = input.description?.trim() || undefined;
-  persistDb();
-  return expense;
-}
-
-/** No hard delete (spec §6.2) — sets `status = 'CANCELLED'`; cancelled expenses are excluded
- *  from `getExpensesForInvoice` and every UI total. */
-export async function cancelExpense(id: string): Promise<Expense> {
-  await delay(160);
-  const expense = db.expenses.find((e) => e.id === id);
-  if (!expense) throw new Error(`Expense ${id} not found`);
-  expense.status = 'CANCELLED';
-  persistDb();
-  return expense;
-}
-
 /* --------------------------- Payment mutations ------------------------- */
 
 export interface PaymentInput {
@@ -2604,9 +2381,9 @@ function nextPaymentId(): string {
  */
 export async function createPayment(input: PaymentInput): Promise<Payment> {
   await delay(180);
-  // Guard the same unguarded `amount / fxRate` division `createExpense` closes (spec §6.2) — an
-  // AED payment recorded with fxRate 0 (or NaN/negative) would otherwise silently produce an
-  // Infinity/NaN amountUSD that then poisons every aggregate that sums payments.
+  // Guard the same unguarded `amount / fxRate` division the charge-line API closes (rework spec
+  // §4) — an AED payment recorded with fxRate 0 (or NaN/negative) would otherwise silently
+  // produce an Infinity/NaN amountUSD that then poisons every aggregate that sums payments.
   if (input.currency !== 'USD' && (!Number.isFinite(input.fxRate) || input.fxRate <= 0)) {
     throw new Error('invalid-fx');
   }
