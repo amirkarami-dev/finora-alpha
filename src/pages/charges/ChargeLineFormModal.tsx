@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { App, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Money } from '@/components/common/Money';
-import { CURRENCIES } from '@/config/constants';
+import { CURRENCIES, ROUTES } from '@/config/constants';
 import { useAddChargeLine, useChargeCategories, useCostCentres, useUpdateChargeLine } from '@/services/queries';
 import type { ChargeGoodInput, ChargeLineInput } from '@/services/api';
 import { splitEqually } from '@/utils/calc';
@@ -92,6 +93,7 @@ interface ChargeLineFormModalProps {
 export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: ChargeLineFormModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const [form] = Form.useForm<LineFormValues>();
   const addMut = useAddChargeLine();
   const updateMut = useUpdateChargeLine();
@@ -318,7 +320,36 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
     >
       <Form form={form} layout="vertical" preserve={false} initialValues={initialValues}>
         <Form.Item name="categoryId" label={t('charges.category')} rules={[{ required: true, message: t('common.required') }]}>
-          <Select showSearch optionFilterProp="label" options={categoryOptions} />
+          <Select
+            showSearch
+            optionFilterProp="label"
+            options={categoryOptions}
+            // Categories are master data now (spec §1), so "no options" means BaseInfo is empty —
+            // AntD's bare "No data" would read as a bug. Point at the tab that fixes it, on the
+            // direction whose list is actually missing (spec §10.11).
+            notFoundContent={
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <Space direction="vertical" size={2}>
+                    <Text>{t('charges.noCategoriesTitle')}</Text>
+                    <Text type="secondary">{t('charges.noCategoriesHint')}</Text>
+                  </Space>
+                }
+              >
+                <Button
+                  size="small"
+                  onClick={() =>
+                    navigate(
+                      `${ROUTES.baseInfo}?tab=${doc.direction === 'EXPENSE' ? 'expenseCategories' : 'revenueCategories'}`,
+                    )
+                  }
+                >
+                  {t('charges.openBaseInfo')}
+                </Button>
+              </Empty>
+            }
+          />
         </Form.Item>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>

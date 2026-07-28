@@ -58,7 +58,9 @@
     "deactivate": "Deactivate",
     "deactivateConfirm": "Deactivate this record?",
     "activateConfirm": "Activate this record?",
-    "mtUnit": "MT"
+    "mtUnit": "MT",
+    "noSearchResults": "No results match your search",
+    "noFilterResults": "No records match these filters"
   },
   "nav": {
     "executive": "Executive",
@@ -515,7 +517,9 @@
     "created": "Cost centre created",
     "updated": "Cost centre updated",
     "activated": "Cost centre activated",
-    "deactivated": "Cost centre deactivated"
+    "deactivated": "Cost centre deactivated",
+    "emptyTitle": "No cost centres yet",
+    "emptyHint": "Cost centres group charge lines by the team that owns them — logistics, trading, admin."
   },
   "baseInfo": {
     "title": "Base Info",
@@ -539,7 +543,10 @@
     "created": "Category created",
     "updated": "Category updated",
     "activated": "Category activated",
-    "deactivated": "Category deactivated"
+    "deactivated": "Category deactivated",
+    "emptyTitle": "No categories yet",
+    "emptyExpenseHint": "Add the cost types this desk books — freight, duty, inspection, office rent.",
+    "emptyRevenueHint": "Add the income types this desk books — weight gain, quality premium, interest."
   },
   "chargeScopes": {
     "INVOICE": "Invoice",
@@ -553,13 +560,17 @@
     "title": "Expenses",
     "subtitle": "Costs booked against invoices, broken down across goods, plus general expenses",
     "tabInvoice": "Invoice expenses",
-    "tabGeneral": "General expenses"
+    "tabGeneral": "General expenses",
+    "emptyInvoiceHint": "Pick a confirmed invoice, then add category lines that split across its goods.",
+    "emptyGeneralHint": "Record overheads that don't belong to any single invoice."
   },
   "revenues": {
     "title": "Revenues",
     "subtitle": "Income booked against invoices, broken down across goods, plus general revenues",
     "tabInvoice": "Invoice revenues",
-    "tabGeneral": "General revenues"
+    "tabGeneral": "General revenues",
+    "emptyInvoiceHint": "Pick a confirmed invoice, then add category lines that split across its goods.",
+    "emptyGeneralHint": "Record income that doesn't belong to any single invoice."
   },
   "charges": {
     "newInvoiceDoc": "New invoice document",
@@ -622,6 +633,10 @@
     "pickerTotal": "Total",
     "pickerEmptyHint": "Only confirmed, priced invoices that haven't been converted further are eligible — orders and drafts don't appear here.",
     "pickerExistingCount": "{{count}} existing charge(s)",
+    "pickerEmptyTitle": "No eligible invoices",
+    "noCategoriesTitle": "No categories yet",
+    "noCategoriesHint": "Categories are master data — add them in Base Info, then come back to this line.",
+    "openBaseInfo": "Open Base Info",
     "errors": {
       "title-required": "Title is required",
       "date-required": "Date is required",
@@ -663,7 +678,10 @@
     "revenueUsd": "Revenues (USD)",
     "claimUsd": "Claims (USD)",
     "orphan": "Not on this document",
-    "orphanHint": "This good was charged or claimed earlier in the chain but is no longer a line on the document you are viewing."
+    "orphanHint": "This good was charged or claimed earlier in the chain but is no longer a line on the document you are viewing.",
+    "noExpensesHint": "Book one from the Expenses page and pick this document.",
+    "noRevenuesHint": "Book one from the Revenues page and pick this document.",
+    "noClaimsHint": "File one from the Claims page and pick this document."
   },
   "payments": {
     "title": "Payments",
@@ -795,6 +813,8 @@
     "cancelConfirm": "Cancel this claim?",
     "emptyTab": "No claims in this tab yet",
     "pickInvoiceFirst": "Select an invoice to list its items",
+    "emptyExpenseHint": "Expense claims are filed against purchase documents — pick one and enter an amount per good.",
+    "emptyRevenueHint": "Revenue claims are filed against sale documents — pick one and enter an amount per good.",
     "errors": {
       "title-required": "Title is required",
       "date-required": "Date is required",

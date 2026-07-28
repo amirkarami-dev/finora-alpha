@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from 'react';
-import { App, Button, Card, Col, Input, Popconfirm, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Col, Empty, Input, Popconfirm, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,12 @@ const SUBTITLE_KEY: Record<ChargeDirection, string> = { EXPENSE: 'expenses.subti
 const TAB_LABEL_KEY: Record<TabKey, Record<ChargeDirection, string>> = {
   invoice: { EXPENSE: 'expenses.tabInvoice', REVENUE: 'revenues.tabInvoice' },
   general: { EXPENSE: 'expenses.tabGeneral', REVENUE: 'revenues.tabGeneral' },
+};
+// Empty-start hints (spec §10.11): with zero data every new page must say what the tab is FOR
+// and how to fill it, not just render a bare table.
+const EMPTY_HINT_KEY: Record<TabKey, Record<ChargeDirection, string>> = {
+  invoice: { EXPENSE: 'expenses.emptyInvoiceHint', REVENUE: 'revenues.emptyInvoiceHint' },
+  general: { EXPENSE: 'expenses.emptyGeneralHint', REVENUE: 'revenues.emptyGeneralHint' },
 };
 
 type ListModal = 'picker' | 'docForm' | null;
@@ -260,7 +266,31 @@ export function ChargeListPage({ direction }: ChargeListPageProps) {
           dataSource={filtered}
           scroll={{ x: kind === 'INVOICE' ? 1300 : 900 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
-          locale={{ emptyText: <Text type="secondary">{t('charges.emptyTab')}</Text> }}
+          locale={{
+            // Two distinct empties: nothing booked at all (offer the create action), versus a
+            // search that filtered everything out (offer nothing — the fix is to clear the box).
+            emptyText:
+              rows.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <Space direction="vertical" size={2}>
+                      <Text>{t('charges.emptyTab')}</Text>
+                      <Text type="secondary">{t(EMPTY_HINT_KEY[tab][direction])}</Text>
+                    </Space>
+                  }
+                >
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openNew}>
+                    {tab === 'invoice' ? t('charges.newInvoiceDoc') : t('charges.newGeneralDoc')}
+                  </Button>
+                </Empty>
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={<Text type="secondary">{t('common.noSearchResults')}</Text>}
+                />
+              ),
+          }}
           onRow={(r) => ({ onClick: () => navigate(chargeDetailRoute(direction, r.id)), className: 'clickable-row' })}
         />
       </Card>

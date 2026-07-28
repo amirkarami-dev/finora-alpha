@@ -186,8 +186,26 @@ export function InvoiceChargesCard({ invoiceId }: InvoiceChargesCardProps) {
     borderBlockStart: `1px solid ${token.colorBorderSecondary}`,
   };
 
-  const emptyText = (message: string) => ({
-    emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={message} />,
+  // Empty-start sweep (spec §10.11): an empty section says both what is missing and where the
+  // user would create it, since nothing on this read-only card can create one.
+  const emptyText = (message: string, hint?: string) => ({
+    emptyText: (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          hint ? (
+            <Space direction="vertical" size={2}>
+              <Text>{message}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {hint}
+              </Text>
+            </Space>
+          ) : (
+            message
+          )
+        }
+      />
+    ),
   });
 
   return (
@@ -253,7 +271,7 @@ export function InvoiceChargesCard({ invoiceId }: InvoiceChargesCardProps) {
             columns={docColumns('EXPENSE')}
             dataSource={expenses}
             scroll={{ x: 800 }}
-            locale={emptyText(t('invoiceCharges.noExpenses'))}
+            locale={emptyText(t('invoiceCharges.noExpenses'), t('invoiceCharges.noExpensesHint'))}
           />
         </div>
       )}
@@ -271,7 +289,7 @@ export function InvoiceChargesCard({ invoiceId }: InvoiceChargesCardProps) {
             columns={docColumns('REVENUE')}
             dataSource={revenues}
             scroll={{ x: 800 }}
-            locale={emptyText(t('invoiceCharges.noRevenues'))}
+            locale={emptyText(t('invoiceCharges.noRevenues'), t('invoiceCharges.noRevenuesHint'))}
           />
         </div>
       )}
@@ -289,7 +307,7 @@ export function InvoiceChargesCard({ invoiceId }: InvoiceChargesCardProps) {
             columns={claimColumns}
             dataSource={claims}
             scroll={{ x: 700 }}
-            locale={emptyText(t('invoiceCharges.noClaims'))}
+            locale={emptyText(t('invoiceCharges.noClaims'), t('invoiceCharges.noClaimsHint'))}
           />
         </div>
       )}

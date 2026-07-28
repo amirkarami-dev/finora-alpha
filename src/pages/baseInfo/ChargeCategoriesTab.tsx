@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
-import { App, Button, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Empty, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -99,9 +99,13 @@ export const ChargeCategoriesTab = forwardRef<ChargeCategoriesTabHandle, ChargeC
               cancelText={t('common.no')}
               onConfirm={async () => {
                 try {
-                  await setActive.mutateAsync({ id: r.id, active: !r.active });
+                  // Capture the INTENDED next state before awaiting: the mock API mutates the
+                  // record in place, so a post-await `r.active` already reads the flipped value
+                  // and the toast would announce the opposite of what just happened.
+                  const next = !r.active;
+                  await setActive.mutateAsync({ id: r.id, active: next });
                   message.success(
-                    r.active ? t('chargeCategories.deactivated') : t('chargeCategories.activated'),
+                    next ? t('chargeCategories.activated') : t('chargeCategories.deactivated'),
                   );
                 } catch {
                   message.error(t('common.saveFailed'));
@@ -146,6 +150,36 @@ export const ChargeCategoriesTab = forwardRef<ChargeCategoriesTabHandle, ChargeC
           dataSource={filtered}
           scroll={{ x: 820 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+          locale={{
+            // Empty-start sweep (spec §10.11): with no categories at all, say what a category is
+            // for and offer to create one — the two Segmenteds above can also empty this table,
+            // and that needs the other message.
+            emptyText:
+              (data ?? []).length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <Space direction="vertical" size={2}>
+                      <Text>{t('chargeCategories.emptyTitle')}</Text>
+                      <Text type="secondary">
+                        {direction === 'EXPENSE'
+                          ? t('chargeCategories.emptyExpenseHint')
+                          : t('chargeCategories.emptyRevenueHint')}
+                      </Text>
+                    </Space>
+                  }
+                >
+                  <Button type="primary" onClick={() => setFormState({ open: true, category: undefined })}>
+                    {t('chargeCategories.newCategory')}
+                  </Button>
+                </Empty>
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={<Text type="secondary">{t('common.noFilterResults')}</Text>}
+                />
+              ),
+          }}
         />
         <ChargeCategoryFormModal
           open={formState.open}

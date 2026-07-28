@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from 'react';
-import { App, Button, Card, Col, Input, Popconfirm, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Col, Empty, Input, Popconfirm, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -243,7 +243,33 @@ export default function ClaimsPage() {
           dataSource={filtered}
           scroll={{ x: 1500 }}
           pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
-          locale={{ emptyText: <Text type="secondary">{t('claims.emptyTab')}</Text> }}
+          locale={{
+            // Nothing filed yet (offer the create action) vs. a search that filtered everything
+            // out (the fix is to clear the box) — the `ChargeListPage` precedent, spec §10.11.
+            emptyText:
+              rows.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <Space direction="vertical" size={2}>
+                      <Text>{t('claims.emptyTab')}</Text>
+                      <Text type="secondary">
+                        {tab === 'expense' ? t('claims.emptyExpenseHint') : t('claims.emptyRevenueHint')}
+                      </Text>
+                    </Space>
+                  }
+                >
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openNew}>
+                    {t('claims.newClaim')}
+                  </Button>
+                </Empty>
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={<Text type="secondary">{t('common.noSearchResults')}</Text>}
+                />
+              ),
+          }}
           expandable={{
             rowExpandable: (r) => r.items.length > 0,
             expandedRowRender: (r) => (

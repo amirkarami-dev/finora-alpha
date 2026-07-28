@@ -212,7 +212,28 @@ export function InvoicePickerModal({ open, side, onCancel, onPick }: InvoicePick
           onChange: (keys) => setSelectedId(keys[0] as string | undefined),
         }}
         onRow={(r) => ({ onClick: () => setSelectedId(r.id), style: { cursor: 'pointer' } })}
-        locale={{ emptyText: <Empty description={<Text type="secondary">{t('charges.pickerEmptyHint')}</Text>} /> }}
+        locale={{
+          // "No invoices" here reads as a bug unless the eligibility rule is spelled out
+          // (spec §10.11) — but only when the SOURCE set is genuinely empty. When the user's own
+          // filters emptied the table, the eligibility rule is the wrong explanation entirely.
+          emptyText:
+            (invoices ?? []).length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <Space direction="vertical" size={2}>
+                    <Text>{t('charges.pickerEmptyTitle')}</Text>
+                    <Text type="secondary">{t('charges.pickerEmptyHint')}</Text>
+                  </Space>
+                }
+              />
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={<Text type="secondary">{t('common.noFilterResults')}</Text>}
+              />
+            ),
+        }}
       />
     </Modal>
   );

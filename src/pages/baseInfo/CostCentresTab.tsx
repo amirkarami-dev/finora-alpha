@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
-import { App, Button, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Empty, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -80,8 +80,12 @@ export const CostCentresTab = forwardRef<CostCentresTabHandle>(function CostCent
             cancelText={t('common.no')}
             onConfirm={async () => {
               try {
-                await setActive.mutateAsync({ id: r.id, active: !r.active });
-                message.success(r.active ? t('costCentres.deactivated') : t('costCentres.activated'));
+                // Capture the INTENDED next state before awaiting: the mock API mutates the
+                // record in place, so a post-await `r.active` already reads the flipped value
+                // and the toast would announce the opposite of what just happened.
+                const next = !r.active;
+                await setActive.mutateAsync({ id: r.id, active: next });
+                message.success(next ? t('costCentres.activated') : t('costCentres.deactivated'));
               } catch {
                 message.error(t('common.saveFailed'));
               }
@@ -116,6 +120,32 @@ export const CostCentresTab = forwardRef<CostCentresTabHandle>(function CostCent
         dataSource={filtered}
         scroll={{ x: 760 }}
         pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+        locale={{
+          // Empty-start sweep (spec §10.11) — the `ChargeCategoriesTab` precedent: an entirely
+          // empty master gets an explanation plus the create action; a Segmented that filtered
+          // everything out gets the other message.
+          emptyText:
+            (data ?? []).length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <Space direction="vertical" size={2}>
+                    <Text>{t('costCentres.emptyTitle')}</Text>
+                    <Text type="secondary">{t('costCentres.emptyHint')}</Text>
+                  </Space>
+                }
+              >
+                <Button type="primary" onClick={() => setFormState({ open: true, costCentre: undefined })}>
+                  {t('costCentres.newCostCentre')}
+                </Button>
+              </Empty>
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={<Text type="secondary">{t('common.noFilterResults')}</Text>}
+              />
+            ),
+        }}
       />
       <CostCentreFormModal
         open={formState.open}
