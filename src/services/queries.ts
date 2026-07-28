@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ChargeDirection, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ChargeDirection, ChargeScope, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -42,6 +42,11 @@ export const qk = {
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
   chargeCategories: (direction?: ChargeDirection) => ['chargeCategories', direction ?? 'all'] as const,
+  // ---- Charge documents (design spec §4-§5) ----
+  chargeDocs: (direction: ChargeDirection, kind?: ChargeScope) =>
+    ['chargeDocs', direction, kind ?? 'all'] as const,
+  chargeDoc: (id: string) => ['chargeDoc', id] as const,
+  chargeSourceInvoices: (side: InvoiceSide) => ['chargeSourceInvoices', side] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -590,12 +595,16 @@ export const useChargeCategories = (direction?: ChargeDirection) =>
   });
 
 // Bare-prefix invalidation (queries.ts precedent above, spec §5): covers every
-// `['chargeCategories', direction]` entry regardless of which direction mutated.
-// Phase 7: also invalidate ['chargeDocs']/['chargeDoc'] here — a rename or deactivate changes
-// the label rendered on every row that references the category.
+// `['chargeCategories', direction]` entry regardless of which direction mutated. Also
+// invalidates `['chargeDocs']`/`['chargeDoc']` — a category rename/deactivate changes the label
+// rendered on every doc row that references it.
 function useInvalidateChargeCategories() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: ['chargeCategories'] });
+  return () => {
+    qc.invalidateQueries({ queryKey: ['chargeCategories'] });
+    qc.invalidateQueries({ queryKey: ['chargeDocs'] });
+    qc.invalidateQueries({ queryKey: ['chargeDoc'] });
+  };
 }
 
 export const useCreateChargeCategory = () => {
@@ -620,6 +629,98 @@ export const useSetChargeCategoryActive = () => {
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       api.setChargeCategoryActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+/* --------------------------- Charge documents (design spec §4-§5) --------------------------- */
+
+export const useChargeSourceInvoices = (side: InvoiceSide) =>
+  useQuery({
+    queryKey: qk.chargeSourceInvoices(side),
+    queryFn: () => api.getChargeSourceInvoices(side),
+  });
+
+export const useChargeDocs = (direction: ChargeDirection, kind?: ChargeScope) =>
+  useQuery({
+    queryKey: qk.chargeDocs(direction, kind),
+    queryFn: () => api.getChargeDocs(direction, kind),
+  });
+
+export const useChargeDoc = (id: string) =>
+  useQuery({
+    queryKey: qk.chargeDoc(id),
+    queryFn: () => api.getChargeDoc(id),
+    enabled: !!id,
+  });
+
+// Bare-prefix invalidation (spec §5): TanStack matches query keys element-by-element, so a bare
+// ['chargeDoc'] does NOT prefix-match ['chargeDocs', direction, kind] — 'chargeDoc' !==
+// 'chargeDocs' as array elements, they just happen to share a text prefix as STRINGS. BOTH bare
+// keys are required below; do not "simplify" either one away.
+function useInvalidateCharges() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['chargeDocs'] });
+    qc.invalidateQueries({ queryKey: ['chargeDoc'] });
+  };
+}
+
+export const useCreateChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: (input: api.ChargeDocInput) => api.createChargeDoc(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ChargeDocInput }) =>
+      api.updateChargeDoc(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelChargeDoc(id),
+    onSuccess: invalidate,
+  });
+};
+
+export const useAddChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ docId, input }: { docId: string; input: api.ChargeLineInput }) =>
+      api.addChargeLine(docId, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({
+      docId,
+      lineId,
+      input,
+    }: {
+      docId: string;
+      lineId: string;
+      input: api.ChargeLineInput;
+    }) => api.updateChargeLine(docId, lineId, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useRemoveChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ docId, lineId }: { docId: string; lineId: string }) =>
+      api.removeChargeLine(docId, lineId),
     onSuccess: invalidate,
   });
 };

@@ -56,3 +56,23 @@ export function invoiceItemAmount(item: Pick<InvoiceItem,
   const gross = unit * item.quantityMt;
   return gross * (1 - (item.discountPercent ?? 0) / 100);
 }
+
+/**
+ * Splits `amount` into `n` equal parts in integer cents. Equal split gives every part the same
+ * fractional remainder, so the tie-break is positional — leftover cents go to the FIRST parts.
+ * Σ result === round(amount) exactly. Callers guarantee amount > 0 (`invalid-amount`).
+ *
+ * Integer cents, not float division: `$100 / 3` → exactly `[33.34, 33.33, 33.33]`, never a
+ * repeating-decimal remainder split across the parts.
+ *
+ * Imported by BOTH `api.ts` (authoritative, server-side) and the Phase 4b line modal (live
+ * preview) so the two can never disagree — see
+ * docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §3.
+ */
+export function splitEqually(amount: number, n: number): number[] {
+  if (n <= 0) return [];
+  const totalCents = Math.round(amount * 100);
+  const base = Math.trunc(totalCents / n);
+  const remainder = totalCents - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
+}
