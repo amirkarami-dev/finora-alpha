@@ -69,9 +69,11 @@ export default function ChargeDocDetailPage() {
     if (state?.autoOpenAddLine && data.doc.status === 'ACTIVE' && data.doc.lines.length === 0) {
       setActiveModal('addLine');
       setAutoOpened(true);
-      navigate(location.pathname, { replace: true, state: null });
+      // `pathname + search`, not `pathname`: clearing the router state must not also drop the
+      // query string (there is none on this route today — this keeps it that way by construction).
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [data, autoOpened, location.state, location.pathname, navigate]);
+  }, [data, autoOpened, location.state, location.pathname, location.search, navigate]);
 
   if (!isLoading && !data) {
     return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />;

@@ -42,9 +42,14 @@ export function InvoiceChargesCard({ invoiceId }: InvoiceChargesCardProps) {
   const canSeeExpenses = useHasAccess('expenses');
   const canSeeRevenues = useHasAccess('revenues');
   const canSeeClaims = useHasAccess('claims');
-  const { data, isLoading } = useInvoiceChargeSummary(invoiceId);
+  const canSeeAnySection = canSeeExpenses || canSeeRevenues || canSeeClaims;
+  // The RBAC gate lives in the QUERY, not in a conditional hook call: without `enabled`, a Staff
+  // user's client still pulls the whole charge summary into the React Query cache for a card that
+  // renders nothing. Free against the mock db (localStorage already holds it all), but this
+  // module's stated design is "replace `api.ts` internals to go real", where it would be a leak.
+  const { data, isLoading } = useInvoiceChargeSummary(invoiceId, { enabled: canSeeAnySection });
 
-  if (!canSeeExpenses && !canSeeRevenues && !canSeeClaims) return null;
+  if (!canSeeAnySection) return null;
 
   const expenses = data?.expenses ?? [];
   const revenues = data?.revenues ?? [];

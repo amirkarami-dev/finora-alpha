@@ -820,9 +820,12 @@ export const useCancelClaim = () => {
 /** Everything booked against an invoice's CHAIN — expense docs, revenue docs, claims, their USD
  *  totals and the per-good breakdown (spec §4). Consumed only by `InvoiceChargesCard`, which
  *  additionally gates each section on its own `useHasAccess` (spec §6). */
-export const useInvoiceChargeSummary = (invoiceId: string) =>
+/** `enabled` override so `InvoiceChargesCard` can keep its hooks unconditional (rules of hooks —
+ *  a CRITICAL rule there) while still not FETCHING charge data for a user whose RBAC hides every
+ *  section of the card. Harmless against the mock db, a real leak against a real backend. */
+export const useInvoiceChargeSummary = (invoiceId: string, options?: { enabled?: boolean }) =>
   useQuery({
     queryKey: qk.invoiceChargeSummary(invoiceId),
     queryFn: () => api.getInvoiceChargeSummary(invoiceId),
-    enabled: !!invoiceId,
+    enabled: (options?.enabled ?? true) && !!invoiceId,
   });

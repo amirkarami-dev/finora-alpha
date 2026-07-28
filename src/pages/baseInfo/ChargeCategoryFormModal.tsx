@@ -64,8 +64,17 @@ export function ChargeCategoryFormModal({ open, onClose, category, direction }: 
       }
       onClose();
     } catch (e) {
-      if (e instanceof Error && e.message === 'duplicate-code') {
+      const code = e instanceof Error ? e.message : '';
+      if (code === 'duplicate-code') {
         form.setFields([{ name: 'code', errors: [t('chargeCategories.codeTaken')] }]);
+        return;
+      }
+      // The server validates name/code independently of this form (api.ts's
+      // `createChargeCategory`/`updateChargeCategory`, spec §4) — surface those on the offending
+      // field rather than as a generic "save failed".
+      if (code === 'name-required' || code === 'code-required') {
+        const field = code === 'name-required' ? 'name' : 'code';
+        form.setFields([{ name: field, errors: [t(`chargeCategories.errors.${code}`)] }]);
         return;
       }
       message.error(t('common.saveFailed'));

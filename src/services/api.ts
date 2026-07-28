@@ -2398,15 +2398,23 @@ export async function getChargeCategories(
   );
 }
 
+/** Guards IN ORDER (spec §4): `name-required` → `code-required` → `duplicate-code` (within the
+ *  direction). The two required-checks are server-side on purpose — the modal marks both fields
+ *  required, but every other master-data guard in this file validates independently of the form,
+ *  and without them a blank code stores `code: ''` and the NEXT blank one reports `duplicate-code`
+ *  ("this code is already in use") against an empty field. */
 export async function createChargeCategory(input: ChargeCategoryInput): Promise<ChargeCategory> {
   await delay(180);
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
   const code = input.code.trim().toUpperCase();
+  if (!code) throw new Error('code-required');
   if (db.chargeCategories.some((c) => c.code === code && c.direction === input.direction)) {
     throw new Error('duplicate-code');
   }
   const category: ChargeCategory = {
     id: nextChargeCategoryId(),
-    name: input.name.trim(),
+    name,
     code,
     direction: input.direction,
     scope: input.scope,
@@ -2418,11 +2426,17 @@ export async function createChargeCategory(input: ChargeCategoryInput): Promise<
   return category;
 }
 
+/** Guards IN ORDER (spec §4): not-found → `name-required` → `code-required`. `code` is immutable
+ *  on edit and therefore ignored, but a blank one still rejects the whole payload rather than
+ *  half-applying it — same reasoning as `createChargeCategory` above. */
 export async function updateChargeCategory(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
   await delay(160);
   const category = db.chargeCategories.find((c) => c.id === id);
   if (!category) throw new Error(`Charge category ${id} not found`);
-  category.name = input.name.trim(); // code/direction/scope immutable on edit
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  if (!input.code.trim()) throw new Error('code-required');
+  category.name = name; // code/direction/scope immutable on edit
   category.description = input.description?.trim() || undefined;
   persistDb();
   return category;
@@ -2830,7 +2844,13 @@ function buildChargeLine(doc: ChargeDoc, input: ChargeLineInput, existing?: Char
     if (!invoiceItem) throw new Error('good-not-on-invoice');
     if (seenRef.has(invoiceItem.referenceDocumentItemId)) throw new Error('duplicate-good');
     seenRef.add(invoiceItem.referenceDocumentItemId);
-    if (g.amount !== undefined && g.amount < 0) throw new Error('invalid-good-amount');
+    // `Number.isFinite` FIRST, matching every sibling guard in this file (`invalid-amount`,
+    // `invalid-fx`, `invalid-item-amount`): a bare `< 0` lets NaN/Infinity/"abc"/{} through, and
+    // a non-finite per-good amount propagates through recomputeLineTotals → recomputeDocTotals
+    // into `doc.totalUSD`, which `persistDb()` then serialises to JSON `null` — unrecoverable.
+    if (g.amount !== undefined && (!Number.isFinite(g.amount) || g.amount < 0)) {
+      throw new Error('invalid-good-amount');
+    }
     resolved.push({ invoiceItem, amount: g.amount });
   }
 
