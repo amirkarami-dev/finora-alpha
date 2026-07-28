@@ -23,8 +23,11 @@ import SalePage from '@/pages/tradeInvoices/SalePage';
 import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
 import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
-import CostCentresPage from '@/pages/costCentres/CostCentresPage';
-import ExpensesPage from '@/pages/expenses/ExpensesPage';
+import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
+import ExpensesPage from '@/pages/charges/ExpensesPage';
+import RevenuesPage from '@/pages/charges/RevenuesPage';
+import ChargeDocDetailPage from '@/pages/charges/ChargeDocDetailPage';
+import ClaimsPage from '@/pages/claims/ClaimsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -79,10 +82,19 @@ export function AppRoutes() {
         <Route path="invoices/purchase" element={<RoleRoute routeKey="purchase"><PurchasePage /></RoleRoute>} />
         <Route path="invoices/sale" element={<RoleRoute routeKey="sale"><SalePage /></RoleRoute>} />
         <Route path="warehouse" element={<RoleRoute routeKey="warehouse"><WarehousePage /></RoleRoute>} />
-        <Route path="cost-centres" element={<RoleRoute routeKey="costCentres"><CostCentresPage /></RoleRoute>} />
+        <Route path="base-info" element={<RoleRoute routeKey="baseInfo"><BaseInfoPage /></RoleRoute>} />
+        {/* Keeps old cost-centres bookmarks alive after the Phase 2 BaseInfo move. */}
+        <Route path="cost-centres" element={<Navigate to="/app/base-info?tab=costCentres" replace />} />
         <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
+        {/* Charge documents (design spec §9 Phase 4b) — one detail component for both directions,
+            registered per-direction at its own list route; Phase 5 adds the `revenues` twin. */}
         <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />
+        <Route path="expenses/:id" element={<RoleRoute routeKey="expenses"><ChargeDocDetailPage /></RoleRoute>} />
+        <Route path="revenues" element={<RoleRoute routeKey="revenues"><RevenuesPage /></RoleRoute>} />
+        <Route path="revenues/:id" element={<RoleRoute routeKey="revenues"><ChargeDocDetailPage /></RoleRoute>} />
+        {/* Claims (design spec §9 Phase 6) — one page, tabbed expense/revenue via useTabParam. */}
+        <Route path="claims" element={<RoleRoute routeKey="claims"><ClaimsPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
         <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>

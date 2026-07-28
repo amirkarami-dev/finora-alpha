@@ -1,6 +1,15 @@
 import dayjs from 'dayjs';
 import { db, persistDb } from '@/mock/data';
 import type {
+  ChargeAllocation,
+  ChargeCategory,
+  ChargeDirection,
+  ChargeDoc,
+  ChargeLine,
+  ChargeScope,
+  Claim,
+  ClaimItem,
+  ClaimSide,
   ClaimType,
   Container,
   ContainerGood,
@@ -14,15 +23,11 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
-  Expense,
-  ExpenseType,
-  GeneralExpenseCategory,
   Incoterm,
   Invoice,
   InventoryDocument,
   InventoryDocumentItem,
   InventoryDocType,
-  InvoiceExpenseCategory,
   InvoiceItem,
   InvoiceSide,
   InvoiceStatus,
@@ -37,7 +42,7 @@ import type {
   TimeSeriesPoint,
   Warehouse,
 } from '@/types';
-import { contractValue, invoiceItemAmount, invoiceItemUnitPrice } from '@/utils/calc';
+import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
@@ -2299,8 +2304,8 @@ export async function setWarehouseActive(id: string, active: boolean): Promise<W
 /* -------------------------- Cost Centre CRUD --------------------------- *
  * Mirrors the Warehouse master exactly (spec §5): code trimmed+uppercased and immutable after
  * create, 'duplicate-code' guard, active/inactive toggle. Inactive centres are excluded from
- * pickers but retained on already-saved expenses (the picker filters client-side; the id itself
- * is never invalidated here).
+ * pickers but retained on already-saved records that reference them (the picker filters
+ * client-side; the id itself is never invalidated here).
  * ------------------------------------------------------------------ */
 
 export interface CostCentreInput {
@@ -2358,28 +2363,137 @@ export async function setCostCentreActive(id: string, active: boolean): Promise<
   return costCentre;
 }
 
-/* ---------------------------- Expense module ---------------------------- *
- * Invoice Expense / General Expense / Claim (Supplier/Claim) — see spec §6.
- * No hard delete: `cancelExpense` sets status = 'CANCELLED'; cancelled rows are excluded from
- * every total/listing that matters (getExpenses still returns them so the UI can show them
- * struck-through/tagged, but getExpensesForInvoice excludes them per spec).
+/* ------------------------ Charge Category CRUD -------------------------- *
+ * Master data behind BaseInfo's Expense/Revenue category tabs (design spec §4). Mirrors the
+ * Cost Centre CRUD immediately above almost exactly — same id/active/persist idioms — with one
+ * deliberate difference: `duplicate-code` is scoped WITHIN a direction (spec §2), so the same
+ * code may exist once under EXPENSE and once under REVENUE, since the two directions are
+ * maintained as fully independent lists.
  * ------------------------------------------------------------------ */
 
-export interface ExpenseSourceInvoiceRow {
+export interface ChargeCategoryInput {
+  name: string;
+  code: string;
+  direction: ChargeDirection;
+  scope: ChargeScope;
+  description?: string;
+}
+
+function nextChargeCategoryId(): string {
+  let max = 0;
+  for (const cc of db.chargeCategories) {
+    const match = /^ccat-(\d+)$/.exec(cc.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `ccat-${String(max + 1).padStart(4, '0')}`;
+}
+
+export async function getChargeCategories(
+  direction?: ChargeDirection,
+  scope?: ChargeScope,
+): Promise<ChargeCategory[]> {
+  await delay(120);
+  return db.chargeCategories.filter(
+    (c) => (direction ? c.direction === direction : true) && (scope ? c.scope === scope : true),
+  );
+}
+
+/** Guards IN ORDER (spec §4): `name-required` → `code-required` → `duplicate-code` (within the
+ *  direction). The two required-checks are server-side on purpose — the modal marks both fields
+ *  required, but every other master-data guard in this file validates independently of the form,
+ *  and without them a blank code stores `code: ''` and the NEXT blank one reports `duplicate-code`
+ *  ("this code is already in use") against an empty field. */
+export async function createChargeCategory(input: ChargeCategoryInput): Promise<ChargeCategory> {
+  await delay(180);
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  const code = input.code.trim().toUpperCase();
+  if (!code) throw new Error('code-required');
+  if (db.chargeCategories.some((c) => c.code === code && c.direction === input.direction)) {
+    throw new Error('duplicate-code');
+  }
+  const category: ChargeCategory = {
+    id: nextChargeCategoryId(),
+    name,
+    code,
+    direction: input.direction,
+    scope: input.scope,
+    description: input.description?.trim() || undefined,
+    active: true,
+  };
+  db.chargeCategories.push(category);
+  persistDb();
+  return category;
+}
+
+/** Guards IN ORDER (spec §4): not-found → `name-required` → `code-required`. `code` is immutable
+ *  on edit and therefore ignored, but a blank one still rejects the whole payload rather than
+ *  half-applying it — same reasoning as `createChargeCategory` above. */
+export async function updateChargeCategory(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
+  await delay(160);
+  const category = db.chargeCategories.find((c) => c.id === id);
+  if (!category) throw new Error(`Charge category ${id} not found`);
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  if (!input.code.trim()) throw new Error('code-required');
+  category.name = name; // code/direction/scope immutable on edit
+  category.description = input.description?.trim() || undefined;
+  persistDb();
+  return category;
+}
+
+export async function setChargeCategoryActive(id: string, active: boolean): Promise<ChargeCategory> {
+  await delay(140);
+  const category = db.chargeCategories.find((c) => c.id === id);
+  if (!category) throw new Error(`Charge category ${id} not found`);
+  category.active = active;
+  persistDb();
+  return category;
+}
+
+/* ------------------------ Charge Documents (Expenses/Revenues) ---------------------- *
+ * Booked expense/revenue documents against an invoice's goods, or general (no-invoice)
+ * documents — see
+ * docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §2 (shapes), §3
+ * (split algorithm + money roll-up + re-split semantics), §4 (this API, guards IN ORDER).
+ * Direction-parameterised: EXPENSE and REVENUE share this exact implementation (spec §5's
+ * gate — if Revenue ever needs more than a thin UI wrapper around these functions, this file's
+ * direction-parameterisation was wrong and Phase 4 needs fixing, not forking).
+ * ------------------------------------------------------------------ */
+
+export interface ChargeSourceInvoiceRow {
   id: string;
   invoiceNumber: string;
   invoiceType: InvoiceType;
   invoiceDate: string;
   customerId: string;
   customerName: string;
+  contractId: string;
+  currency: Currency;
+  totalAmount: number;
+  totalWeightMt: number;
+  itemCount: number;
 }
 
-/** Chain-leaf, CONFIRMED, priced documents of `side` — the ONLY universe an expense/claim may
- *  attach to (spec §6.2). Never use `getTradeInvoices`/`useTradeInvoices` for this: it returns
- *  DRAFT, CANCELLED and unpriced order documents unfiltered. */
-export async function getExpenseSourceInvoices(side: InvoiceSide): Promise<ExpenseSourceInvoiceRow[]> {
+/** Chain-leaf, CONFIRMED, priced documents — the ONLY universe a charge (expense or revenue
+ *  document) may attach to (spec §4). Never use `getTradeInvoices`/`useTradeInvoices` for this:
+ *  it returns DRAFT, CANCELLED and unpriced order documents unfiltered. (Renamed from the
+ *  pre-rework `getExpenseSourceInvoices`, which this doc-comment's warning is carried over from
+ *  verbatim; row widened with `contractId`/`currency`/`totalAmount`/`totalWeightMt`/`itemCount`
+ *  so the picker can filter and show useful columns.)
+ *
+ *  `side` is OPTIONAL and defaults to BOTH sides: a charge document is side-agnostic. Only
+ *  CLAIMS are side-restricted (spec §1's binding table; the user's requirements doc scopes the
+ *  purchase/sale split to Supplier Claim / Customer Claim only, and defines an Invoice Expense as
+ *  a cost related to "a purchase OR sale invoice"). Freight, insurance and handling are booked on
+ *  sale invoices as readily as purchase ones. `createChargeDoc` has never had a side guard — it
+ *  derives the side FROM the invoice — so restricting the picker was a UI-only invention.
+ *  `getClaimSourceInvoices(side)` below is the side-restricted entry point. */
+export async function getChargeSourceInvoices(side?: InvoiceSide): Promise<ChargeSourceInvoiceRow[]> {
   await delay(140);
-  return chainLeafDocs(side)
+  const sides: InvoiceSide[] = side ? [side] : ['PURCHASE', 'SALE'];
+  return sides
+    .flatMap((s) => chainLeafDocs(s))
     .filter((inv) => isPricedType(inv.invoiceType))
     .map((inv) => ({
       id: inv.id,
@@ -2388,192 +2502,834 @@ export async function getExpenseSourceInvoices(side: InvoiceSide): Promise<Expen
       invoiceDate: inv.invoiceDate,
       customerId: inv.customerId,
       customerName: customerById.get(inv.customerId)?.name ?? '—',
+      contractId: inv.contractId,
+      currency: inv.currency,
+      totalAmount: inv.totalAmount,
+      totalWeightMt: inv.totalWeightMt,
+      itemCount: inv.items.length,
     }))
     .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
 }
 
-export async function getExpenses(type?: ExpenseType): Promise<Expense[]> {
-  await delay(140);
-  return db.expenses
-    .filter((e) => !type || e.expenseType === type)
+export interface ChargeDocRow extends ChargeDoc {
+  invoiceNumber?: string;
+  customerName?: string;
+  lineCount: number;
+}
+
+export interface ChargeDocDetail {
+  doc: ChargeDoc;
+  invoice?: Invoice;
+  invoiceItems: InvoiceItem[];
+  customerName?: string;
+}
+
+/** Includes CANCELLED docs (the UI strikes them through in Phase 4b) — date desc.
+ *  `invoiceNumber`/`customerName` joined server-side (the `PaymentRow extends Payment` idiom
+ *  above) so the list page doesn't rebuild its own id→label Maps. */
+export async function getChargeDocs(
+  direction: ChargeDirection,
+  kind?: ChargeScope,
+): Promise<ChargeDocRow[]> {
+  await delay(160);
+  return db.chargeDocs
+    .filter((d) => d.direction === direction && (kind ? d.kind === kind : true))
+    .map((d) => {
+      const invoice = d.invoiceId ? findInvoice(d.invoiceId) : undefined;
+      return {
+        ...d,
+        invoiceNumber: invoice?.invoiceNumber,
+        customerName: invoice ? customerById.get(invoice.customerId)?.name : undefined,
+        lineCount: d.lines.length,
+      };
+    })
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
-/**
- * Resolves over the invoice's full conversion CHAIN (spec §6.2, CRITICAL) — mirrors
- * `getTradeInvoice`'s payment aggregation exactly: an expense booked on a provisional must not
- * vanish the instant that provisional converts to a final invoice, since the final (not the
- * provisional) becomes the new chain leaf and the two never share an id. Excludes CANCELLED
- * expenses from the total.
- */
-export async function getExpensesForInvoice(invoiceId: string): Promise<Expense[]> {
+/** `invoiceItems` come from the BOOKED invoice (`doc.invoiceId`), never the chain leaf — a
+ *  charge's goods picker always shows the exact document it was created against, even after a
+ *  later conversion moves the chain leaf elsewhere (spec §2's immutable-`invoiceId` decision). */
+export async function getChargeDoc(id: string): Promise<ChargeDocDetail | undefined> {
   await delay(140);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  // Seed with the queried document itself: `invoiceChain` walks up to the root then back down
-  // via `findSuccessor`, which SKIPS cancelled documents — so a CANCELLED document that has a
-  // parent is not a member of its own chain per that walk, and its own expenses would otherwise
-  // disappear from its page the moment it's cancelled, while still showing on the Expenses page.
-  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
-  return db.expenses
-    .filter((e) => e.invoiceId && chainIds.has(e.invoiceId) && e.status !== 'CANCELLED')
-    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+  const doc = db.chargeDocs.find((d) => d.id === id);
+  if (!doc) return undefined;
+  const invoice = doc.invoiceId ? findInvoice(doc.invoiceId) : undefined;
+  return {
+    doc,
+    invoice,
+    invoiceItems: invoice ? invoice.items : [],
+    customerName: invoice ? customerById.get(invoice.customerId)?.name : undefined,
+  };
 }
 
-function nextExpenseId(): string {
+function nextChargeDocId(): string {
   let max = 0;
-  for (const e of db.expenses) {
-    const match = /^exp-(\d+)$/.exec(e.id);
+  for (const d of db.chargeDocs) {
+    const match = /^chg-(\d+)$/.exec(d.id);
     if (match) max = Math.max(max, Number(match[1]));
   }
-  return `exp-${String(max + 1).padStart(4, '0')}`;
+  return `chg-${String(max + 1).padStart(4, '0')}`;
 }
 
-export interface ExpenseInput {
+/** Monotonic max-scanning counter (mirrors `nextInvoiceItemId`) — NOT length-derived, so a
+ *  create/remove interleave across two docs can't mint a duplicate line id. */
+let chargeLineSeq = db.chargeDocs.reduce(
+  (max, doc) =>
+    doc.lines.reduce((m, line) => {
+      const match = /^chgline-(\d+)$/.exec(line.id);
+      return match ? Math.max(m, Number(match[1])) : m;
+    }, max),
+  0,
+);
+function nextChargeLineId(): string {
+  chargeLineSeq += 1;
+  return `chgline-${chargeLineSeq}`;
+}
+
+/** Same idiom, one level deeper: allocations are inline on lines which are inline on docs. */
+let chargeAllocationSeq = db.chargeDocs.reduce(
+  (max, doc) =>
+    doc.lines.reduce(
+      (m, line) =>
+        line.allocations.reduce((mm, alloc) => {
+          const match = /^chgalloc-(\d+)$/.exec(alloc.id);
+          return match ? Math.max(mm, Number(match[1])) : mm;
+        }, m),
+      max,
+    ),
+  0,
+);
+function nextChargeAllocationId(): string {
+  chargeAllocationSeq += 1;
+  return `chgalloc-${chargeAllocationSeq}`;
+}
+
+export interface ChargeDocInput {
+  direction: ChargeDirection;
+  kind: ChargeScope;
   title: string;
-  expenseType: ExpenseType;
-  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
-  claimType?: ClaimType;
-  partyId?: string;
   invoiceId?: string;
-  amount: number;
-  currency: Currency;
-  fxRate: number;
   date: string;
-  costCentreId?: string;
   description?: string;
 }
 
 /**
- * Guards IN ORDER (spec §6.2): 'title-required' → 'invalid-amount' → 'invalid-fx' →
- * 'category-required' (INVOICE/GENERAL) → 'invoice-required' (INVOICE/CLAIM) →
- * 'invoice-not-found' → 'invoice-not-confirmed' (must be a chain-leaf CONFIRMED priced document)
- * → 'claim-type-required' (CLAIM) → 'party-required' (CLAIM) → 'party-invoice-mismatch' (the
- * invoice must belong to the chosen party AND match the side: SUPPLIER→PURCHASE, CUSTOMER→SALE).
- *
- * `currentInvoiceId` — the expense's OWN `invoiceId` as already persisted (booked-on document,
- * not the chain leaf; see `getExpensesForInvoice`) — skips the chain-leaf-CONFIRMED check when
- * the input re-submits that same id unchanged. Without this, editing so much as the title of an
- * expense booked on a document that has since been converted throws forever: the booked document
- * is no longer a chain leaf, but the expense was never meant to require re-pointing at one just
- * to be edited. A genuinely different `invoiceId` still goes through the full check.
- *
- * Returns the fields the SERVER decided to keep, normalized rather than trusting the client
- * (mirrors `createInventoryDocument`'s refusal to trust client-supplied product/ceilings):
- * `category` is stripped for CLAIM; `claimType`/`partyId` are stripped for INVOICE/GENERAL;
- * `invoiceId` is stripped for GENERAL.
+ * Guards IN ORDER (spec §4): `title-required` → `date-required` → (kind==='INVOICE')
+ * `invoice-required` → `invoice-not-found` → `invoice-not-confirmed` (must be `isPricedType`
+ * AND a member of `chainLeafDocs(invoiceSide(inv.invoiceType))` — the `createInventoryDocument`
+ * precedent). `invoiceId` is stripped server-side for GENERAL even if the client sent one —
+ * kind and invoiceId travel together for the document's whole lifetime (spec §2).
  */
-function validateAndNormalizeExpense(
-  input: ExpenseInput,
-  currentInvoiceId?: string,
-): {
-  category?: InvoiceExpenseCategory | GeneralExpenseCategory;
-  claimType?: ClaimType;
-  partyId?: string;
-  invoiceId?: string;
-  invoice?: Invoice;
-} {
-  if (!input.title.trim()) throw new Error('title-required');
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
-  if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
-
-  const isInvoiceType = input.expenseType === 'INVOICE';
-  const isGeneralType = input.expenseType === 'GENERAL';
-  const isClaimType = input.expenseType === 'CLAIM';
-
-  if ((isInvoiceType || isGeneralType) && !input.category) throw new Error('category-required');
-  if ((isInvoiceType || isClaimType) && !input.invoiceId) throw new Error('invoice-required');
-
-  let invoice: Invoice | undefined;
-  if (isInvoiceType || isClaimType) {
-    invoice = findInvoice(input.invoiceId!);
-    if (!invoice) throw new Error('invoice-not-found');
-    const isUnchangedBookedInvoice = currentInvoiceId !== undefined && input.invoiceId === currentInvoiceId;
-    if (!isUnchangedBookedInvoice) {
-      const side = invoiceSide(invoice.invoiceType);
-      const isChainLeafConfirmed =
-        isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice!.id);
-      if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
-    }
-  }
-
-  if (isClaimType) {
-    if (input.claimType !== 'SUPPLIER' && input.claimType !== 'CUSTOMER') throw new Error('claim-type-required');
-    if (!input.partyId) throw new Error('party-required');
-    const expectedSide: InvoiceSide = input.claimType === 'SUPPLIER' ? 'PURCHASE' : 'SALE';
-    if (invoice!.customerId !== input.partyId || invoiceSide(invoice!.invoiceType) !== expectedSide) {
-      throw new Error('party-invoice-mismatch');
-    }
-  }
-
-  return {
-    category: isClaimType ? undefined : input.category,
-    claimType: isClaimType ? input.claimType : undefined,
-    partyId: isClaimType ? input.partyId : undefined,
-    invoiceId: isGeneralType ? undefined : input.invoiceId,
-    invoice,
-  };
-}
-
-export async function createExpense(input: ExpenseInput): Promise<Expense> {
+export async function createChargeDoc(input: ChargeDocInput): Promise<ChargeDoc> {
   await delay(200);
-  const normalized = validateAndNormalizeExpense(input);
-  // amountUSD computed ONCE server-side with `round` (2dp) — `round3` is for quantities.
-  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
-  const expense: Expense = {
-    id: nextExpenseId(),
-    title: input.title.trim(),
-    expenseType: input.expenseType,
-    category: normalized.category,
-    claimType: normalized.claimType,
-    partyId: normalized.partyId,
-    invoiceId: normalized.invoiceId,
-    amount: input.amount,
-    currency: input.currency,
-    fxRate: input.fxRate,
-    amountUSD,
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+
+  let invoiceId: string | undefined;
+  if (input.kind === 'INVOICE') {
+    if (!input.invoiceId) throw new Error('invoice-required');
+    const invoice = findInvoice(input.invoiceId);
+    if (!invoice) throw new Error('invoice-not-found');
+    const side = invoiceSide(invoice.invoiceType);
+    const isChainLeafConfirmed =
+      isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice.id);
+    if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+    invoiceId = invoice.id;
+  }
+
+  const doc: ChargeDoc = {
+    id: nextChargeDocId(),
+    direction: input.direction,
+    kind: input.kind,
+    title,
+    invoiceId,
     date: input.date,
-    costCentreId: input.costCentreId,
     description: input.description?.trim() || undefined,
     status: 'ACTIVE',
     createdAt: dayjs().toISOString(),
+    lines: [],
+    totalUSD: 0,
   };
-  db.expenses.push(expense);
+  db.chargeDocs.push(doc);
   persistDb();
-  return expense;
+  return doc;
 }
 
-export async function updateExpense(id: string, input: ExpenseInput): Promise<Expense> {
-  await delay(200);
-  const expense = db.expenses.find((e) => e.id === id);
-  if (!expense) throw new Error(`Expense ${id} not found`);
-  const normalized = validateAndNormalizeExpense(input, expense.invoiceId);
-  const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
-  expense.title = input.title.trim();
-  expense.expenseType = input.expenseType;
-  expense.category = normalized.category;
-  expense.claimType = normalized.claimType;
-  expense.partyId = normalized.partyId;
-  expense.invoiceId = normalized.invoiceId;
-  expense.amount = input.amount;
-  expense.currency = input.currency;
-  expense.fxRate = input.fxRate;
-  expense.amountUSD = amountUSD;
-  expense.date = input.date;
-  expense.costCentreId = input.costCentreId;
-  expense.description = input.description?.trim() || undefined;
+/**
+ * Guards IN ORDER (spec §4): not-found → `doc-cancelled` → `title-required` → `date-required` →
+ * `invoice-immutable` (`input.invoiceId !== doc.invoiceId`) → `kind-immutable` →
+ * `direction-immutable`. Deliberately NO invoice re-validation — that is the whole point of the
+ * immutable `invoiceId` (spec §2): editing a title after the booked provisional converts to a
+ * final must never throw, unlike the old `validateAndNormalizeExpense` escape hatch it replaces.
+ */
+export async function updateChargeDoc(id: string, input: ChargeDocInput): Promise<ChargeDoc> {
+  await delay(180);
+  const doc = db.chargeDocs.find((d) => d.id === id);
+  if (!doc) throw new Error(`Charge document ${id} not found`);
+  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+  if ((input.invoiceId ?? undefined) !== doc.invoiceId) throw new Error('invoice-immutable');
+  if (input.kind !== doc.kind) throw new Error('kind-immutable');
+  if (input.direction !== doc.direction) throw new Error('direction-immutable');
+
+  doc.title = title;
+  doc.date = input.date;
+  doc.description = input.description?.trim() || undefined;
   persistDb();
-  return expense;
+  return doc;
 }
 
-/** No hard delete (spec §6.2) — sets `status = 'CANCELLED'`; cancelled expenses are excluded
- *  from `getExpensesForInvoice` and every UI total. */
-export async function cancelExpense(id: string): Promise<Expense> {
+/** Sets `status = 'CANCELLED'`. No hard delete (spec §4) — cancelled docs are excluded from
+ *  every total/listing that matters via each reader's own filter, not by disappearing here. */
+export async function cancelChargeDoc(id: string): Promise<ChargeDoc> {
   await delay(160);
-  const expense = db.expenses.find((e) => e.id === id);
-  if (!expense) throw new Error(`Expense ${id} not found`);
-  expense.status = 'CANCELLED';
+  const doc = db.chargeDocs.find((d) => d.id === id);
+  if (!doc) throw new Error(`Charge document ${id} not found`);
+  if (doc.status === 'CANCELLED') return doc;
+  doc.status = 'CANCELLED';
   persistDb();
-  return expense;
+  return doc;
+}
+
+/* -------------------------- Charge line recompute (spec §3) -------------------------- *
+ * Three private helpers mirroring `recomputeItemAmount`/`recomputeInvoiceTotals` above.
+ * "Convert at the leaf, roll up": every USD figure above an allocation is derived by SUMMING
+ * already-converted USD children, never by converting a parent total once and splitting it —
+ * that is what keeps `line.amountUSD === Σ allocation.amountUSD` and
+ * `doc.totalUSD === Σ line.amountUSD` EXACT rather than off-by-a-cent from rounding twice.
+ * Called at the end of every line mutation below; never exported, never callable from the
+ * client.
+ * ------------------------------------------------------------------ */
+
+/** allocation.amountUSD = round(allocation.amount / line.fxRate) — the leaf conversion. */
+function recomputeAllocationUSD(alloc: ChargeAllocation, line: ChargeLine): void {
+  alloc.amountUSD = round(alloc.amount / line.fxRate);
+}
+
+/**
+ * Rolls a line's allocations up into its totals, or converts `amount` directly for GENERAL
+ * lines. Branches on `allocations.length` rather than taking a separate `kind` parameter:
+ * GENERAL lines always carry `allocations: []`, INVOICE lines always carry ≥1 (the
+ * `goods-required`/`last-allocation` guard below), so the array itself is the reliable signal.
+ */
+function recomputeLineTotals(line: ChargeLine): void {
+  if (line.allocations.length > 0) {
+    for (const alloc of line.allocations) recomputeAllocationUSD(alloc, line);
+    line.amount = round(line.allocations.reduce((s, a) => s + a.amount, 0));
+    line.amountUSD = round(line.allocations.reduce((s, a) => s + a.amountUSD, 0));
+    line.quantityBasisMt = round3(line.allocations.reduce((s, a) => s + a.quantityMt, 0));
+    line.unitPriceUSD = line.quantityBasisMt > 0 ? round(line.amountUSD / line.quantityBasisMt) : undefined;
+  } else {
+    line.amountUSD = round(line.amount / line.fxRate);
+    line.quantityBasisMt = undefined;
+    line.unitPriceUSD = undefined;
+  }
+}
+
+/** doc.totalUSD = round(Σ lines[].amountUSD). */
+function recomputeDocTotals(doc: ChargeDoc): void {
+  doc.totalUSD = round(doc.lines.reduce((s, l) => s + l.amountUSD, 0));
+}
+
+export interface ChargeGoodInput {
+  invoiceItemId: string;
+  amount?: number;
+}
+
+export interface ChargeLineInput {
+  categoryId: string;
+  date: string;
+  amount: number;
+  currency: Currency;
+  fxRate: number;
+  costCentreId?: string;
+  description?: string;
+  /** INVOICE kind only; omitted → every item of the booked invoice (spec §4). */
+  goods?: ChargeGoodInput[];
+}
+
+/**
+ * Shared guard + build pipeline for `addChargeLine`/`updateChargeLine` (spec §4) — one atomic
+ * mutation replaces the WHOLE allocation set rather than granular per-good calls, matching the
+ * Phase 4b modal's UX and making two-pass validation trivial. This builds a brand-new
+ * `ChargeLine` in a local variable and only ever throws before it is attached to `doc.lines` —
+ * the two exported functions below attach it (push / index-replace) after this returns
+ * successfully, which is what keeps a failed edit from leaving `doc.lines` half-mutated (the
+ * `addInvoiceItems` atomicity idiom).
+ *
+ * `existing` is the line being replaced (undefined when creating) — consulted ONLY for the
+ * `category-inactive` "only when the id changes" union idiom: an already-saved line pointing at
+ * a category that has since been deactivated must survive an unrelated edit (e.g. just the
+ * date), so the inactive check is skipped unless this call is actually switching categories.
+ *
+ * Guards IN ORDER: `category-required` → `category-not-found` → `category-inactive` (only when
+ * the category id changes) → `category-mismatch` (`category.direction !== doc.direction ||
+ * category.scope !== doc.kind`) → `date-required` → `invalid-amount` → `invalid-fx` (USD forces
+ * fxRate = 1 server-side, skipping the check entirely) → `cost-centre-not-found` (when
+ * supplied) → GENERAL: `goods-not-allowed` if goods supplied → INVOICE PASS 1 (validate ALL
+ * before building anything): resolve the goods set (supplied, else default = every item of the
+ * booked invoice) → `goods-required` if empty (the `last-allocation` invariant: an INVOICE line
+ * must keep ≥1 good, on create AND on update) → per good, in order: `good-not-on-invoice` →
+ * `duplicate-good` (same `referenceDocumentItemId` twice) → `invalid-good-amount` (supplied and
+ * < 0) → PASS 2: build allocations deriving `referenceDocumentItemId`/`product`/`quantityMt`
+ * from the invoice line — NEVER the client (the `createInventoryDocument` precedent).
+ */
+function buildChargeLine(doc: ChargeDoc, input: ChargeLineInput, existing?: ChargeLine): ChargeLine {
+  if (!input.categoryId) throw new Error('category-required');
+  const category = db.chargeCategories.find((c) => c.id === input.categoryId);
+  if (!category) throw new Error('category-not-found');
+  const categoryChanged = !existing || existing.categoryId !== category.id;
+  if (categoryChanged && !category.active) throw new Error('category-inactive');
+  if (category.direction !== doc.direction || category.scope !== doc.kind) {
+    throw new Error('category-mismatch');
+  }
+  if (!input.date) throw new Error('date-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+
+  const currency = input.currency;
+  // USD FORCES fxRate = 1 server-side regardless of what the client sent — only a non-USD
+  // line's fxRate is actually validated (spec §4).
+  let fxRate = 1;
+  if (currency !== 'USD') {
+    if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
+    fxRate = input.fxRate;
+  }
+
+  if (input.costCentreId && !db.costCentres.some((cc) => cc.id === input.costCentreId)) {
+    throw new Error('cost-centre-not-found');
+  }
+
+  const lineId = existing?.id ?? nextChargeLineId();
+  const line: ChargeLine = {
+    id: lineId,
+    docId: doc.id,
+    categoryId: category.id,
+    date: input.date,
+    amount: round(input.amount),
+    currency,
+    fxRate,
+    amountUSD: 0,
+    costCentreId: input.costCentreId || undefined,
+    description: input.description?.trim() || undefined,
+    quantityBasisMt: undefined,
+    unitPriceUSD: undefined,
+    allocations: [],
+  };
+
+  if (doc.kind === 'GENERAL') {
+    if (input.goods !== undefined) throw new Error('goods-not-allowed');
+    recomputeLineTotals(line);
+    return line;
+  }
+
+  // INVOICE kind: `doc.invoiceId` is guaranteed set here — validated at createChargeDoc and
+  // immutable ever after (updateChargeDoc's whole point, spec §2) — guarded anyway rather than
+  // trusting the invariant blindly.
+  const invoice = doc.invoiceId ? findInvoice(doc.invoiceId) : undefined;
+  if (!invoice) throw new Error(`Charge document ${doc.id} has no booked invoice`);
+
+  // PASS 1 (addInvoiceItems atomicity idiom): resolve + validate the ENTIRE goods set before
+  // building anything. Omitted goods → every item of the booked invoice (spec §4).
+  const goodsInputs: ChargeGoodInput[] =
+    input.goods !== undefined ? input.goods : invoice.items.map((it) => ({ invoiceItemId: it.id }));
+  if (goodsInputs.length === 0) throw new Error('goods-required');
+
+  const seenRef = new Set<string>();
+  const resolved: Array<{ invoiceItem: InvoiceItem; amount?: number }> = [];
+  for (const g of goodsInputs) {
+    const invoiceItem = invoice.items.find((it) => it.id === g.invoiceItemId);
+    if (!invoiceItem) throw new Error('good-not-on-invoice');
+    if (seenRef.has(invoiceItem.referenceDocumentItemId)) throw new Error('duplicate-good');
+    seenRef.add(invoiceItem.referenceDocumentItemId);
+    // `Number.isFinite` FIRST, matching every sibling guard in this file (`invalid-amount`,
+    // `invalid-fx`, `invalid-item-amount`): a bare `< 0` lets NaN/Infinity/"abc"/{} through, and
+    // a non-finite per-good amount propagates through recomputeLineTotals → recomputeDocTotals
+    // into `doc.totalUSD`, which `persistDb()` then serialises to JSON `null` — unrecoverable.
+    if (g.amount !== undefined && (!Number.isFinite(g.amount) || g.amount < 0)) {
+      throw new Error('invalid-good-amount');
+    }
+    resolved.push({ invoiceItem, amount: g.amount });
+  }
+
+  // PASS 2: every entry is now known-valid. An explicit amount on EVERY good is used as-is; a
+  // missing amount on ANY good forces a full `splitEqually` across all of them, seeded from
+  // `input.amount` — this mirrors the re-split table (spec §3): adding/removing a good re-splits
+  // the WHOLE line, discarding any prior manual per-good edits, not just the touched row's.
+  const allExplicit = resolved.every((r) => r.amount !== undefined);
+  const amounts = allExplicit
+    ? resolved.map((r) => round(r.amount!))
+    : splitEqually(input.amount, resolved.length);
+
+  line.allocations = resolved.map((r, i) => ({
+    id: nextChargeAllocationId(),
+    lineId,
+    invoiceItemId: r.invoiceItem.id,
+    // Derived from the invoice line, NEVER the client (createInventoryDocument precedent).
+    referenceDocumentItemId: r.invoiceItem.referenceDocumentItemId,
+    product: r.invoiceItem.product,
+    quantityMt: r.invoiceItem.quantityMt,
+    amount: amounts[i],
+    amountUSD: 0,
+  }));
+
+  recomputeLineTotals(line);
+  return line;
+}
+
+/** Guards IN ORDER: doc not-found → `doc-cancelled` → the `buildChargeLine` pipeline above.
+ *  Recomputes doc totals and persists on success; a thrown guard never touches `doc.lines`. */
+export async function addChargeLine(docId: string, input: ChargeLineInput): Promise<ChargeDoc> {
+  await delay(200);
+  const doc = db.chargeDocs.find((d) => d.id === docId);
+  if (!doc) throw new Error(`Charge document ${docId} not found`);
+  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
+  const line = buildChargeLine(doc, input);
+  doc.lines.push(line);
+  recomputeDocTotals(doc);
+  persistDb();
+  return doc;
+}
+
+/** Full replace of one line (incl. its whole allocation set) — see `buildChargeLine`'s header
+ *  comment for why this is one atomic call rather than granular per-good mutations. */
+export async function updateChargeLine(
+  docId: string,
+  lineId: string,
+  input: ChargeLineInput,
+): Promise<ChargeDoc> {
+  await delay(200);
+  const doc = db.chargeDocs.find((d) => d.id === docId);
+  if (!doc) throw new Error(`Charge document ${docId} not found`);
+  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
+  const index = doc.lines.findIndex((l) => l.id === lineId);
+  if (index === -1) throw new Error(`Charge line ${lineId} not found`);
+  const line = buildChargeLine(doc, input, doc.lines[index]);
+  doc.lines[index] = line;
+  recomputeDocTotals(doc);
+  persistDb();
+  return doc;
+}
+
+/** Hard remove — only headers soft-cancel (spec §4); a removed line has no independent
+ *  lifecycle to preserve, unlike a cancelled doc which must stay visible (struck through). */
+export async function removeChargeLine(docId: string, lineId: string): Promise<ChargeDoc> {
+  await delay(180);
+  const doc = db.chargeDocs.find((d) => d.id === docId);
+  if (!doc) throw new Error(`Charge document ${docId} not found`);
+  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
+  const exists = doc.lines.some((l) => l.id === lineId);
+  if (!exists) throw new Error(`Charge line ${lineId} not found`);
+  doc.lines = doc.lines.filter((l) => l.id !== lineId);
+  recomputeDocTotals(doc);
+  persistDb();
+  return doc;
+}
+
+/* ------------------------------ Claims ---------------------------------- *
+ * Per-item claims against one invoice's goods, typed as quantity or quality — see
+ * docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §1 (claim sides:
+ * expense-claim → PURCHASE invoices, revenue-claim → SALE), §2 (shapes, already declared in
+ * types/index.ts), §4 (this API, guards IN ORDER). Deliberately its own flat `db.claims` table,
+ * not folded into `chargeDocs` — a claim has exactly one line-shaped thing (its items), no
+ * category/cost-centre, and its header amount is a pure read-only sum, so the doc/line/allocation
+ * three-level shape above would be pointless indirection here.
+ * ------------------------------------------------------------------ */
+
+export interface ClaimItemInput {
+  invoiceItemId: string;
+  amount: number;
+  description?: string;
+}
+
+export interface ClaimInput {
+  side: ClaimSide;
+  title: string;
+  invoiceId: string;
+  claimType: ClaimType;
+  date: string;
+  currency: Currency;
+  fxRate: number;
+  description?: string;
+  items: ClaimItemInput[];
+}
+
+export interface ClaimRow extends Claim {
+  invoiceNumber?: string;
+  partyName?: string;
+  itemCount: number;
+}
+
+export interface ClaimDetail {
+  claim: Claim;
+  invoice?: Invoice;
+  invoiceItems: InvoiceItem[];
+}
+
+function nextClaimId(): string {
+  let max = 0;
+  for (const c of db.claims) {
+    const match = /^clm-(\d+)$/.exec(c.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `clm-${String(max + 1).padStart(4, '0')}`;
+}
+
+/** Monotonic max-scanning counter (mirrors `nextChargeLineId`) — NOT length-derived. */
+let claimItemSeq = db.claims.reduce(
+  (max, c) =>
+    c.items.reduce((m, it) => {
+      const match = /^clmitem-(\d+)$/.exec(it.id);
+      return match ? Math.max(m, Number(match[1])) : m;
+    }, max),
+  0,
+);
+function nextClaimItemId(): string {
+  claimItemSeq += 1;
+  return `clmitem-${claimItemSeq}`;
+}
+
+/** Mirrors the claim-side mapping in spec §1's binding-decision table: an expense claim is filed
+ *  against a PURCHASE invoice, a revenue claim against a SALE invoice. */
+function claimInvoiceSide(side: ClaimSide): InvoiceSide {
+  return side === 'EXPENSE' ? 'PURCHASE' : 'SALE';
+}
+
+/** Thin wrapper (spec §4) — the claim picker's invoice universe is IDENTICAL to the charge-doc
+ *  picker's, just entered via `ClaimSide` instead of `InvoiceSide`. */
+export async function getClaimSourceInvoices(side: ClaimSide): Promise<ChargeSourceInvoiceRow[]> {
+  return getChargeSourceInvoices(claimInvoiceSide(side));
+}
+
+/** Includes CANCELLED claims (the UI strikes them through) — date desc. `invoiceNumber`/
+ *  `partyName` joined server-side (the `ChargeDocRow`/`PaymentRow` idiom above). */
+export async function getClaims(side?: ClaimSide): Promise<ClaimRow[]> {
+  await delay(160);
+  return db.claims
+    .filter((c) => (side ? c.side === side : true))
+    .map((c) => {
+      const invoice = findInvoice(c.invoiceId);
+      return {
+        ...c,
+        invoiceNumber: invoice?.invoiceNumber,
+        partyName: customerById.get(c.partyId)?.name,
+        itemCount: c.items.length,
+      };
+    })
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+export async function getClaim(id: string): Promise<ClaimDetail | undefined> {
+  await delay(140);
+  const claim = db.claims.find((c) => c.id === id);
+  if (!claim) return undefined;
+  const invoice = findInvoice(claim.invoiceId);
+  return { claim, invoice, invoiceItems: invoice ? invoice.items : [] };
+}
+
+/**
+ * Shared guard + build pipeline for `createClaim`/`updateClaim`'s claim-type/FX/item half (spec
+ * §4). Title/date validation and invoice resolution/validation are each CALLER's own
+ * responsibility — they diverge (create validates the invoice fully; update never re-validates
+ * it, the `updateChargeDoc` precedent) — so only the part both share lives here.
+ *
+ * Guards IN ORDER: `claim-type-required` (must be `QUANTITY` or `QUALITY`) → `invalid-fx` (USD
+ * forces fxRate = 1 server-side, skipping the check entirely) → drop items whose `amount <= 0`
+ * (client- AND server-side — a blank/zero row is simply not a claim, not an error) →
+ * `no-claim-items` if none remain → PASS 1 (validate the WHOLE item set before building
+ * anything, the `addInvoiceItems`/`buildChargeLine` atomicity idiom): `item-not-on-invoice` →
+ * `invalid-item-amount` → `duplicate-item` (same `referenceDocumentItemId` twice) → PASS 2:
+ * build items deriving `referenceDocumentItemId`/`product`/`quantityMt` from the invoice line —
+ * NEVER the client (the `createInventoryDocument`/`buildChargeLine` precedent) — and
+ * `amountUSD = round(amount / fxRate)` per item, leaf-converted like `recomputeAllocationUSD`.
+ * `partyId = invoice.customerId` — SERVER-DERIVED, which is what deletes the old
+ * `party-required`/`party-invoice-mismatch` codes entirely (spec §4). The header `amount`/
+ * `amountUSD` are READ-ONLY sums of the items — never client-supplied.
+ *
+ * `existing` is present only on update, supplying `id`/`status`/`createdAt` to preserve rather
+ * than mint/reset.
+ */
+function buildClaim(invoice: Invoice, input: ClaimInput, existing?: Claim): Claim {
+  if (input.claimType !== 'QUANTITY' && input.claimType !== 'QUALITY') {
+    throw new Error('claim-type-required');
+  }
+
+  const currency = input.currency;
+  // USD FORCES fxRate = 1 server-side regardless of what the client sent (buildChargeLine
+  // precedent) — only a non-USD claim's fxRate is actually validated.
+  let fxRate = 1;
+  if (currency !== 'USD') {
+    if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
+    fxRate = input.fxRate;
+  }
+
+  const positiveItems = input.items.filter((it) => it.amount > 0);
+  if (positiveItems.length === 0) throw new Error('no-claim-items');
+
+  const seenRef = new Set<string>();
+  const resolved: Array<{ invoiceItem: InvoiceItem; amount: number; description?: string }> = [];
+  for (const it of positiveItems) {
+    const invoiceItem = invoice.items.find((line) => line.id === it.invoiceItemId);
+    if (!invoiceItem) throw new Error('item-not-on-invoice');
+    if (!Number.isFinite(it.amount) || it.amount <= 0) throw new Error('invalid-item-amount');
+    if (seenRef.has(invoiceItem.referenceDocumentItemId)) throw new Error('duplicate-item');
+    seenRef.add(invoiceItem.referenceDocumentItemId);
+    resolved.push({ invoiceItem, amount: it.amount, description: it.description?.trim() || undefined });
+  }
+
+  const claimId = existing?.id ?? nextClaimId();
+  const items: ClaimItem[] = resolved.map((r) => ({
+    id: nextClaimItemId(),
+    claimId,
+    invoiceItemId: r.invoiceItem.id,
+    referenceDocumentItemId: r.invoiceItem.referenceDocumentItemId,
+    product: r.invoiceItem.product,
+    quantityMt: r.invoiceItem.quantityMt,
+    amount: round(r.amount),
+    amountUSD: round(r.amount / fxRate),
+    description: r.description,
+  }));
+
+  return {
+    id: claimId,
+    side: input.side,
+    title: input.title.trim(),
+    invoiceId: invoice.id,
+    partyId: invoice.customerId,
+    claimType: input.claimType,
+    date: input.date,
+    currency,
+    fxRate,
+    amount: round(items.reduce((s, it) => s + it.amount, 0)),
+    amountUSD: round(items.reduce((s, it) => s + it.amountUSD, 0)),
+    description: input.description?.trim() || undefined,
+    status: existing?.status ?? 'ACTIVE',
+    createdAt: existing?.createdAt ?? dayjs().toISOString(),
+    items,
+  };
+}
+
+/**
+ * Guards IN ORDER (spec §4): `title-required` → `date-required` → `invoice-required` →
+ * `invoice-not-found` → `invoice-side-mismatch` (`invoiceSide(inv.invoiceType) !==` the side's
+ * mapped invoice side) → `invoice-not-confirmed` (must be `isPricedType` AND a member of
+ * `chainLeafDocs` — the `createChargeDoc` precedent) → then `buildClaim`'s claim-type/FX/item
+ * guards.
+ */
+export async function createClaim(input: ClaimInput): Promise<Claim> {
+  await delay(200);
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+  if (!input.invoiceId) throw new Error('invoice-required');
+  const invoice = findInvoice(input.invoiceId);
+  if (!invoice) throw new Error('invoice-not-found');
+
+  const invSide = claimInvoiceSide(input.side);
+  if (invoiceSide(invoice.invoiceType) !== invSide) throw new Error('invoice-side-mismatch');
+  const isChainLeafConfirmed =
+    isPricedType(invoice.invoiceType) && chainLeafDocs(invSide).some((inv) => inv.id === invoice.id);
+  if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+
+  const claim = buildClaim(invoice, input);
+  db.claims.push(claim);
+  persistDb();
+  return claim;
+}
+
+/**
+ * Guards IN ORDER (spec §4): not-found → `claim-cancelled` → `title-required` → `date-required`
+ * → `invoice-immutable` (`input.invoiceId !== existing.invoiceId`) → `side-immutable` → then
+ * `buildClaim`'s claim-type/FX/item guards. Deliberately SKIPS invoice-required/
+ * invoice-not-found/invoice-side-mismatch/invoice-not-confirmed (the chain-leaf re-check)
+ * ENTIRELY — the `updateChargeDoc` precedent (spec §2): editing a claim after its booked invoice
+ * converts to a later document in the chain must never throw.
+ */
+export async function updateClaim(id: string, input: ClaimInput): Promise<Claim> {
+  await delay(200);
+  const index = db.claims.findIndex((c) => c.id === id);
+  if (index === -1) throw new Error(`Claim ${id} not found`);
+  const existing = db.claims[index];
+  if (existing.status === 'CANCELLED') throw new Error('claim-cancelled');
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+  if (input.invoiceId !== existing.invoiceId) throw new Error('invoice-immutable');
+  if (input.side !== existing.side) throw new Error('side-immutable');
+
+  // Invoice is looked up fresh (never re-validated — see the guard comment above) purely to
+  // source `invoice.items` for the item-validation pass; documents are never hard-deleted, so
+  // this cannot fail in practice, but `findInvoiceOrThrow` fails loudly instead of silently
+  // producing an empty items list if that invariant is ever broken.
+  const invoice = findInvoiceOrThrow(existing.invoiceId);
+  const claim = buildClaim(invoice, input, existing);
+  db.claims[index] = claim;
+  persistDb();
+  return claim;
+}
+
+/** Sets `status = 'CANCELLED'`. No hard delete (`cancelChargeDoc` precedent, spec §4). */
+export async function cancelClaim(id: string): Promise<Claim> {
+  await delay(160);
+  const claim = db.claims.find((c) => c.id === id);
+  if (!claim) throw new Error(`Claim ${id} not found`);
+  if (claim.status === 'CANCELLED') return claim;
+  claim.status = 'CANCELLED';
+  persistDb();
+  return claim;
+}
+
+/* --------------------- Invoice charge reporting (spec §4) --------------------- *
+ * Everything an invoice-detail page needs to show what has been booked against ITS CHAIN:
+ * the expense documents, the revenue documents, the claims, their USD totals and a per-good
+ * breakdown. Read-only aggregation — the create/edit affordances live on the charges and
+ * claims modules themselves (spec §6, the `InvoiceChargesCard` design).
+ * ------------------------------------------------------------------ */
+
+export interface InvoiceChargeGoodRow {
+  /** The chain-stable key (spec §2) — NOT `invoiceItemId`, which differs on every document of
+   *  the chain and so would lose every allocation the moment a provisional converts. */
+  referenceDocumentItemId: string;
+  product: string;
+  quantityMt: number;
+  expenseUSD: number;
+  revenueUSD: number;
+  claimUSD: number;
+  /** true when this good exists only on a charge/claim snapshot, not on the invoice being
+   *  viewed — e.g. a line removed from the document after the charge was booked. Sorts last. */
+  orphan: boolean;
+}
+
+export interface InvoiceChargeSummary {
+  expenses: ChargeDocRow[];
+  revenues: ChargeDocRow[];
+  claims: Claim[];
+  expenseUSD: number;
+  revenueUSD: number;
+  claimUSD: number;
+  byGood: InvoiceChargeGoodRow[];
+}
+
+/**
+ * Expense docs, revenue docs and claims booked ANYWHERE on `invoiceId`'s chain, with USD totals
+ * and a per-good breakdown (spec §4). Returns `undefined` for an unknown id — the
+ * `getTradeInvoice` precedent.
+ *
+ * CANCELLED charge documents and claims are excluded EVERYWHERE — from the lists, from the
+ * totals and from `byGood` — matching how `ChargeListPage`/`ClaimsPage`'s tiles already treat
+ * them (`rows.filter((r) => r.status !== 'CANCELLED')`).
+ *
+ * `byGood` is seeded from the VIEWED invoice's own items first, so goods with no charges still
+ * appear (zeroed) and in document order; allocations/claim items are then folded in on
+ * `referenceDocumentItemId`. Anything folded in whose key was not seeded is an `orphan` — it
+ * only ever exists on a snapshot — and lands after the seeded rows by Map insertion order.
+ *
+ * Money is `amountUSD` only, `round`ed per total: the header figures come from the documents'
+ * own server-derived `totalUSD`/`amountUSD`, the per-good figures from the leaf allocations, and
+ * spec §3's convert-at-the-leaf-then-roll-up invariant (`doc.totalUSD === Σ line.amountUSD ===
+ * Σ Σ allocation.amountUSD`, exact in cents) is what keeps the two sides equal rather than
+ * off-by-a-cent.
+ */
+export async function getInvoiceChargeSummary(
+  invoiceId: string,
+): Promise<InvoiceChargeSummary | undefined> {
+  await delay(180);
+  const invoice = findInvoice(invoiceId);
+  if (!invoice) return undefined;
+
+  // Chain resolution, carried over VERBATIM from the pre-rework `getExpensesForInvoice`
+  // (spec §4) — INCLUDING the `invoice.id` seed, which is NOT redundant: `invoiceChain` walks
+  // down via `findSuccessor`, which skips CANCELLED documents, so a cancelled document is not a
+  // member of its own chain and everything booked on it would silently vanish here without the
+  // explicit seed. This is the most easily-broken line in the rework — do not "simplify" it.
+  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
+
+  const toRow = (d: ChargeDoc): ChargeDocRow => {
+    const bookedOn = d.invoiceId ? findInvoice(d.invoiceId) : undefined;
+    return {
+      ...d,
+      invoiceNumber: bookedOn?.invoiceNumber,
+      customerName: bookedOn ? customerById.get(bookedOn.customerId)?.name : undefined,
+      lineCount: d.lines.length,
+    };
+  };
+
+  const chainDocs = db.chargeDocs.filter(
+    (d) => d.status !== 'CANCELLED' && !!d.invoiceId && chainIds.has(d.invoiceId),
+  );
+  const byDate = (a: { date: string }, b: { date: string }) =>
+    dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+  const expenses = chainDocs.filter((d) => d.direction === 'EXPENSE').map(toRow).sort(byDate);
+  const revenues = chainDocs.filter((d) => d.direction === 'REVENUE').map(toRow).sort(byDate);
+  const claims = db.claims
+    .filter((c) => c.status !== 'CANCELLED' && chainIds.has(c.invoiceId))
+    .sort(byDate);
+
+  const byGoodMap = new Map<string, InvoiceChargeGoodRow>();
+  // Seed pass: the viewed document's own goods, in its own line order, zeroed.
+  for (const item of invoice.items) {
+    if (byGoodMap.has(item.referenceDocumentItemId)) continue;
+    byGoodMap.set(item.referenceDocumentItemId, {
+      referenceDocumentItemId: item.referenceDocumentItemId,
+      product: item.product,
+      quantityMt: item.quantityMt,
+      expenseUSD: 0,
+      revenueUSD: 0,
+      claimUSD: 0,
+      orphan: false,
+    });
+  }
+  // Fold pass: anything whose key wasn't seeded is an orphan, described by its own snapshot.
+  const rowFor = (key: string, product: string, quantityMt: number): InvoiceChargeGoodRow => {
+    const existing = byGoodMap.get(key);
+    if (existing) return existing;
+    const created: InvoiceChargeGoodRow = {
+      referenceDocumentItemId: key,
+      product,
+      quantityMt,
+      expenseUSD: 0,
+      revenueUSD: 0,
+      claimUSD: 0,
+      orphan: true,
+    };
+    byGoodMap.set(key, created);
+    return created;
+  };
+  for (const doc of chainDocs) {
+    for (const line of doc.lines) {
+      for (const alloc of line.allocations) {
+        const row = rowFor(alloc.referenceDocumentItemId, alloc.product, alloc.quantityMt);
+        if (doc.direction === 'EXPENSE') row.expenseUSD += alloc.amountUSD;
+        else row.revenueUSD += alloc.amountUSD;
+      }
+    }
+  }
+  for (const claim of claims) {
+    for (const item of claim.items) {
+      const row = rowFor(item.referenceDocumentItemId, item.product, item.quantityMt);
+      row.claimUSD += item.amountUSD;
+    }
+  }
+
+  const byGood = [...byGoodMap.values()].map((r) => ({
+    ...r,
+    quantityMt: round3(r.quantityMt),
+    expenseUSD: round(r.expenseUSD),
+    revenueUSD: round(r.revenueUSD),
+    claimUSD: round(r.claimUSD),
+  }));
+
+  return {
+    expenses,
+    revenues,
+    claims,
+    expenseUSD: round(expenses.reduce((s, d) => s + d.totalUSD, 0)),
+    revenueUSD: round(revenues.reduce((s, d) => s + d.totalUSD, 0)),
+    claimUSD: round(claims.reduce((s, c) => s + c.amountUSD, 0)),
+    byGood,
+  };
 }
 
 /* --------------------------- Payment mutations ------------------------- */
@@ -2604,9 +3360,9 @@ function nextPaymentId(): string {
  */
 export async function createPayment(input: PaymentInput): Promise<Payment> {
   await delay(180);
-  // Guard the same unguarded `amount / fxRate` division `createExpense` closes (spec §6.2) — an
-  // AED payment recorded with fxRate 0 (or NaN/negative) would otherwise silently produce an
-  // Infinity/NaN amountUSD that then poisons every aggregate that sums payments.
+  // Guard the same unguarded `amount / fxRate` division the charge-line API closes (rework spec
+  // §4) — an AED payment recorded with fxRate 0 (or NaN/negative) would otherwise silently
+  // produce an Infinity/NaN amountUSD that then poisons every aggregate that sums payments.
   if (input.currency !== 'USD' && (!Number.isFinite(input.fxRate) || input.fxRate <= 0)) {
     throw new Error('invalid-fx');
   }

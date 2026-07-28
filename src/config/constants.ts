@@ -1,12 +1,8 @@
 import type {
-  ClaimType,
   ContainerStatus,
   ContractStatus,
   Currency,
-  ExpenseType,
-  GeneralExpenseCategory,
   Incoterm,
-  InvoiceExpenseCategory,
   Locale,
   PaymentMethod,
 } from '@/types';
@@ -28,27 +24,6 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
 ];
 
 export const INCOTERMS: Incoterm[] = ['FOB', 'CIF', 'CFR', 'CNF', 'EXW', 'DAP'];
-
-/** Expense module built-in lists (spec §6.1) — order drives Select option order. */
-export const EXPENSE_TYPES: ExpenseType[] = ['INVOICE', 'GENERAL', 'CLAIM'];
-export const CLAIM_TYPES: ClaimType[] = ['SUPPLIER', 'CUSTOMER'];
-export const INVOICE_EXPENSE_CATEGORIES: InvoiceExpenseCategory[] = [
-  'FREIGHT',
-  'CUSTOMS',
-  'SHIPPING',
-  'LOADING_UNLOADING',
-  'INSURANCE',
-  'PACKAGING',
-];
-export const GENERAL_EXPENSE_CATEGORIES: GeneralExpenseCategory[] = [
-  'SALARY',
-  'OFFICE',
-  'RENT',
-  'ELECTRICITY',
-  'INTERNET',
-  'FUEL',
-  'MAINTENANCE',
-];
 
 export const CONTRACT_STATUSES: ContractStatus[] = [
   'ACTIVE',
@@ -156,10 +131,12 @@ export const ROUTES = {
   sale: '/app/invoices/sale',
   warehouse: '/app/warehouse',
   payments: '/app/payments',
+  expenses: '/app/expenses',
+  revenues: '/app/revenues',
+  claims: '/app/claims',
   reports: '/app/reports',
   settings: '/app/settings',
   partners: '/app/partners',
   portal: '/app/portal',
-  expenses: '/app/expenses',
-  costCentres: '/app/cost-centres',
+  baseInfo: '/app/base-info',
 } as const;

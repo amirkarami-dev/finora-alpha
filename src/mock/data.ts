@@ -1,9 +1,11 @@
 import type {
+  ChargeCategory,
+  ChargeDoc,
+  Claim,
   Container,
   Contract,
   CostCentre,
   Customer,
-  Expense,
   InventoryDocument,
   Invoice,
   Partner,
@@ -42,8 +44,17 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  * gains `portalAccount?: boolean` (§3) — additive/optional, so it doesn't need its own probe.
  * Phase C (cost centres + expenses) reuses v5 rather than bumping again: those are additive
  * new entities, not a shape change to anything already persisted.
+ *
+ * Schema v6 (2026-07-27): the flat `Expense` entity is replaced outright by `ChargeCategory` +
+ * `ChargeDoc`/`ChargeLine`/`ChargeAllocation` (expenses/revenues, direction-parameterised) and
+ * `Claim`/`ClaimItem` (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md
+ * §2) — **no migration**; any persisted `expenses` data is discarded per that spec's binding
+ * decision. Because this is a brand-new STORAGE_KEY, `costCentres`/`chargeCategories`/
+ * `chargeDocs`/`claims` are HARD `Array.isArray` requirements below (not the old v5 soft
+ * `!== undefined` probe with a `loadDb` backfill) — every blob that reaches `isCompatible` was
+ * persisted under v6 or later, so "missing" now means "not v6", full stop.
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
@@ -56,7 +67,9 @@ const seed = {
   invoices: [] as Invoice[],
   inventoryDocs: [] as InventoryDocument[],
   costCentres: [] as CostCentre[],
-  expenses: [] as Expense[],
+  chargeCategories: [] as ChargeCategory[],
+  chargeDocs: [] as ChargeDoc[],
+  claims: [] as Claim[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -71,12 +84,17 @@ function isCompatible(d: unknown): d is typeof seed {
   }
   if (!Array.isArray(o.containers) || !Array.isArray(o.payments)) return false;
   if (typeof o.fxRate !== 'number') return false;
-  // Phase C (cost centres + expenses) reuses schema v5 rather than bumping — so a blob persisted
-  // before this change shipped won't have these two arrays AT ALL. Missing is fine (backfilled
-  // in `loadDb` below); PRESENT-but-wrong-shape is the only thing that should reject the whole
-  // blob, so a corrupt/foreign value here can't silently masquerade as an empty list.
-  if (o.costCentres !== undefined && !Array.isArray(o.costCentres)) return false;
-  if (o.expenses !== undefined && !Array.isArray(o.expenses)) return false;
+  // Schema v6: a fresh STORAGE_KEY means every blob that reaches here was persisted under v6 or
+  // later, so these four arrays are HARD requirements — unlike the old v5 Phase-C soft probe
+  // (`!== undefined &&`) with its `loadDb` backfill, missing OR wrong-shape now means "not v6".
+  if (
+    !Array.isArray(o.costCentres) ||
+    !Array.isArray(o.chargeCategories) ||
+    !Array.isArray(o.chargeDocs) ||
+    !Array.isArray(o.claims)
+  ) {
+    return false;
+  }
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -106,6 +124,19 @@ function isCompatible(d: unknown): d is typeof seed {
   if (
     docWithItems &&
     typeof (docWithItems.items as Array<Record<string, unknown>>)[0].referenceDocumentItemId !== 'string'
+  ) {
+    return false;
+  }
+  // Schema v6: ChargeDoc.lines is inline, and each line's allocations is an inline array too.
+  // `.find()` for the first doc that actually HAS lines — never `[0].lines[0]` blindly: a
+  // freshly-created doc with no lines yet is normal, and a leading one would false-negative
+  // this probe and silently wipe user data.
+  const chargeDocWithLines = (o.chargeDocs as Array<Record<string, unknown>>).find(
+    (cd) => Array.isArray(cd?.lines) && (cd.lines as unknown[]).length > 0,
+  );
+  if (
+    chargeDocWithLines &&
+    !Array.isArray((chargeDocWithLines.lines as Array<Record<string, unknown>>)[0].allocations)
   ) {
     return false;
   }
@@ -146,14 +177,7 @@ function loadDb(): typeof seed {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (isCompatible(parsed)) {
-        // Backfill Phase C's two additive arrays for a blob persisted before they existed
-        // (schema v5 wasn't bumped for them) — never silently wipe the customers/contracts
-        // already in that blob just because two new lists aren't there yet.
-        if (!Array.isArray(parsed.costCentres)) parsed.costCentres = [];
-        if (!Array.isArray(parsed.expenses)) parsed.expenses = [];
-        return parsed;
-      }
+      if (isCompatible(parsed)) return parsed;
     }
   } catch {
     /* corrupt or unavailable — fall back to the (empty) seed */

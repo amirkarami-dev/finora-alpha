@@ -281,8 +281,7 @@ export type ThemeMode = 'light' | 'dark';
 export type Role = 'CEO' | 'Manager' | 'Staff' | 'Customer';
 
 /* ------------------------------------------------------------------ *
- * Cost Centres + Expense management — see
- * docs/superpowers/specs/2026-07-24-empty-seed-and-expenses-design.md §5/§6.
+ * Cost Centres — see docs/superpowers/specs/2026-07-24-empty-seed-and-expenses-design.md §5.
  * ------------------------------------------------------------------ */
 
 export interface CostCentre {
@@ -293,28 +292,93 @@ export interface CostCentre {
   active: boolean;
 }
 
-export type ExpenseType = 'INVOICE' | 'GENERAL' | 'CLAIM';
-export type ClaimType = 'SUPPLIER' | 'CUSTOMER';
-export type InvoiceExpenseCategory =
-  'FREIGHT' | 'CUSTOMS' | 'SHIPPING' | 'LOADING_UNLOADING' | 'INSURANCE' | 'PACKAGING';
-export type GeneralExpenseCategory =
-  'SALARY' | 'OFFICE' | 'RENT' | 'ELECTRICITY' | 'INTERNET' | 'FUEL' | 'MAINTENANCE';
+/* ------------------------------------------------------------------ *
+ * Charges (expenses/revenues) + Claims — see
+ * docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §2.
+ * Replaces the old flat `Expense` entity (schema v6, no migration).
+ * ------------------------------------------------------------------ */
 
-export interface Expense {
-  id: string;                 // 'exp-0001', max-scanning
+export type ChargeDirection = 'EXPENSE' | 'REVENUE';
+export type ChargeScope = 'INVOICE' | 'GENERAL';
+
+export interface ChargeCategory {          // db.chargeCategories (flat master)
+  id: string;                 // 'ccat-0001'
+  name: string;
+  code: string;               // trimmed+uppercased; immutable; unique WITHIN a direction
+  direction: ChargeDirection; // immutable
+  scope: ChargeScope;         // immutable
+  description?: string;
+  active: boolean;
+}
+
+export interface ChargeDoc {               // db.chargeDocs (flat)
+  id: string;                 // 'chg-0001'
+  direction: ChargeDirection; // immutable
+  kind: ChargeScope;          // immutable
   title: string;
-  expenseType: ExpenseType;
-  category?: InvoiceExpenseCategory | GeneralExpenseCategory;  // none for CLAIM
-  claimType?: ClaimType;      // CLAIM only
-  partyId?: string;           // CLAIM only
-  invoiceId?: string;         // INVOICE + CLAIM — the document it was BOOKED on, not the chain leaf
-  amount: number;             // in `currency`
-  currency: Currency;
-  fxRate: number;             // AED per USD; 1 for USD
-  amountUSD: number;          // computed server-side
+  invoiceId?: string;         // kind==='INVOICE'; the document it was BOOKED on; IMMUTABLE
   date: string;
+  description?: string;
+  status: 'ACTIVE' | 'CANCELLED';
+  createdAt: string;
+  lines: ChargeLine[];        // inline
+  totalUSD: number;           // SERVER-DERIVED: round(Σ lines[].amountUSD)
+}
+
+export interface ChargeLine {              // inline on ChargeDoc
+  id: string;                 // 'chgline-<n>' monotonic counter
+  docId: string;
+  categoryId: string;         // must match doc.direction AND doc.kind === category.scope
+  date: string;
+  amount: number;             // INVOICE kind: SERVER-DERIVED round(Σ allocations[].amount)
+  currency: Currency;
+  fxRate: number;             // forced to 1 server-side when currency==='USD'
+  amountUSD: number;          // SERVER-DERIVED
   costCentreId?: string;
   description?: string;
-  status: 'ACTIVE' | 'CANCELLED';   // see api.ts's cancelExpense — no hard delete
+  quantityBasisMt?: number;   // SERVER-DERIVED round3(Σ allocations[].quantityMt)
+  unitPriceUSD?: number;      // SERVER-DERIVED amountUSD / quantityBasisMt (cost per MT)
+  allocations: ChargeAllocation[];   // [] on GENERAL; ≥1 on INVOICE
+}
+
+export interface ChargeAllocation {        // inline on ChargeLine
+  id: string;                 // 'chgalloc-<n>'
+  lineId: string;
+  invoiceItemId: string;
+  referenceDocumentItemId: string;  // SERVER-DERIVED — chain-stable key
+  product: string;                  // SERVER-DERIVED snapshot
+  quantityMt: number;               // SERVER-DERIVED snapshot
+  amount: number;                   // editable per good
+  amountUSD: number;                // SERVER-DERIVED round(amount / line.fxRate)
+}
+
+export type ClaimSide = 'EXPENSE' | 'REVENUE';
+export type ClaimType = 'QUANTITY' | 'QUALITY';   // name kept, values replaced
+
+export interface Claim {                   // db.claims (flat)
+  id: string;                 // 'clm-0001'
+  side: ClaimSide;            // immutable
+  title: string;
+  invoiceId: string;          // required; IMMUTABLE
+  partyId: string;            // SERVER-DERIVED from invoice.customerId
+  claimType: ClaimType;
+  date: string;
+  currency: Currency;
+  fxRate: number;
+  amount: number;             // SERVER-DERIVED round(Σ items[].amount)
+  amountUSD: number;          // SERVER-DERIVED
+  description?: string;
+  status: 'ACTIVE' | 'CANCELLED';
   createdAt: string;
+  items: ClaimItem[];         // inline
+}
+
+export interface ClaimItem {
+  id: string; claimId: string;
+  invoiceItemId: string;
+  referenceDocumentItemId: string;  // SERVER-DERIVED
+  product: string; quantityMt: number;   // SERVER-DERIVED snapshots
+  amount: number;                        // user-entered
+  amountUSD: number;                     // SERVER-DERIVED
+  description?: string;
 }

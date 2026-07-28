@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ExpenseType, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ChargeDirection, ChargeScope, ClaimSide, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -38,11 +38,24 @@ export const qk = {
   inventoryDocLines: (invoiceId: string) => ['inventoryDocLines', invoiceId] as const,
   invoiceOptions: ['invoiceOptions'] as const,
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
-  // ---- Cost centres + expenses (spec §5/§6) ----
+  // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
-  expenses: (type?: ExpenseType) => ['expenses', type ?? 'all'] as const,
-  expensesForInvoice: (invoiceId: string) => ['expensesForInvoice', invoiceId] as const,
-  expenseSourceInvoices: (side: InvoiceSide) => ['expenseSourceInvoices', side] as const,
+  // ---- Charge categories (design spec §4-§5) ----
+  chargeCategories: (direction?: ChargeDirection) => ['chargeCategories', direction ?? 'all'] as const,
+  // ---- Charge documents (design spec §4-§5) ----
+  chargeDocs: (direction: ChargeDirection, kind?: ChargeScope) =>
+    ['chargeDocs', direction, kind ?? 'all'] as const,
+  chargeDoc: (id: string) => ['chargeDoc', id] as const,
+  // `side` is optional — a charge document is side-agnostic (see `getChargeSourceInvoices`);
+  // 'ALL' keeps the both-sides result in its own cache entry. The bare-prefix invalidation
+  // `['chargeSourceInvoices']` in `useInvalidateInvoices` still covers every variant.
+  chargeSourceInvoices: (side?: InvoiceSide) => ['chargeSourceInvoices', side ?? 'ALL'] as const,
+  // ---- Claims (design spec §4-§5) ----
+  claims: (side?: ClaimSide) => ['claims', side ?? 'all'] as const,
+  claim: (id: string) => ['claim', id] as const,
+  claimSourceInvoices: (side: ClaimSide) => ['claimSourceInvoices', side] as const,
+  // ---- Invoice charge summary (design spec §4-§5, Phase 7) ----
+  invoiceChargeSummary: (invoiceId: string) => ['invoiceChargeSummary', invoiceId] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -338,6 +351,16 @@ function useInvalidateInvoices() {
     // picker can keep offering a just-converted predecessor for up to its 60s staleTime.
     qc.invalidateQueries({ queryKey: ['inventorySourceInvoices'] });
     qc.invalidateQueries({ queryKey: ['inventoryDocLines'] });
+    // Same gap, same reason, for the charge/claim side (design spec §5's "pre-existing gap to
+    // close"): the expense/revenue/claim invoice pickers are keyed on `getChargeSourceInvoices`/
+    // `getClaimSourceInvoices`, which are `chainLeafDocs`-derived — without these, converting a
+    // provisional leaves the dead predecessor selectable for up to its 60s staleTime. The
+    // invoice charge summary is chain-derived too, so a conversion moves which document shows
+    // the booked charges. BARE PREFIXES only: never keyed off an id from a mutation result,
+    // since the server may have stripped it (the bare-prefix rule documented below).
+    qc.invalidateQueries({ queryKey: ['chargeSourceInvoices'] });
+    qc.invalidateQueries({ queryKey: ['claimSourceInvoices'] });
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
     qc.invalidateQueries({ queryKey: qk.payments });
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
@@ -546,7 +569,7 @@ export const useCreatePayment = () => {
   });
 };
 
-/* ---------------------- Cost centres + expenses (spec §5/§6) --------------------- */
+/* ---------------------------- Cost centres (spec §5) ---------------------------- */
 
 export const useCostCentres = () =>
   useQuery({ queryKey: qk.costCentres, queryFn: api.getCostCentres });
@@ -582,64 +605,227 @@ export const useSetCostCentreActive = () => {
   });
 };
 
-export const useExpenseSourceInvoices = (side: InvoiceSide) =>
+/* ------------------------- Charge categories (design spec §4-§5) ------------------------- */
+
+export const useChargeCategories = (direction?: ChargeDirection) =>
   useQuery({
-    queryKey: qk.expenseSourceInvoices(side),
-    queryFn: () => api.getExpenseSourceInvoices(side),
+    queryKey: qk.chargeCategories(direction),
+    queryFn: () => api.getChargeCategories(direction),
   });
 
-export const useExpenses = (type?: ExpenseType) =>
-  useQuery({ queryKey: qk.expenses(type), queryFn: () => api.getExpenses(type) });
-
-export const useExpensesForInvoice = (invoiceId: string) =>
-  useQuery({
-    queryKey: qk.expensesForInvoice(invoiceId),
-    queryFn: () => api.getExpensesForInvoice(invoiceId),
-    enabled: !!invoiceId,
-  });
-
-/** An expense mutation changes its own tab's list (any `type`), the linked invoice's Expenses
- *  card (chain-scoped, so keyed on invoiceId, not the invoice's own id), and — since amountUSD
- *  feeds no dashboard aggregate today — nothing beyond those two. Bare `['expenses']` prefix
- *  matches every type-scoped variant.
- *
- * Always invalidates the bare `['expensesForInvoice']` prefix — NOT conditionally on the passed
- * `invoiceId`. Callers pass `expense.invoiceId` from the mutation RESULT, and the API strips
- * `invoiceId` for GENERAL expenses: converting an Invoice-Expense/Claim into a General expense
- * (or cancelling one) yields `undefined` for that argument, so a guard here would skip
- * invalidating the invoice it used to be linked to — that invoice's Expenses card would keep
- * listing and totalling it until `staleTime` (60s) lapses. TanStack matches query keys
- * element-by-element, so this bare prefix also correctly covers every `['expensesForInvoice',
- * id]` variant regardless of which specific id changed. */
-function useInvalidateExpenses() {
+// Bare-prefix invalidation (queries.ts precedent above, spec §5): covers every
+// `['chargeCategories', direction]` entry regardless of which direction mutated. Also
+// invalidates `['chargeDocs']`/`['chargeDoc']` — a category rename/deactivate changes the label
+// rendered on every doc row that references it.
+function useInvalidateChargeCategories() {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: ['expenses'] });
-    qc.invalidateQueries({ queryKey: ['expensesForInvoice'] });
+    qc.invalidateQueries({ queryKey: ['chargeCategories'] });
+    qc.invalidateQueries({ queryKey: ['chargeDocs'] });
+    qc.invalidateQueries({ queryKey: ['chargeDoc'] });
   };
 }
 
-export const useCreateExpense = () => {
-  const invalidate = useInvalidateExpenses();
+export const useCreateChargeCategory = () => {
+  const invalidate = useInvalidateChargeCategories();
   return useMutation({
-    mutationFn: (input: api.ExpenseInput) => api.createExpense(input),
+    mutationFn: (input: api.ChargeCategoryInput) => api.createChargeCategory(input),
     onSuccess: invalidate,
   });
 };
 
-export const useUpdateExpense = () => {
-  const invalidate = useInvalidateExpenses();
+export const useUpdateChargeCategory = () => {
+  const invalidate = useInvalidateChargeCategories();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: api.ExpenseInput }) =>
-      api.updateExpense(id, input),
+    mutationFn: ({ id, input }: { id: string; input: api.ChargeCategoryInput }) =>
+      api.updateChargeCategory(id, input),
     onSuccess: invalidate,
   });
 };
 
-export const useCancelExpense = () => {
-  const invalidate = useInvalidateExpenses();
+export const useSetChargeCategoryActive = () => {
+  const invalidate = useInvalidateChargeCategories();
   return useMutation({
-    mutationFn: (id: string) => api.cancelExpense(id),
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setChargeCategoryActive(id, active),
     onSuccess: invalidate,
   });
 };
+
+/* --------------------------- Charge documents (design spec §4-§5) --------------------------- */
+
+/** `side` omitted → BOTH sides (a charge document is side-agnostic; only claims are restricted —
+ *  see `api.getChargeSourceInvoices`). `enabled` is overridable so `InvoicePickerModal` can call
+ *  this AND `useClaimSourceInvoices` unconditionally (rules of hooks) and gate whichever one its
+ *  mode doesn't need. */
+export const useChargeSourceInvoices = (side?: InvoiceSide, options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.chargeSourceInvoices(side),
+    queryFn: () => api.getChargeSourceInvoices(side),
+    enabled: options?.enabled ?? true,
+  });
+
+export const useChargeDocs = (direction: ChargeDirection, kind?: ChargeScope) =>
+  useQuery({
+    queryKey: qk.chargeDocs(direction, kind),
+    queryFn: () => api.getChargeDocs(direction, kind),
+  });
+
+export const useChargeDoc = (id: string) =>
+  useQuery({
+    queryKey: qk.chargeDoc(id),
+    queryFn: () => api.getChargeDoc(id),
+    enabled: !!id,
+  });
+
+// Bare-prefix invalidation (spec §5): TanStack matches query keys element-by-element, so a bare
+// ['chargeDoc'] does NOT prefix-match ['chargeDocs', direction, kind] — 'chargeDoc' !==
+// 'chargeDocs' as array elements, they just happen to share a text prefix as STRINGS. BOTH bare
+// keys are required below; do not "simplify" either one away.
+function useInvalidateCharges() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['chargeDocs'] });
+    qc.invalidateQueries({ queryKey: ['chargeDoc'] });
+    // The invoice-detail charges card reads a different key, so booking or cancelling a charge
+    // here would otherwise leave that card stale for up to `staleTime` (spec §5).
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
+  };
+}
+
+export const useCreateChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: (input: api.ChargeDocInput) => api.createChargeDoc(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ChargeDocInput }) =>
+      api.updateChargeDoc(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelChargeDoc = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelChargeDoc(id),
+    onSuccess: invalidate,
+  });
+};
+
+export const useAddChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ docId, input }: { docId: string; input: api.ChargeLineInput }) =>
+      api.addChargeLine(docId, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({
+      docId,
+      lineId,
+      input,
+    }: {
+      docId: string;
+      lineId: string;
+      input: api.ChargeLineInput;
+    }) => api.updateChargeLine(docId, lineId, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useRemoveChargeLine = () => {
+  const invalidate = useInvalidateCharges();
+  return useMutation({
+    mutationFn: ({ docId, lineId }: { docId: string; lineId: string }) =>
+      api.removeChargeLine(docId, lineId),
+    onSuccess: invalidate,
+  });
+};
+
+/* --------------------------------- Claims (design spec §4-§5) --------------------------------- */
+
+/** The side-restricted picker universe (expense-claim → PURCHASE, revenue-claim → SALE), mapped
+ *  SERVER-side per spec §4 — the client must not re-derive it. `enabled` override: see
+ *  `useChargeSourceInvoices` above. */
+export const useClaimSourceInvoices = (side: ClaimSide, options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.claimSourceInvoices(side),
+    queryFn: () => api.getClaimSourceInvoices(side),
+    enabled: options?.enabled ?? true,
+  });
+
+export const useClaims = (side?: ClaimSide) =>
+  useQuery({
+    queryKey: qk.claims(side),
+    queryFn: () => api.getClaims(side),
+  });
+
+export const useClaim = (id: string) =>
+  useQuery({
+    queryKey: qk.claim(id),
+    queryFn: () => api.getClaim(id),
+    enabled: !!id,
+  });
+
+// Bare-prefix invalidation (spec §5, same trap as `useInvalidateCharges` above): TanStack matches
+// query keys element-by-element, so a bare ['claim'] does NOT prefix-match ['claims', side] —
+// 'claim' !== 'claims' as array elements, they just happen to share a text prefix as STRINGS.
+// BOTH bare keys are required below; do not "simplify" either one away.
+function useInvalidateClaims() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['claims'] });
+    qc.invalidateQueries({ queryKey: ['claim'] });
+    // Same reason as `useInvalidateCharges` — the invoice card counts claims too (spec §5).
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
+  };
+}
+
+export const useCreateClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: (input: api.ClaimInput) => api.createClaim(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ClaimInput }) => api.updateClaim(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelClaim(id),
+    onSuccess: invalidate,
+  });
+};
+
+/* ------------------------ Invoice charge summary (design spec §4-§5) ------------------------ */
+
+/** Everything booked against an invoice's CHAIN — expense docs, revenue docs, claims, their USD
+ *  totals and the per-good breakdown (spec §4). Consumed only by `InvoiceChargesCard`, which
+ *  additionally gates each section on its own `useHasAccess` (spec §6). */
+/** `enabled` override so `InvoiceChargesCard` can keep its hooks unconditional (rules of hooks —
+ *  a CRITICAL rule there) while still not FETCHING charge data for a user whose RBAC hides every
+ *  section of the card. Harmless against the mock db, a real leak against a real backend. */
+export const useInvoiceChargeSummary = (invoiceId: string, options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.invoiceChargeSummary(invoiceId),
+    queryFn: () => api.getInvoiceChargeSummary(invoiceId),
+    enabled: (options?.enabled ?? true) && !!invoiceId,
+  });

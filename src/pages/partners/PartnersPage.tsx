@@ -63,8 +63,12 @@ export default function PartnersPage() {
             cancelText={t('common.no')}
             onConfirm={async () => {
               try {
-                await setActive.mutateAsync({ id: r.id, active: !r.active });
-                message.success(r.active ? t('partners.deactivated') : t('partners.activated'));
+                // Capture the INTENDED next state before awaiting: the mock API mutates the
+                // record in place, so a post-await `r.active` already reads the flipped value
+                // and the toast would announce the opposite of what just happened.
+                const next = !r.active;
+                await setActive.mutateAsync({ id: r.id, active: next });
+                message.success(next ? t('partners.activated') : t('partners.deactivated'));
               } catch {
                 message.error(t('common.saveFailed'));
               }

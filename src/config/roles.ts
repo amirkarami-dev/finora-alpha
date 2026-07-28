@@ -13,25 +13,27 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'contracts',
     'partners',
     'containers',
-    'costCentres',
+    'baseInfo',
     'purchase',
     'sale',
     'warehouse',
     'payments',
     'expenses',
+    'revenues',
+    'claims',
     'reports',
     'settings',
   ],
-  // Cost Centres: Manager + Staff (spec §5). Expenses: Manager ONLY (spec §6.4) — `payments` is
-  // Manager-only too, not Manager+CEO, and CEO can't even reach invoice detail; a create/edit
-  // page would contradict an otherwise read-only role.
+  // BaseInfo (cost centres + expense/revenue categories, spec §7): Manager + Staff — Staff
+  // retains today's cost-centre capability under the new shell. `expenses`/`revenues`/`claims`
+  // are Manager-only (NOT Staff, NOT CEO) per spec §9 Phase 4b/5/6's registration instructions.
   Staff: [
     'dashboard',
     'customers',
     'contracts',
     'partners',
     'containers',
-    'costCentres',
+    'baseInfo',
     'purchase',
     'sale',
     'warehouse',
@@ -92,11 +94,13 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'partners', route: ROUTES.partners, icon: 'apartment', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },
   { key: 'warehouse', route: ROUTES.warehouse, icon: 'gold', group: 'operations' },
-  { key: 'costCentres', route: ROUTES.costCentres, icon: 'cluster', group: 'operations' },
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
   { key: 'expenses', route: ROUTES.expenses, icon: 'accountbook', group: 'finance' },
+  { key: 'revenues', route: ROUTES.revenues, icon: 'rise', group: 'finance' },
+  { key: 'claims', route: ROUTES.claims, icon: 'exception', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
+  { key: 'baseInfo', route: ROUTES.baseInfo, icon: 'database', group: 'system' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];
