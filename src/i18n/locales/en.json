@@ -540,6 +540,10 @@
     "descriptionPlaceholder": "Optional notes for this category",
     "codeInvalid": "Letters, numbers and hyphens only",
     "codeTaken": "This code is already in use for this direction",
+    "errors": {
+      "name-required": "Name is required",
+      "code-required": "Code is required"
+    },
     "created": "Category created",
     "updated": "Category updated",
     "activated": "Category activated",
@@ -633,6 +637,7 @@
     "pickerTotal": "Total",
     "pickerEmptyHint": "Only confirmed, priced invoices that haven't been converted further are eligible — orders and drafts don't appear here.",
     "pickerExistingCount": "{{count}} existing charge(s)",
+    "pickerExistingClaimCount": "{{count}} existing claim(s)",
     "pickerEmptyTitle": "No eligible invoices",
     "noCategoriesTitle": "No categories yet",
     "noCategoriesHint": "Categories are master data — add them in Base Info, then come back to this line.",

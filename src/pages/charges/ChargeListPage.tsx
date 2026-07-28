@@ -10,7 +10,7 @@ import { useCancelChargeDoc, useChargeDocs } from '@/services/queries';
 import type { ChargeDocRow, ChargeSourceInvoiceRow } from '@/services/api';
 import { formatDate } from '@/utils/format';
 import { useTabParam } from '@/hooks/useTabParam';
-import type { ChargeDirection, ChargeScope, InvoiceSide } from '@/types';
+import type { ChargeDirection, ChargeScope } from '@/types';
 import { chargeDetailRoute } from './routes';
 import { ChargeDocFormModal, type ChargeDocInvoiceInfo } from './ChargeDocFormModal';
 import { InvoicePickerModal } from './InvoicePickerModal';
@@ -20,12 +20,6 @@ const { Text } = Typography;
 const TAB_KEYS = ['invoice', 'general'] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 const TAB_KIND: Record<TabKey, ChargeScope> = { invoice: 'INVOICE', general: 'GENERAL' };
-
-// Mirrors the claim-side mapping in design spec §1's binding-decision table (expense-claim →
-// PURCHASE invoices, revenue-claim → SALE) — an expense document books against a cost-side
-// invoice, a revenue document against a sale-side one. Same rationale documented from the
-// picker's point of view on `InvoicePickerModal`'s `side` prop.
-const DIRECTION_SIDE: Record<ChargeDirection, InvoiceSide> = { EXPENSE: 'PURCHASE', REVENUE: 'SALE' };
 
 // Direction-keyed i18n lookups (not hardcoded to `expenses.*`) are what let `ExpensesPage`/
 // `RevenuesPage` stay three-line wrappers (spec §9 Phase 5's gate): Phase 5 only has to add a
@@ -64,6 +58,11 @@ export function ChargeListPage({ direction }: ChargeListPageProps) {
   const kind = TAB_KIND[tab];
 
   const { data, isLoading } = useChargeDocs(direction, kind);
+  // The picker's "N existing charge(s)" hint is computed HERE, not inside the picker: the picker
+  // is direction-agnostic and shared with the claims flow, so deriving a direction in there would
+  // make a claim's picker count expense documents (spec §4 "Docs per invoice"). On the invoice
+  // tab this shares a cache entry with the list query above; on the general tab it is unused.
+  const { data: invoiceDocs } = useChargeDocs(direction, 'INVOICE');
   const cancelMut = useCancelChargeDoc();
   const [search, setSearch] = useState('');
 
@@ -78,6 +77,15 @@ export function ChargeListPage({ direction }: ChargeListPageProps) {
   // objects and so always shows the current value. Summing on every render keeps the two in
   // lockstep; the list is small enough that this costs nothing.
   const totalUSD = rows.filter((r) => r.status !== 'CANCELLED').reduce((s, r) => s + r.totalUSD, 0);
+
+  const existingCountByInvoiceId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const doc of invoiceDocs ?? []) {
+      if (doc.status !== 'ACTIVE' || !doc.invoiceId) continue;
+      map.set(doc.invoiceId, (map.get(doc.invoiceId) ?? 0) + 1);
+    }
+    return map;
+  }, [invoiceDocs]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -295,9 +303,11 @@ export function ChargeListPage({ direction }: ChargeListPageProps) {
         />
       </Card>
 
+      {/* No `claimSide` — a charge document may be booked on EITHER a purchase or a sale invoice
+          (see the picker's prop doc); the type filter is how a user narrows to one family. */}
       <InvoicePickerModal
         open={activeModal === 'picker'}
-        side={DIRECTION_SIDE[direction]}
+        existingCountByInvoiceId={existingCountByInvoiceId}
         onCancel={() => setActiveModal(null)}
         onPick={(invoice) => {
           setPickedInvoice(invoice);

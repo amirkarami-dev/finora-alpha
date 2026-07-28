@@ -46,7 +46,10 @@ export const qk = {
   chargeDocs: (direction: ChargeDirection, kind?: ChargeScope) =>
     ['chargeDocs', direction, kind ?? 'all'] as const,
   chargeDoc: (id: string) => ['chargeDoc', id] as const,
-  chargeSourceInvoices: (side: InvoiceSide) => ['chargeSourceInvoices', side] as const,
+  // `side` is optional — a charge document is side-agnostic (see `getChargeSourceInvoices`);
+  // 'ALL' keeps the both-sides result in its own cache entry. The bare-prefix invalidation
+  // `['chargeSourceInvoices']` in `useInvalidateInvoices` still covers every variant.
+  chargeSourceInvoices: (side?: InvoiceSide) => ['chargeSourceInvoices', side ?? 'ALL'] as const,
   // ---- Claims (design spec §4-§5) ----
   claims: (side?: ClaimSide) => ['claims', side ?? 'all'] as const,
   claim: (id: string) => ['claim', id] as const,
@@ -651,10 +654,15 @@ export const useSetChargeCategoryActive = () => {
 
 /* --------------------------- Charge documents (design spec §4-§5) --------------------------- */
 
-export const useChargeSourceInvoices = (side: InvoiceSide) =>
+/** `side` omitted → BOTH sides (a charge document is side-agnostic; only claims are restricted —
+ *  see `api.getChargeSourceInvoices`). `enabled` is overridable so `InvoicePickerModal` can call
+ *  this AND `useClaimSourceInvoices` unconditionally (rules of hooks) and gate whichever one its
+ *  mode doesn't need. */
+export const useChargeSourceInvoices = (side?: InvoiceSide, options?: { enabled?: boolean }) =>
   useQuery({
     queryKey: qk.chargeSourceInvoices(side),
     queryFn: () => api.getChargeSourceInvoices(side),
+    enabled: options?.enabled ?? true,
   });
 
 export const useChargeDocs = (direction: ChargeDirection, kind?: ChargeScope) =>
@@ -746,10 +754,14 @@ export const useRemoveChargeLine = () => {
 
 /* --------------------------------- Claims (design spec §4-§5) --------------------------------- */
 
-export const useClaimSourceInvoices = (side: ClaimSide) =>
+/** The side-restricted picker universe (expense-claim → PURCHASE, revenue-claim → SALE), mapped
+ *  SERVER-side per spec §4 — the client must not re-derive it. `enabled` override: see
+ *  `useChargeSourceInvoices` above. */
+export const useClaimSourceInvoices = (side: ClaimSide, options?: { enabled?: boolean }) =>
   useQuery({
     queryKey: qk.claimSourceInvoices(side),
     queryFn: () => api.getClaimSourceInvoices(side),
+    enabled: options?.enabled ?? true,
   });
 
 export const useClaims = (side?: ClaimSide) =>

@@ -2461,15 +2461,25 @@ export interface ChargeSourceInvoiceRow {
   itemCount: number;
 }
 
-/** Chain-leaf, CONFIRMED, priced documents of `side` — the ONLY universe a charge (expense or
- *  revenue document) may attach to (spec §4). Never use `getTradeInvoices`/`useTradeInvoices`
- *  for this: it returns DRAFT, CANCELLED and unpriced order documents unfiltered. (Renamed from
- *  the pre-rework `getExpenseSourceInvoices`, which this doc-comment's warning is carried over
- *  from verbatim; row widened with `contractId`/`currency`/`totalAmount`/`totalWeightMt`/
- *  `itemCount` so the picker can filter and show useful columns.) */
-export async function getChargeSourceInvoices(side: InvoiceSide): Promise<ChargeSourceInvoiceRow[]> {
+/** Chain-leaf, CONFIRMED, priced documents — the ONLY universe a charge (expense or revenue
+ *  document) may attach to (spec §4). Never use `getTradeInvoices`/`useTradeInvoices` for this:
+ *  it returns DRAFT, CANCELLED and unpriced order documents unfiltered. (Renamed from the
+ *  pre-rework `getExpenseSourceInvoices`, which this doc-comment's warning is carried over from
+ *  verbatim; row widened with `contractId`/`currency`/`totalAmount`/`totalWeightMt`/`itemCount`
+ *  so the picker can filter and show useful columns.)
+ *
+ *  `side` is OPTIONAL and defaults to BOTH sides: a charge document is side-agnostic. Only
+ *  CLAIMS are side-restricted (spec §1's binding table; the user's requirements doc scopes the
+ *  purchase/sale split to Supplier Claim / Customer Claim only, and defines an Invoice Expense as
+ *  a cost related to "a purchase OR sale invoice"). Freight, insurance and handling are booked on
+ *  sale invoices as readily as purchase ones. `createChargeDoc` has never had a side guard — it
+ *  derives the side FROM the invoice — so restricting the picker was a UI-only invention.
+ *  `getClaimSourceInvoices(side)` below is the side-restricted entry point. */
+export async function getChargeSourceInvoices(side?: InvoiceSide): Promise<ChargeSourceInvoiceRow[]> {
   await delay(140);
-  return chainLeafDocs(side)
+  const sides: InvoiceSide[] = side ? [side] : ['PURCHASE', 'SALE'];
+  return sides
+    .flatMap((s) => chainLeafDocs(s))
     .filter((inv) => isPricedType(inv.invoiceType))
     .map((inv) => ({
       id: inv.id,

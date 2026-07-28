@@ -540,6 +540,10 @@
     "descriptionPlaceholder": "ملاحظات اختيارية لهذه الفئة",
     "codeInvalid": "أحرف وأرقام وشرطات فقط",
     "codeTaken": "هذا الرمز مستخدم بالفعل ضمن هذا الاتجاه",
+    "errors": {
+      "name-required": "الاسم مطلوب",
+      "code-required": "الرمز مطلوب"
+    },
     "created": "تم إنشاء الفئة",
     "updated": "تم تحديث الفئة",
     "activated": "تم تفعيل الفئة",
@@ -573,8 +577,8 @@
     "emptyGeneralHint": "سجِّل الإيرادات التي لا تخص فاتورة بعينها."
   },
   "charges": {
-    "newInvoiceDoc": "مستند مصاريف على فاتورة",
-    "newGeneralDoc": "مستند مصاريف عام",
+    "newInvoiceDoc": "مستند جديد على فاتورة",
+    "newGeneralDoc": "مستند عام جديد",
     "editDoc": "تعديل المستند",
     "docTitle": "العنوان",
     "titlePlaceholder": "مثال: الشحن والجمارك للفاتورة PP-2026-0001",
@@ -632,7 +636,8 @@
     "pickerWeight": "الوزن (طن)",
     "pickerTotal": "الإجمالي",
     "pickerEmptyHint": "المستندات المؤهلة هي فقط الفواتير المؤكدة والمسعّرة التي لم تُحوَّل لاحقًا — لا تظهر هنا الطلبات أو المسودات.",
-    "pickerExistingCount": "{{count}} مستند مصاريف موجود",
+    "pickerExistingCount": "{{count}} مستند موجود",
+    "pickerExistingClaimCount": "{{count}} مطالبة موجودة",
     "pickerEmptyTitle": "لا توجد فواتير مؤهلة",
     "noCategoriesTitle": "لا توجد فئات بعد",
     "noCategoriesHint": "الفئات بيانات أساسية — أضِفها من البيانات الأساسية ثم عُد إلى هذا البند.",

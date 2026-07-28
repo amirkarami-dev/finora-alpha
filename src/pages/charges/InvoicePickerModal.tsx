@@ -5,10 +5,10 @@ import { SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { Money } from '@/components/common/Money';
-import { useChargeDocs, useChargeSourceInvoices } from '@/services/queries';
+import { useChargeSourceInvoices, useClaimSourceInvoices } from '@/services/queries';
 import type { ChargeSourceInvoiceRow } from '@/services/api';
 import { formatDate, formatMt } from '@/utils/format';
-import type { ChargeDirection, InvoiceSide, InvoiceType } from '@/types';
+import type { ClaimSide, InvoiceType } from '@/types';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -27,26 +27,50 @@ const ltrTruncateStyle: CSSProperties = {
 
 interface InvoicePickerModalProps {
   open: boolean;
-  /** Which invoice universe to offer (design spec §4's `getChargeSourceInvoices(side)`). Mirrors
-   *  the claim-side mapping in spec §1's binding-decision table (expense → PURCHASE, revenue →
-   *  SALE) — the caller (`ChargeListPage`) derives this from `direction` so an expense document
-   *  is always booked against a cost-side invoice and a revenue document against a sale-side one. */
-  side: InvoiceSide;
+  /**
+   * Discriminates the invoice universe (spec §4). Present → CLAIM mode: the side rule from spec
+   * §1's binding table applies (expense-claim → PURCHASE invoices, revenue-claim → SALE) and is
+   * resolved SERVER-side by `getClaimSourceInvoices`. Absent → CHARGE-DOC mode: **both** sides.
+   *
+   * Charge documents are side-agnostic, and only claims are side-restricted. The previous prop
+   * here asserted the opposite (an expense had to be booked on a purchase invoice) as though the
+   * spec said so — it does not, and neither does the server: `createChargeDoc` derives the side
+   * FROM the invoice and has no side guard. The user's requirements doc defines an Invoice
+   * Expense as a cost related to "a purchase OR sale invoice" and lists freight / shipping /
+   * loading & unloading / insurance / packaging, which are routinely sell-side; it restricts
+   * sides for Supplier Claim / Customer Claim only. The sample dataset even seeds an EXPENSE doc
+   * on a SALE invoice, which no user could previously reproduce. Narrow with the document-type
+   * filter, not with a hard-coded rule.
+   */
+  claimSide?: ClaimSide;
+  /**
+   * Optional "N already exist" hint per invoice id, rendered as a tag under the number. Supplied
+   * BY THE CALLER (spec §4's "Docs per invoice: many allowed; picker hints how many already
+   * exist") rather than derived here: this modal has no direction and, in claim mode, no charge
+   * direction at all — deriving one to fetch a count would show a claim's picker a tally of
+   * expense documents and fire an unrelated query from the claims flow.
+   */
+  existingCountByInvoiceId?: Map<string, number>;
   onCancel: () => void;
   onPick: (invoice: ChargeSourceInvoiceRow) => void;
 }
 
 /** design spec §6 — the user's explicitly-requested "button to pick the invoice with filters",
- *  shared (eventually) by expenses, revenues and claims. Only party/type/date/search filters +
- *  radio selection are needed by Phase 4b; claims reuse in Phase 6 is expected to need nothing
- *  more than this same component. */
-export function InvoicePickerModal({ open, side, onCancel, onPick }: InvoicePickerModalProps) {
+ *  shared by expenses, revenues and claims. Only party/type/date/search filters + radio
+ *  selection are needed; the type filter is what narrows to one document family. */
+export function InvoicePickerModal({
+  open,
+  claimSide,
+  existingCountByInvoiceId,
+  onCancel,
+  onPick,
+}: InvoicePickerModalProps) {
   const { t } = useTranslation();
-  const { data: invoices, isLoading } = useChargeSourceInvoices(side);
-  // `side` maps 1:1 to a charge direction (see the prop doc above) purely to compute the
-  // "already has N charge docs" hint below — this modal otherwise has no opinion on direction.
-  const direction: ChargeDirection = side === 'PURCHASE' ? 'EXPENSE' : 'REVENUE';
-  const { data: existingDocs } = useChargeDocs(direction, 'INVOICE');
+  // BOTH hooks are called unconditionally (rules of hooks) and gated with TanStack's `enabled`,
+  // then the active result is selected — never a conditional hook call.
+  const chargeSource = useChargeSourceInvoices(undefined, { enabled: open && !claimSide });
+  const claimSource = useClaimSourceInvoices(claimSide ?? 'EXPENSE', { enabled: open && !!claimSide });
+  const { data: invoices, isLoading } = claimSide ? claimSource : chargeSource;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [partyFilter, setPartyFilter] = useState<string | undefined>(undefined);
@@ -70,16 +94,9 @@ export function InvoicePickerModal({ open, side, onCancel, onPick }: InvoicePick
     return Array.from(seen, (type) => ({ value: type, label: t(`tradeInvoices.type.${type}`) }));
   }, [invoices, t]);
 
-  // Existing-charge-count hint, keyed by invoiceId — many charge docs per invoice are allowed
-  // (spec §4 "Docs per invoice"), so this surfaces the count rather than blocking selection.
-  const existingCountByInvoiceId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const doc of existingDocs ?? []) {
-      if (doc.status !== 'ACTIVE' || !doc.invoiceId) continue;
-      map.set(doc.invoiceId, (map.get(doc.invoiceId) ?? 0) + 1);
-    }
-    return map;
-  }, [existingDocs]);
+  // "N existing charge(s)" vs "N existing claim(s)" — the two flows count different things, so
+  // one shared label would be wrong in whichever flow it wasn't written for.
+  const existingCountKey = claimSide ? 'charges.pickerExistingClaimCount' : 'charges.pickerExistingCount';
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -106,9 +123,9 @@ export function InvoicePickerModal({ open, side, onCancel, onPick }: InvoicePick
           <span dir="ltr" style={{ ...ltrTruncateStyle, fontFamily: 'monospace', fontWeight: 600 }}>
             {v}
           </span>
-          {(existingCountByInvoiceId.get(r.id) ?? 0) > 0 && (
+          {(existingCountByInvoiceId?.get(r.id) ?? 0) > 0 && (
             <Tag style={{ marginInlineStart: 0 }}>
-              {t('charges.pickerExistingCount', { count: existingCountByInvoiceId.get(r.id) })}
+              {t(existingCountKey, { count: existingCountByInvoiceId?.get(r.id) })}
             </Tag>
           )}
         </Space>
@@ -118,7 +135,9 @@ export function InvoicePickerModal({ open, side, onCancel, onPick }: InvoicePick
       title: t('charges.pickerType'),
       dataIndex: 'invoiceType',
       width: 150,
-      render: (v: InvoiceType) => <Tag color={side === 'PURCHASE' ? 'blue' : 'green'}>{t(`tradeInvoices.type.${v}`)}</Tag>,
+      // Colored per ROW, not per picker: charge-doc mode lists both sides in one table. Same
+      // side derivation as `api.ts`'s `invoiceSide` (`type.startsWith('PURCHASE')`).
+      render: (v: InvoiceType) => <Tag color={v.startsWith('PURCHASE') ? 'blue' : 'green'}>{t(`tradeInvoices.type.${v}`)}</Tag>,
     },
     { title: t('charges.date'), dataIndex: 'invoiceDate', width: 120, render: (v) => formatDate(v) },
     { title: t('charges.customer'), dataIndex: 'customerName', width: 200 },

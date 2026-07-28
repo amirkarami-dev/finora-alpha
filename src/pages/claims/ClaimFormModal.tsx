@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { App, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
@@ -6,11 +6,11 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { Money } from '@/components/common/Money';
 import { CURRENCIES } from '@/config/constants';
 import { InvoicePickerModal } from '@/pages/charges/InvoicePickerModal';
-import { useCreateClaim, useTradeInvoice, useUpdateClaim } from '@/services/queries';
+import { useClaims, useCreateClaim, useTradeInvoice, useUpdateClaim } from '@/services/queries';
 import type { ChargeSourceInvoiceRow, ClaimInput, ClaimItemInput, ClaimRow } from '@/services/api';
 import { formatMt } from '@/utils/format';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import type { ClaimSide, ClaimType, Currency, InvoiceSide } from '@/types';
+import type { ClaimSide, ClaimType, Currency } from '@/types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -50,10 +50,6 @@ const KNOWN_ERROR_CODES = [
   'invoice-immutable',
   'side-immutable',
 ] as const;
-
-// Mirrors the claim-side mapping in design spec §1's binding-decision table (expense-claim →
-// PURCHASE invoices, revenue-claim → SALE) — same mapping `ChargeListPage` uses for charge docs.
-const CLAIM_INVOICE_SIDE: Record<ClaimSide, InvoiceSide> = { EXPENSE: 'PURCHASE', REVENUE: 'SALE' };
 
 interface ItemRow {
   invoiceItemId: string;
@@ -97,6 +93,13 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
 
   const [rows, setRows] = useState<ItemRow[]>([]);
   const seededInvoiceIdRef = useRef<string | undefined>(undefined);
+  // Monotonic pick counter, bumped by `handlePick`. `invoiceDetail` ALONE is not a sufficient dep:
+  // re-picking the invoice that is ALREADY selected clears `rows` + the seed ref, but TanStack's
+  // structural sharing hands back the SAME `invoiceDetail` object identity across the refetch, so
+  // the effect below never re-runs and the items grid stays permanently empty (Save is still
+  // enabled — it only checks `invoiceId` — leaving the user with a claim that fails
+  // `no-claim-items`). The nonce is what makes "same invoice, new pick" observable to the effect.
+  const [pickNonce, setPickNonce] = useState(0);
 
   useEffect(() => {
     if (!invoiceDetail) return;
@@ -116,16 +119,30 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
     );
     // `claim` is intentionally read only inside the effect body, not listed as a dep — it never
     // changes across the lifetime of one modal instance (the Modal is keyed by `claim?.id`).
+    // `pickNonce` IS a dep on purpose — see its declaration above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceDetail]);
+  }, [invoiceDetail, pickNonce]);
 
   const currency = Form.useWatch('currency', form) ?? 'USD';
   const totalAmount = round2(rows.reduce((s, r) => s + (r.amount || 0), 0));
+
+  // The picker's "already exists" hint is supplied by the CALLER (see its prop doc): in the claims
+  // flow that means a count of ACTIVE claims on this side, never charge documents.
+  const { data: sideClaims } = useClaims(side);
+  const existingClaimCountByInvoiceId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of sideClaims ?? []) {
+      if (c.status !== 'ACTIVE') continue;
+      map.set(c.invoiceId, (map.get(c.invoiceId) ?? 0) + 1);
+    }
+    return map;
+  }, [sideClaims]);
 
   const handlePick = (inv: ChargeSourceInvoiceRow) => {
     setPickedInvoice(inv);
     setRows([]);
     seededInvoiceIdRef.current = undefined;
+    setPickNonce((n) => n + 1);
     setPickerOpen(false);
   };
 
@@ -330,9 +347,13 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
         )}
       </Modal>
 
+      {/* `claimSide` (not a pre-mapped `InvoiceSide`): the expense-claim → PURCHASE /
+          revenue-claim → SALE rule of spec §1 is resolved SERVER-side by
+          `getClaimSourceInvoices`, per spec §4 — the client must not re-derive it. */}
       <InvoicePickerModal
         open={pickerOpen}
-        side={CLAIM_INVOICE_SIDE[side]}
+        claimSide={side}
+        existingCountByInvoiceId={existingClaimCountByInvoiceId}
         onCancel={() => setPickerOpen(false)}
         onPick={handlePick}
       />
