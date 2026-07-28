@@ -679,6 +679,9 @@ function useInvalidateCharges() {
   return () => {
     qc.invalidateQueries({ queryKey: ['chargeDocs'] });
     qc.invalidateQueries({ queryKey: ['chargeDoc'] });
+    // The invoice-detail charges card reads a different key, so booking or cancelling a charge
+    // here would otherwise leave that card stale for up to `staleTime` (spec §5).
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
   };
 }
 
@@ -771,6 +774,8 @@ function useInvalidateClaims() {
   return () => {
     qc.invalidateQueries({ queryKey: ['claims'] });
     qc.invalidateQueries({ queryKey: ['claim'] });
+    // Same reason as `useInvalidateCharges` — the invoice card counts claims too (spec §5).
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
   };
 }
 
