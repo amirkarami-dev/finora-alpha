@@ -24,6 +24,8 @@ import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
 import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
 import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
+import ExpensesPage from '@/pages/charges/ExpensesPage';
+import ChargeDocDetailPage from '@/pages/charges/ChargeDocDetailPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -83,6 +85,10 @@ export function AppRoutes() {
         <Route path="cost-centres" element={<Navigate to="/app/base-info?tab=costCentres" replace />} />
         <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
+        {/* Charge documents (design spec §9 Phase 4b) — one detail component for both directions,
+            registered per-direction at its own list route; Phase 5 adds the `revenues` twin. */}
+        <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />
+        <Route path="expenses/:id" element={<RoleRoute routeKey="expenses"><ChargeDocDetailPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
         <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>

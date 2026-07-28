@@ -18,13 +18,15 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'sale',
     'warehouse',
     'payments',
+    'expenses',
     'reports',
     'settings',
   ],
   // BaseInfo (cost centres + expense/revenue categories, spec §7): Manager + Staff — Staff
   // retains today's cost-centre capability under the new shell. The charges/revenues/claims
   // rework (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md) adds
-  // Expenses/Revenues/Claims grants for Manager from Phase 4/5/6 onward — not yet present here.
+  // Revenues/Claims grants for Manager from Phase 5/6 onward — not yet present here. `expenses`
+  // is Manager-only (NOT Staff, NOT CEO) per spec §9 Phase 4b's registration instructions.
   Staff: [
     'dashboard',
     'customers',
@@ -95,6 +97,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
+  { key: 'expenses', route: ROUTES.expenses, icon: 'accountbook', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'baseInfo', route: ROUTES.baseInfo, icon: 'database', group: 'system' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },

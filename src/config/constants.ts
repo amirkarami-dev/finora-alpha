@@ -131,6 +131,7 @@ export const ROUTES = {
   sale: '/app/invoices/sale',
   warehouse: '/app/warehouse',
   payments: '/app/payments',
+  expenses: '/app/expenses',
   reports: '/app/reports',
   settings: '/app/settings',
   partners: '/app/partners',
