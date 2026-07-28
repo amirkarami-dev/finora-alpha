@@ -646,6 +646,25 @@
       "invalid-good-amount": "Enter a valid amount for every good"
     }
   },
+  "invoiceCharges": {
+    "title": "Charges & claims",
+    "chainHint": "Everything booked anywhere on this document's chain — a charge booked on a provisional stays visible on the final it converts to.",
+    "bookedOn": "Booked on",
+    "expensesTotal": "Expenses (USD)",
+    "revenuesTotal": "Revenues (USD)",
+    "claimsTotal": "Claims (USD)",
+    "noExpenses": "No expense documents booked on this invoice",
+    "noRevenues": "No revenue documents booked on this invoice",
+    "noClaims": "No claims filed against this invoice",
+    "byGoodTitle": "Breakdown by good",
+    "byGoodHint": "Each good's share of the documents above.",
+    "noGoods": "This document has no goods yet",
+    "expenseUsd": "Expenses (USD)",
+    "revenueUsd": "Revenues (USD)",
+    "claimUsd": "Claims (USD)",
+    "orphan": "Not on this document",
+    "orphanHint": "This good was charged or claimed earlier in the chain but is no longer a line on the document you are viewing."
+  },
   "payments": {
     "title": "Payments",
     "subtitle": "Cash received against invoices",

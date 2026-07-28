@@ -53,6 +53,7 @@ import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
 import type { InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
 import { CreateInvoiceModal } from './CreateInvoiceModal';
+import { InvoiceChargesCard } from './InvoiceChargesCard';
 import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
 import { ConvertContainerModal } from './ConvertContainerModal';
@@ -677,6 +678,12 @@ export default function InvoiceDetailPage() {
           )}
         </Card>
       )}
+
+      {/* design spec §6/§9 Phase 7 — replaces the inline expenses block that used to sit here.
+          The card gates ITSELF: each section has its own `useHasAccess`, and it renders nothing
+          at all unless at least one passes (an empty card would still tell Staff that expenses
+          exist), so this mount point stays unconditional. */}
+      <InvoiceChargesCard invoiceId={invoiceId} />
 
       {isDraft && (
         <>

@@ -51,6 +51,8 @@ export const qk = {
   claims: (side?: ClaimSide) => ['claims', side ?? 'all'] as const,
   claim: (id: string) => ['claim', id] as const,
   claimSourceInvoices: (side: ClaimSide) => ['claimSourceInvoices', side] as const,
+  // ---- Invoice charge summary (design spec §4-§5, Phase 7) ----
+  invoiceChargeSummary: (invoiceId: string) => ['invoiceChargeSummary', invoiceId] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -346,6 +348,16 @@ function useInvalidateInvoices() {
     // picker can keep offering a just-converted predecessor for up to its 60s staleTime.
     qc.invalidateQueries({ queryKey: ['inventorySourceInvoices'] });
     qc.invalidateQueries({ queryKey: ['inventoryDocLines'] });
+    // Same gap, same reason, for the charge/claim side (design spec §5's "pre-existing gap to
+    // close"): the expense/revenue/claim invoice pickers are keyed on `getChargeSourceInvoices`/
+    // `getClaimSourceInvoices`, which are `chainLeafDocs`-derived — without these, converting a
+    // provisional leaves the dead predecessor selectable for up to its 60s staleTime. The
+    // invoice charge summary is chain-derived too, so a conversion moves which document shows
+    // the booked charges. BARE PREFIXES only: never keyed off an id from a mutation result,
+    // since the server may have stripped it (the bare-prefix rule documented below).
+    qc.invalidateQueries({ queryKey: ['chargeSourceInvoices'] });
+    qc.invalidateQueries({ queryKey: ['claimSourceInvoices'] });
+    qc.invalidateQueries({ queryKey: ['invoiceChargeSummary'] });
     qc.invalidateQueries({ queryKey: qk.payments });
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
@@ -785,3 +797,15 @@ export const useCancelClaim = () => {
     onSuccess: invalidate,
   });
 };
+
+/* ------------------------ Invoice charge summary (design spec §4-§5) ------------------------ */
+
+/** Everything booked against an invoice's CHAIN — expense docs, revenue docs, claims, their USD
+ *  totals and the per-good breakdown (spec §4). Consumed only by `InvoiceChargesCard`, which
+ *  additionally gates each section on its own `useHasAccess` (spec §6). */
+export const useInvoiceChargeSummary = (invoiceId: string) =>
+  useQuery({
+    queryKey: qk.invoiceChargeSummary(invoiceId),
+    queryFn: () => api.getInvoiceChargeSummary(invoiceId),
+    enabled: !!invoiceId,
+  });

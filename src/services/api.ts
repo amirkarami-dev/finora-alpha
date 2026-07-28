@@ -3151,6 +3151,157 @@ export async function cancelClaim(id: string): Promise<Claim> {
   return claim;
 }
 
+/* --------------------- Invoice charge reporting (spec §4) --------------------- *
+ * Everything an invoice-detail page needs to show what has been booked against ITS CHAIN:
+ * the expense documents, the revenue documents, the claims, their USD totals and a per-good
+ * breakdown. Read-only aggregation — the create/edit affordances live on the charges and
+ * claims modules themselves (spec §6, the `InvoiceChargesCard` design).
+ * ------------------------------------------------------------------ */
+
+export interface InvoiceChargeGoodRow {
+  /** The chain-stable key (spec §2) — NOT `invoiceItemId`, which differs on every document of
+   *  the chain and so would lose every allocation the moment a provisional converts. */
+  referenceDocumentItemId: string;
+  product: string;
+  quantityMt: number;
+  expenseUSD: number;
+  revenueUSD: number;
+  claimUSD: number;
+  /** true when this good exists only on a charge/claim snapshot, not on the invoice being
+   *  viewed — e.g. a line removed from the document after the charge was booked. Sorts last. */
+  orphan: boolean;
+}
+
+export interface InvoiceChargeSummary {
+  expenses: ChargeDocRow[];
+  revenues: ChargeDocRow[];
+  claims: Claim[];
+  expenseUSD: number;
+  revenueUSD: number;
+  claimUSD: number;
+  byGood: InvoiceChargeGoodRow[];
+}
+
+/**
+ * Expense docs, revenue docs and claims booked ANYWHERE on `invoiceId`'s chain, with USD totals
+ * and a per-good breakdown (spec §4). Returns `undefined` for an unknown id — the
+ * `getTradeInvoice` precedent.
+ *
+ * CANCELLED charge documents and claims are excluded EVERYWHERE — from the lists, from the
+ * totals and from `byGood` — matching how `ChargeListPage`/`ClaimsPage`'s tiles already treat
+ * them (`rows.filter((r) => r.status !== 'CANCELLED')`).
+ *
+ * `byGood` is seeded from the VIEWED invoice's own items first, so goods with no charges still
+ * appear (zeroed) and in document order; allocations/claim items are then folded in on
+ * `referenceDocumentItemId`. Anything folded in whose key was not seeded is an `orphan` — it
+ * only ever exists on a snapshot — and lands after the seeded rows by Map insertion order.
+ *
+ * Money is `amountUSD` only, `round`ed per total: the header figures come from the documents'
+ * own server-derived `totalUSD`/`amountUSD`, the per-good figures from the leaf allocations, and
+ * spec §3's convert-at-the-leaf-then-roll-up invariant (`doc.totalUSD === Σ line.amountUSD ===
+ * Σ Σ allocation.amountUSD`, exact in cents) is what keeps the two sides equal rather than
+ * off-by-a-cent.
+ */
+export async function getInvoiceChargeSummary(
+  invoiceId: string,
+): Promise<InvoiceChargeSummary | undefined> {
+  await delay(180);
+  const invoice = findInvoice(invoiceId);
+  if (!invoice) return undefined;
+
+  // Chain resolution, carried over VERBATIM from the pre-rework `getExpensesForInvoice`
+  // (spec §4) — INCLUDING the `invoice.id` seed, which is NOT redundant: `invoiceChain` walks
+  // down via `findSuccessor`, which skips CANCELLED documents, so a cancelled document is not a
+  // member of its own chain and everything booked on it would silently vanish here without the
+  // explicit seed. This is the most easily-broken line in the rework — do not "simplify" it.
+  const chainIds = new Set([invoice.id, ...invoiceChain(invoice).map((c) => c.id)]);
+
+  const toRow = (d: ChargeDoc): ChargeDocRow => {
+    const bookedOn = d.invoiceId ? findInvoice(d.invoiceId) : undefined;
+    return {
+      ...d,
+      invoiceNumber: bookedOn?.invoiceNumber,
+      customerName: bookedOn ? customerById.get(bookedOn.customerId)?.name : undefined,
+      lineCount: d.lines.length,
+    };
+  };
+
+  const chainDocs = db.chargeDocs.filter(
+    (d) => d.status !== 'CANCELLED' && !!d.invoiceId && chainIds.has(d.invoiceId),
+  );
+  const byDate = (a: { date: string }, b: { date: string }) =>
+    dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+  const expenses = chainDocs.filter((d) => d.direction === 'EXPENSE').map(toRow).sort(byDate);
+  const revenues = chainDocs.filter((d) => d.direction === 'REVENUE').map(toRow).sort(byDate);
+  const claims = db.claims
+    .filter((c) => c.status !== 'CANCELLED' && chainIds.has(c.invoiceId))
+    .sort(byDate);
+
+  const byGoodMap = new Map<string, InvoiceChargeGoodRow>();
+  // Seed pass: the viewed document's own goods, in its own line order, zeroed.
+  for (const item of invoice.items) {
+    if (byGoodMap.has(item.referenceDocumentItemId)) continue;
+    byGoodMap.set(item.referenceDocumentItemId, {
+      referenceDocumentItemId: item.referenceDocumentItemId,
+      product: item.product,
+      quantityMt: item.quantityMt,
+      expenseUSD: 0,
+      revenueUSD: 0,
+      claimUSD: 0,
+      orphan: false,
+    });
+  }
+  // Fold pass: anything whose key wasn't seeded is an orphan, described by its own snapshot.
+  const rowFor = (key: string, product: string, quantityMt: number): InvoiceChargeGoodRow => {
+    const existing = byGoodMap.get(key);
+    if (existing) return existing;
+    const created: InvoiceChargeGoodRow = {
+      referenceDocumentItemId: key,
+      product,
+      quantityMt,
+      expenseUSD: 0,
+      revenueUSD: 0,
+      claimUSD: 0,
+      orphan: true,
+    };
+    byGoodMap.set(key, created);
+    return created;
+  };
+  for (const doc of chainDocs) {
+    for (const line of doc.lines) {
+      for (const alloc of line.allocations) {
+        const row = rowFor(alloc.referenceDocumentItemId, alloc.product, alloc.quantityMt);
+        if (doc.direction === 'EXPENSE') row.expenseUSD += alloc.amountUSD;
+        else row.revenueUSD += alloc.amountUSD;
+      }
+    }
+  }
+  for (const claim of claims) {
+    for (const item of claim.items) {
+      const row = rowFor(item.referenceDocumentItemId, item.product, item.quantityMt);
+      row.claimUSD += item.amountUSD;
+    }
+  }
+
+  const byGood = [...byGoodMap.values()].map((r) => ({
+    ...r,
+    quantityMt: round3(r.quantityMt),
+    expenseUSD: round(r.expenseUSD),
+    revenueUSD: round(r.revenueUSD),
+    claimUSD: round(r.claimUSD),
+  }));
+
+  return {
+    expenses,
+    revenues,
+    claims,
+    expenseUSD: round(expenses.reduce((s, d) => s + d.totalUSD, 0)),
+    revenueUSD: round(revenues.reduce((s, d) => s + d.totalUSD, 0)),
+    claimUSD: round(claims.reduce((s, c) => s + c.amountUSD, 0)),
+    byGood,
+  };
+}
+
 /* --------------------------- Payment mutations ------------------------- */
 
 export interface PaymentInput {
