@@ -116,11 +116,52 @@ async function shot(ctx, path, file, tag, wait = 1600) {
   await ctx.close();
 }
 
+// 2b. Charges / claims / BaseInfo (light, en) on the EMPTY db, so this also covers the
+//     empty states — the thing a brand-new install actually shows.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await seed(ctx, { theme: 'light', locale: 'en', auth: true });
+  await shot(ctx, '/app/expenses', '10-expenses.png', 'expenses');
+  await shot(ctx, '/app/revenues', '11-revenues.png', 'revenues');
+  await shot(ctx, '/app/claims', '12-claims.png', 'claims');
+  await shot(ctx, '/app/base-info', '13-base-info.png', 'base-info');
+  // `?tab=` must survive a fresh load, and the old cost-centres URL must still redirect
+  // into BaseInfo so existing bookmarks keep working.
+  await shot(ctx, '/app/base-info?tab=costCentres', '14-base-info-cost-centres.png', 'base-info-cc');
+  await shot(ctx, '/app/cost-centres', '15-cost-centres-redirect.png', 'cost-centres-redirect');
+  // A detail route with an unknown id must still render its not-found page rather than a
+  // blank screen or a crash. That is what these two cover.
+  //
+  // What they do NOT cover, verified by re-introducing the bug and re-running: these routes
+  // once logged "Query data cannot be undefined" (the API returned `undefined`, which
+  // TanStack Query rejects). That message is a DEV-ONLY warning — it is stripped from the
+  // production bundle, and this script runs against `npm run preview`, which is a production
+  // build. Putting the bug back produced the error on the dev server and nothing here, so
+  // treat this pair as a render check only. Catching that class of bug needs a run against
+  // `npm run dev`.
+  await shot(ctx, '/app/expenses/does-not-exist', '16-charge-not-found.png', 'charge-404');
+  await shot(ctx, '/app/invoices/does-not-exist', '17-invoice-not-found.png', 'invoice-404');
+  await ctx.close();
+}
+
 // 3. App authed (light, Persian RTL)
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await seed(ctx, { theme: 'light', locale: 'fa', auth: true });
   await shot(ctx, '/app/dashboard', '08-dashboard-fa-rtl.png', 'dashboard-fa');
+  // Revenues in an RTL locale: `charges.*` keys are shared by both directions, so a
+  // translation that bakes in "expense" only shows up on this page, never in English.
+  await shot(ctx, '/app/revenues', '18-revenues-fa-rtl.png', 'revenues-fa');
+  await shot(ctx, '/app/claims', '19-claims-fa-rtl.png', 'claims-fa');
+  await ctx.close();
+}
+
+// 3b. Arabic RTL over the same new pages
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await seed(ctx, { theme: 'light', locale: 'ar', auth: true });
+  await shot(ctx, '/app/revenues', '20-revenues-ar-rtl.png', 'revenues-ar');
+  await shot(ctx, '/app/base-info', '21-base-info-ar-rtl.png', 'base-info-ar');
   await ctx.close();
 }
 
