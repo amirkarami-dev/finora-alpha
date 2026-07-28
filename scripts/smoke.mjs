@@ -6,7 +6,43 @@ const OUT = '/tmp/finora-shots';
 mkdirSync(OUT, { recursive: true });
 
 const errors = [];
-const browser = await chromium.launch();
+
+/**
+ * Prefer Playwright's own Chromium. Fall back to the Edge that ships with Windows.
+ *
+ * Why the fallback exists: `npx playwright install chromium` cannot complete from some
+ * locations. `cdn.playwright.dev` itself is fine — it 307-redirects to
+ * `storage.googleapis.com`, and Google blocks the download there with
+ * `403 AccessDenied … "this service is not available in your location"`. A VPN does not
+ * reliably help: a datacenter-IP exit is blocked by Google regardless of country.
+ * Note that HEAD on that URL returns 200 while GET returns 403, so a quick reachability
+ * check is misleading — only a real download proves it.
+ *
+ * Edge is the same Chromium engine, so for a screenshot + console-error sweep the two are
+ * equivalent. We print which one ran, because "smoke passed" means less if you don't know
+ * what it passed on.
+ */
+async function launchBrowser() {
+  try {
+    const browser = await chromium.launch();
+    console.log('Browser: bundled Chromium');
+    return browser;
+  } catch (err) {
+    try {
+      const browser = await chromium.launch({ channel: 'msedge' });
+      console.log('Browser: Microsoft Edge (bundled Chromium unavailable)');
+      return browser;
+    } catch {
+      // Report the ORIGINAL failure — the Edge error ("channel not found") would send
+      // someone debugging the wrong problem.
+      console.error('Could not launch a browser. Bundled Chromium failed with:\n', err.message);
+      console.error('\nInstall one of:\n  npx playwright install chromium\n  or Microsoft Edge');
+      process.exit(1);
+    }
+  }
+}
+
+const browser = await launchBrowser();
 
 function attach(page, tag) {
   page.on('console', (m) => {
