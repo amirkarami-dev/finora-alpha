@@ -127,4 +127,5 @@ en/ar/fa + RTL; responsive.
 
 - Fonts load from Google Fonts; offline/strict-TLS environments fall back to
   system fonts (cosmetic only).
-- This branch is `claude/awesome-turing-b8ven2`.
+- The default branch is `main`. `claude/awesome-turing-b8ven2` was the default
+  until 2026-07-28 and still exists pointing at the same commit; prefer `main`.
