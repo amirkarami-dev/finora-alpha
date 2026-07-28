@@ -1,10 +1,20 @@
 import dayjs, { type Dayjs } from 'dayjs';
 import type {
+  ChargeCategory,
+  ChargeDirection,
+  ChargeDoc,
+  ChargeLine,
+  ChargeScope,
+  Claim,
+  ClaimItem,
+  ClaimSide,
+  ClaimType,
   Container,
   ContainerStatus,
   Contract,
   ContractStatus,
   ContractType,
+  CostCentre,
   Currency,
   Customer,
   CustomerType,
@@ -20,7 +30,7 @@ import type {
   Warehouse,
 } from '@/types';
 import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
-import { invoiceItemAmount, invoiceItemUnitPrice, unitPrice } from '@/utils/calc';
+import { invoiceItemAmount, invoiceItemUnitPrice, splitEqually, unitPrice } from '@/utils/calc';
 import type { Db } from './data';
 
 /**
@@ -959,6 +969,330 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const portalCustomer = customers.find((c) => c.code === 'AM');
   if (portalCustomer) portalCustomer.portalAccount = true;
 
+  /* ------------------------------------------------------------------ *
+   * Charge master data (cost centres + the 2×2 of charge categories) and a handful of demo
+   * charge documents and claims — docs/superpowers/specs/2026-07-27-expense-revenue-claim-
+   * rework-design.md §7 (`mock/sampleData.ts`: "seed real categories + cost centres … the old
+   * hard-coded lists become data"), deferred there to §9's Phase 8. Without the categories,
+   * "Load sample data" gives invoices but every charge flow dead-ends at an empty picker.
+   *
+   * ZERO rnd() draws — appended after every draw-consuming pass, exactly like the
+   * `portalCustomer` post-pass above, so `cust-am`'s creditLimit (2,750,000) and every other
+   * previously-generated value stay byte-identical.
+   *
+   * Ids are minted LITERALLY, in the exact formats `api.ts`'s `next*` helpers max-scan for
+   * (`ccat-0001`, `cc-0001`, `chg-0001`, `chgline-<n>`, `chgalloc-<n>`, `clm-0001`,
+   * `clmitem-<n>`), so a record the user creates after loading sample data continues the
+   * sequence instead of colliding. Never by CALLING those helpers: they read `db`, a store
+   * that does not exist yet at generation time.
+   *
+   * Every date is derived from `anchor` (via `rel()`) or from the booked invoice's own
+   * already-anchor-relative date — never an absolute literal and never the clock. A previous
+   * release shipped baked absolute dates and produced a permanent −100% trend.
+   * ------------------------------------------------------------------ */
+  const costCentres: CostCentre[] = [
+    { id: 'cc-0001', name: 'Logistics', code: 'LOG', description: 'Freight, port handling and haulage', active: true },
+    { id: 'cc-0002', name: 'Trading Desk', code: 'TRD', description: 'Deal-side costs and recoveries', active: true },
+    { id: 'cc-0003', name: 'Administration', code: 'ADM', description: 'Office and general overheads', active: true },
+    { id: 'cc-0004', name: 'Finance', code: 'FIN', description: 'Banking, insurance and treasury', active: true },
+  ];
+
+  // The 2×2 of spec §2: `direction` EXPENSE|REVENUE × `scope` INVOICE|GENERAL. `code` is
+  // trimmed+uppercased and unique WITHIN a direction (so REVENUE may reuse an EXPENSE code) —
+  // the `createChargeCategory` guard these literals must satisfy.
+  const chargeCategories: ChargeCategory[] = [
+    // EXPENSE / INVOICE — costs booked against a specific trade document's goods.
+    { id: 'ccat-0001', name: 'Ocean Freight', code: 'FRT', direction: 'EXPENSE', scope: 'INVOICE', description: 'Sea freight per shipment', active: true },
+    { id: 'ccat-0002', name: 'Customs Duty', code: 'DUTY', direction: 'EXPENSE', scope: 'INVOICE', description: 'Import/export duty and clearance', active: true },
+    { id: 'ccat-0003', name: 'Inspection & Assay', code: 'INSP', direction: 'EXPENSE', scope: 'INVOICE', description: 'Third-party survey, sampling and assay', active: true },
+    { id: 'ccat-0004', name: 'Port Handling', code: 'PORT', direction: 'EXPENSE', scope: 'INVOICE', description: 'Terminal handling, lift-on/lift-off, storage', active: true },
+    { id: 'ccat-0005', name: 'Cargo Insurance', code: 'INS', direction: 'EXPENSE', scope: 'INVOICE', description: 'Marine cargo cover per shipment', active: true },
+    // EXPENSE / GENERAL — overheads that belong to no single document.
+    { id: 'ccat-0006', name: 'Office Rent', code: 'RENT', direction: 'EXPENSE', scope: 'GENERAL', description: 'Premises rent and service charge', active: true },
+    { id: 'ccat-0007', name: 'Salaries & Wages', code: 'SAL', direction: 'EXPENSE', scope: 'GENERAL', description: 'Payroll and staff costs', active: true },
+    { id: 'ccat-0008', name: 'Bank Charges', code: 'BANK', direction: 'EXPENSE', scope: 'GENERAL', description: 'LC fees, transfer and facility charges', active: true },
+    // REVENUE / INVOICE — income attributable to a document's goods.
+    { id: 'ccat-0009', name: 'Weight Gain', code: 'WTGAIN', direction: 'REVENUE', scope: 'INVOICE', description: 'Outturn weight above invoiced quantity', active: true },
+    { id: 'ccat-0010', name: 'Quality Premium', code: 'QPREM', direction: 'REVENUE', scope: 'INVOICE', description: 'Assay above contracted grade', active: true },
+    // REVENUE / GENERAL — income that belongs to no single document.
+    { id: 'ccat-0011', name: 'Interest Income', code: 'INT', direction: 'REVENUE', scope: 'GENERAL', description: 'Deposit and facility interest', active: true },
+    { id: 'ccat-0012', name: 'Scrap Resale', code: 'SCRAP', direction: 'REVENUE', scope: 'GENERAL', description: 'Yard sweepings and off-spec resale', active: true },
+  ];
+
+  /**
+   * CONFIRMED, priced and chain-leaf — the exact eligibility rule `getChargeSourceInvoices`
+   * enforces (api.ts, spec §4), recomputed here from the generated arrays rather than
+   * hard-coded against invoice ids, so a seeded document can never reference something the
+   * picker would reject.
+   */
+  const chargeEligible = (inv: Invoice): boolean =>
+    inv.status === 'CONFIRMED' &&
+    inv.invoiceType !== 'PURCHASE_ORDER' &&
+    inv.invoiceType !== 'SALE_ORDER' &&
+    inv.items.length > 0 &&
+    !invoices.some((other) => other.refInvoiceId === inv.id && other.status !== 'CANCELLED');
+
+  const eligiblePurchases = invoices.filter((inv) => chargeEligible(inv) && inv.invoiceType.startsWith('PURCHASE'));
+  const eligibleSales = invoices.filter((inv) => chargeEligible(inv) && inv.invoiceType.startsWith('SALE'));
+  // ≥3 goods so the equal split (spec §3) is visible on screen rather than trivial.
+  const multiGoodPurchase = eligiblePurchases.find((inv) => inv.items.length >= 3);
+  const multiGoodSales = eligibleSales.filter((inv) => inv.items.length >= 3);
+
+  const chargeDocs: ChargeDoc[] = [];
+  const claims: Claim[] = [];
+
+  // Literal-format id counters — see this block's header for why the `next*` helpers in api.ts
+  // are unusable here. Each mirrors its helper's format exactly (4-digit zero-padded for the
+  // header entities, bare monotonic for the inline children).
+  let chargeDocSeq = 0;
+  let chargeLineSeq = 0;
+  let chargeAllocSeq = 0;
+  let claimSeq = 0;
+  let claimItemSeq = 0;
+
+  interface SeedLineSpec {
+    categoryId: string;
+    amount: number;
+    currency: Currency;
+    costCentreId: string;
+    description: string;
+    /** Days after the document date — keeps line dates anchor-relative too. */
+    dayOffset: number;
+  }
+
+  /**
+   * Mirrors `buildChargeLine` + `recomputeLineTotals` (api.ts, spec §3): equal split across
+   * every good of the booked invoice, leaf USD conversion, then roll-up — never a parent total
+   * converted once and split, which is what would put `line.amountUSD` a cent off
+   * `Σ allocation.amountUSD`. GENERAL lines carry `allocations: []` and convert directly.
+   */
+  function makeChargeLine(doc: ChargeDoc, invoice: Invoice | undefined, spec: SeedLineSpec): ChargeLine {
+    chargeLineSeq += 1;
+    const fxRate = spec.currency === 'USD' ? 1 : DEFAULT_FX_AED_PER_USD;
+    const line: ChargeLine = {
+      id: `chgline-${chargeLineSeq}`,
+      docId: doc.id,
+      categoryId: spec.categoryId,
+      date: dayjs(doc.date).add(spec.dayOffset, 'day').toISOString(),
+      amount: round(spec.amount, 2),
+      currency: spec.currency,
+      fxRate,
+      amountUSD: 0,
+      costCentreId: spec.costCentreId,
+      description: spec.description,
+      quantityBasisMt: undefined,
+      unitPriceUSD: undefined,
+      allocations: [],
+    };
+
+    if (doc.kind === 'GENERAL' || !invoice) {
+      line.amountUSD = round(line.amount / fxRate, 2);
+      return line;
+    }
+
+    const parts = splitEqually(line.amount, invoice.items.length);
+    line.allocations = invoice.items.map((it, i) => {
+      chargeAllocSeq += 1;
+      return {
+        id: `chgalloc-${chargeAllocSeq}`,
+        lineId: line.id,
+        invoiceItemId: it.id,
+        referenceDocumentItemId: it.referenceDocumentItemId,
+        product: it.product,
+        quantityMt: it.quantityMt,
+        amount: parts[i],
+        amountUSD: round(parts[i] / fxRate, 2),
+      };
+    });
+    line.amount = round(line.allocations.reduce((s, a) => s + a.amount, 0), 2);
+    line.amountUSD = round(line.allocations.reduce((s, a) => s + a.amountUSD, 0), 2);
+    line.quantityBasisMt = round(line.allocations.reduce((s, a) => s + a.quantityMt, 0), 3);
+    line.unitPriceUSD =
+      line.quantityBasisMt > 0 ? round(line.amountUSD / line.quantityBasisMt, 2) : undefined;
+    return line;
+  }
+
+  /** `totalUSD = round(Σ lines[].amountUSD)` — `recomputeDocTotals`'s rule (spec §3). */
+  function pushChargeDoc(spec: {
+    direction: ChargeDirection;
+    kind: ChargeScope;
+    title: string;
+    invoice?: Invoice;
+    date: string;
+    description: string;
+    lines: SeedLineSpec[];
+  }): void {
+    chargeDocSeq += 1;
+    const doc: ChargeDoc = {
+      id: `chg-${String(chargeDocSeq).padStart(4, '0')}`,
+      direction: spec.direction,
+      kind: spec.kind,
+      title: spec.title,
+      invoiceId: spec.kind === 'INVOICE' ? spec.invoice?.id : undefined,
+      date: spec.date,
+      description: spec.description,
+      status: 'ACTIVE',
+      createdAt: spec.date,
+      lines: [],
+      totalUSD: 0,
+    };
+    doc.lines = spec.lines.map((line) => makeChargeLine(doc, spec.invoice, line));
+    doc.totalUSD = round(doc.lines.reduce((s, l) => s + l.amountUSD, 0), 2);
+    chargeDocs.push(doc);
+  }
+
+  /**
+   * Mirrors `buildClaim` (api.ts, spec §4): `partyId` from the invoice, per-item snapshots from
+   * the invoice line, `amountUSD = round(amount / fxRate)` at the leaf, and a header `amount`/
+   * `amountUSD` that is a pure read-only sum of the items.
+   */
+  function pushClaim(spec: {
+    side: ClaimSide;
+    title: string;
+    invoice: Invoice;
+    claimType: ClaimType;
+    currency: Currency;
+    dayOffset: number;
+    description: string;
+    /** Only the first N goods are claimed — a claim on *some* of a document's goods (spec §10.8). */
+    items: Array<{ amount: number; description: string }>;
+  }): void {
+    claimSeq += 1;
+    const claimId = `clm-${String(claimSeq).padStart(4, '0')}`;
+    const fxRate = spec.currency === 'USD' ? 1 : DEFAULT_FX_AED_PER_USD;
+    const date = dayjs(spec.invoice.invoiceDate).add(spec.dayOffset, 'day').toISOString();
+    const items: ClaimItem[] = spec.items.map((entry, i) => {
+      claimItemSeq += 1;
+      const invoiceItem = spec.invoice.items[i];
+      return {
+        id: `clmitem-${claimItemSeq}`,
+        claimId,
+        invoiceItemId: invoiceItem.id,
+        referenceDocumentItemId: invoiceItem.referenceDocumentItemId,
+        product: invoiceItem.product,
+        quantityMt: invoiceItem.quantityMt,
+        amount: round(entry.amount, 2),
+        amountUSD: round(entry.amount / fxRate, 2),
+        description: entry.description,
+      };
+    });
+    claims.push({
+      id: claimId,
+      side: spec.side,
+      title: spec.title,
+      invoiceId: spec.invoice.id,
+      partyId: spec.invoice.customerId,
+      claimType: spec.claimType,
+      date,
+      currency: spec.currency,
+      fxRate,
+      amount: round(items.reduce((s, it) => s + it.amount, 0), 2),
+      amountUSD: round(items.reduce((s, it) => s + it.amountUSD, 0), 2),
+      description: spec.description,
+      status: 'ACTIVE',
+      createdAt: date,
+      items,
+    });
+  }
+
+  // chg-0001: import costs on a multi-good PURCHASE document — three lines, one of them in AED
+  // so the demo shows the FX column doing real work.
+  if (multiGoodPurchase) {
+    pushChargeDoc({
+      direction: 'EXPENSE',
+      kind: 'INVOICE',
+      title: `Import costs ${multiGoodPurchase.invoiceNumber}`,
+      invoice: multiGoodPurchase,
+      date: dayjs(multiGoodPurchase.invoiceDate).add(3, 'day').toISOString(),
+      description: 'Landed-cost build-up for the received cargo',
+      lines: [
+        { categoryId: 'ccat-0001', amount: 18400, currency: 'USD', costCentreId: 'cc-0001', description: 'Sea freight, 4 × 40HC', dayOffset: 0 },
+        { categoryId: 'ccat-0002', amount: 22050, currency: 'AED', costCentreId: 'cc-0001', description: 'Duty and clearance at Jebel Ali', dayOffset: 2 },
+        { categoryId: 'ccat-0003', amount: 3600, currency: 'USD', costCentreId: 'cc-0002', description: 'Independent survey and assay', dayOffset: 4 },
+      ],
+    });
+  }
+
+  // chg-0002: outbound handling on a multi-good SALE document.
+  if (multiGoodSales[0]) {
+    pushChargeDoc({
+      direction: 'EXPENSE',
+      kind: 'INVOICE',
+      title: `Outbound handling ${multiGoodSales[0].invoiceNumber}`,
+      invoice: multiGoodSales[0],
+      date: dayjs(multiGoodSales[0].invoiceDate).add(2, 'day').toISOString(),
+      description: 'Terminal and cover costs on the shipped parcel',
+      lines: [
+        { categoryId: 'ccat-0004', amount: 6250, currency: 'USD', costCentreId: 'cc-0001', description: 'Terminal handling and lift-on', dayOffset: 0 },
+        { categoryId: 'ccat-0005', amount: 2480, currency: 'USD', costCentreId: 'cc-0004', description: 'Marine cargo cover to destination', dayOffset: 3 },
+      ],
+    });
+  }
+
+  // chg-0003: a GENERAL expense — no invoice, no goods, `allocations: []` on every line.
+  pushChargeDoc({
+    direction: 'EXPENSE',
+    kind: 'GENERAL',
+    title: 'Office overheads',
+    date: rel('2026-06-01').toISOString(),
+    description: 'Monthly overheads not attributable to a single document',
+    lines: [
+      { categoryId: 'ccat-0006', amount: 45000, currency: 'AED', costCentreId: 'cc-0003', description: 'Premises rent and service charge', dayOffset: 0 },
+      { categoryId: 'ccat-0007', amount: 62500, currency: 'USD', costCentreId: 'cc-0003', description: 'Desk and back-office payroll', dayOffset: 1 },
+      { categoryId: 'ccat-0008', amount: 1180, currency: 'USD', costCentreId: 'cc-0004', description: 'LC issuance and transfer fees', dayOffset: 2 },
+    ],
+  });
+
+  // chg-0004: the REVENUE mirror — a second SALE document so the Revenues list is independent
+  // of the Expenses list (spec §10.7).
+  if (multiGoodSales[1]) {
+    pushChargeDoc({
+      direction: 'REVENUE',
+      kind: 'INVOICE',
+      title: `Outturn gain ${multiGoodSales[1].invoiceNumber}`,
+      invoice: multiGoodSales[1],
+      date: dayjs(multiGoodSales[1].invoiceDate).add(5, 'day').toISOString(),
+      description: 'Discharge outturn above the invoiced quantity',
+      lines: [
+        { categoryId: 'ccat-0009', amount: 9400, currency: 'USD', costCentreId: 'cc-0002', description: 'Weight gain at discharge', dayOffset: 0 },
+      ],
+    });
+  }
+
+  // clm-0001 / clm-0002: expense-claim → PURCHASE, revenue-claim → SALE (spec §1's binding
+  // table). Both claim only the FIRST TWO goods of a ≥3-good document, so the detail modal
+  // demonstrates a partial claim rather than a whole-document one.
+  if (multiGoodPurchase) {
+    pushClaim({
+      side: 'EXPENSE',
+      title: `Short weight ${multiGoodPurchase.invoiceNumber}`,
+      invoice: multiGoodPurchase,
+      claimType: 'QUANTITY',
+      currency: 'USD',
+      dayOffset: 12,
+      description: 'Draft survey short against the supplier',
+      items: [
+        { amount: 4250, description: 'Outturn 1.8 MT below B/L weight' },
+        { amount: 3180, description: 'Outturn 1.3 MT below B/L weight' },
+      ],
+    });
+  }
+  if (multiGoodSales[1]) {
+    pushClaim({
+      side: 'REVENUE',
+      title: `Quality claim ${multiGoodSales[1].invoiceNumber}`,
+      invoice: multiGoodSales[1],
+      claimType: 'QUALITY',
+      currency: 'AED',
+      dayOffset: 16,
+      description: 'Buyer claim on assay below contracted grade',
+      items: [
+        { amount: 18500, description: 'Copper content 0.6% under spec' },
+        { amount: 11250, description: 'Excess moisture on discharge' },
+      ],
+    });
+  }
+
   return {
     customers,
     contracts,
@@ -968,14 +1302,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     warehouses,
     invoices,
     inventoryDocs,
-    // Cost centres/charge categories/charge docs/claims (schema v6) aren't populated by the demo
-    // generator yet — real category + cost-centre seeding is deferred to the rework's Phase 8
-    // (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §7/§9). Empty
-    // arrays keep this return shape satisfying `Db` in the meantime.
-    costCentres: [],
-    chargeCategories: [],
-    chargeDocs: [],
-    claims: [],
+    costCentres,
+    chargeCategories,
+    chargeDocs,
+    claims,
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }
