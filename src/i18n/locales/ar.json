@@ -74,7 +74,7 @@
     "settings": "الإعدادات",
     "portal": "حسابي",
     "partners": "الشركاء",
-    "costCentres": "مراكز التكلفة",
+    "baseInfo": "البيانات الأساسية",
     "main": "الرئيسية",
     "operations": "العمليات",
     "finance": "المالية",
@@ -513,6 +513,38 @@
     "updated": "تم تحديث مركز التكلفة",
     "activated": "تم تفعيل مركز التكلفة",
     "deactivated": "تم إلغاء تفعيل مركز التكلفة"
+  },
+  "baseInfo": {
+    "title": "البيانات الأساسية",
+    "subtitle": "البيانات الرئيسية المشتركة بين المصروفات والإيرادات والمطالبات",
+    "tabExpenseCategories": "فئات المصروفات",
+    "tabRevenueCategories": "فئات الإيرادات",
+    "tabCostCentres": "مراكز التكلفة"
+  },
+  "chargeCategories": {
+    "name": "الاسم",
+    "code": "الرمز",
+    "scope": "النطاق",
+    "description": "الوصف",
+    "newCategory": "فئة جديدة",
+    "editCategory": "تعديل الفئة",
+    "namePlaceholder": "مثال: الشحن",
+    "codePlaceholder": "مثال: FREIGHT",
+    "descriptionPlaceholder": "ملاحظات اختيارية لهذه الفئة",
+    "codeInvalid": "أحرف وأرقام وشرطات فقط",
+    "codeTaken": "هذا الرمز مستخدم بالفعل ضمن هذا الاتجاه",
+    "created": "تم إنشاء الفئة",
+    "updated": "تم تحديث الفئة",
+    "activated": "تم تفعيل الفئة",
+    "deactivated": "تم إلغاء تفعيل الفئة"
+  },
+  "chargeScopes": {
+    "INVOICE": "فاتورة",
+    "GENERAL": "عام"
+  },
+  "chargeDirections": {
+    "EXPENSE": "مصروف",
+    "REVENUE": "إيراد"
   },
   "payments": {
     "title": "المدفوعات",

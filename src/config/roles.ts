@@ -13,7 +13,7 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'contracts',
     'partners',
     'containers',
-    'costCentres',
+    'baseInfo',
     'purchase',
     'sale',
     'warehouse',
@@ -21,17 +21,17 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'reports',
     'settings',
   ],
-  // Cost Centres: Manager + Staff (spec §5). The charges/revenues/claims/baseInfo rework
-  // (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md) re-adds an
-  // Expenses grant from Phase 2 onward — removed here in Phase 1 along with the route itself,
-  // since the flat expense module and its page are gone and there is nothing left to guard.
+  // BaseInfo (cost centres + expense/revenue categories, spec §7): Manager + Staff — Staff
+  // retains today's cost-centre capability under the new shell. The charges/revenues/claims
+  // rework (docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md) adds
+  // Expenses/Revenues/Claims grants for Manager from Phase 4/5/6 onward — not yet present here.
   Staff: [
     'dashboard',
     'customers',
     'contracts',
     'partners',
     'containers',
-    'costCentres',
+    'baseInfo',
     'purchase',
     'sale',
     'warehouse',
@@ -92,10 +92,10 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'partners', route: ROUTES.partners, icon: 'apartment', group: 'operations' },
   { key: 'containers', route: ROUTES.containers, icon: 'container', group: 'operations' },
   { key: 'warehouse', route: ROUTES.warehouse, icon: 'gold', group: 'operations' },
-  { key: 'costCentres', route: ROUTES.costCentres, icon: 'cluster', group: 'operations' },
   { key: 'purchase', route: ROUTES.purchase, icon: 'shoppingcart', group: 'finance' },
   { key: 'sale', route: ROUTES.sale, icon: 'tags', group: 'finance' },
   { key: 'payments', route: ROUTES.payments, icon: 'creditcard', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
+  { key: 'baseInfo', route: ROUTES.baseInfo, icon: 'database', group: 'system' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
 ];

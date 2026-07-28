@@ -74,7 +74,7 @@
     "settings": "Settings",
     "portal": "My Account",
     "partners": "Partners",
-    "costCentres": "Cost Centres",
+    "baseInfo": "Base Info",
     "main": "Main",
     "operations": "Operations",
     "finance": "Finance",
@@ -513,6 +513,38 @@
     "updated": "Cost centre updated",
     "activated": "Cost centre activated",
     "deactivated": "Cost centre deactivated"
+  },
+  "baseInfo": {
+    "title": "Base Info",
+    "subtitle": "Master data shared across expenses, revenues and claims",
+    "tabExpenseCategories": "Expense categories",
+    "tabRevenueCategories": "Revenue categories",
+    "tabCostCentres": "Cost centres"
+  },
+  "chargeCategories": {
+    "name": "Name",
+    "code": "Code",
+    "scope": "Scope",
+    "description": "Description",
+    "newCategory": "New category",
+    "editCategory": "Edit category",
+    "namePlaceholder": "e.g. Freight",
+    "codePlaceholder": "e.g. FREIGHT",
+    "descriptionPlaceholder": "Optional notes for this category",
+    "codeInvalid": "Letters, numbers and hyphens only",
+    "codeTaken": "This code is already in use for this direction",
+    "created": "Category created",
+    "updated": "Category updated",
+    "activated": "Category activated",
+    "deactivated": "Category deactivated"
+  },
+  "chargeScopes": {
+    "INVOICE": "Invoice",
+    "GENERAL": "General"
+  },
+  "chargeDirections": {
+    "EXPENSE": "Expense",
+    "REVENUE": "Revenue"
   },
   "payments": {
     "title": "Payments",

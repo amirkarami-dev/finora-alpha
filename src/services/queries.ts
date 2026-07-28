@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ChargeDirection, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -40,6 +40,8 @@ export const qk = {
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
+  // ---- Charge categories (design spec §4-§5) ----
+  chargeCategories: (direction?: ChargeDirection) => ['chargeCategories', direction ?? 'all'] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -575,6 +577,49 @@ export const useSetCostCentreActive = () => {
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       api.setCostCentreActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+/* ------------------------- Charge categories (design spec §4-§5) ------------------------- */
+
+export const useChargeCategories = (direction?: ChargeDirection) =>
+  useQuery({
+    queryKey: qk.chargeCategories(direction),
+    queryFn: () => api.getChargeCategories(direction),
+  });
+
+// Bare-prefix invalidation (queries.ts precedent above, spec §5): covers every
+// `['chargeCategories', direction]` entry regardless of which direction mutated.
+// Phase 7: also invalidate ['chargeDocs']/['chargeDoc'] here — a rename or deactivate changes
+// the label rendered on every row that references the category.
+function useInvalidateChargeCategories() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ['chargeCategories'] });
+}
+
+export const useCreateChargeCategory = () => {
+  const invalidate = useInvalidateChargeCategories();
+  return useMutation({
+    mutationFn: (input: api.ChargeCategoryInput) => api.createChargeCategory(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateChargeCategory = () => {
+  const invalidate = useInvalidateChargeCategories();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ChargeCategoryInput }) =>
+      api.updateChargeCategory(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetChargeCategoryActive = () => {
+  const invalidate = useInvalidateChargeCategories();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setChargeCategoryActive(id, active),
     onSuccess: invalidate,
   });
 };

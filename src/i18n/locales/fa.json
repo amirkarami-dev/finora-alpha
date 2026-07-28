@@ -74,7 +74,7 @@
     "settings": "تنظیمات",
     "portal": "حساب من",
     "partners": "شرکا",
-    "costCentres": "مراکز هزینه",
+    "baseInfo": "اطلاعات پایه",
     "main": "اصلی",
     "operations": "عملیات",
     "finance": "مالی",
@@ -513,6 +513,38 @@
     "updated": "مرکز هزینه به‌روزرسانی شد",
     "activated": "مرکز هزینه فعال شد",
     "deactivated": "مرکز هزینه غیرفعال شد"
+  },
+  "baseInfo": {
+    "title": "اطلاعات پایه",
+    "subtitle": "اطلاعات پایه مشترک بین هزینه‌ها، درآمدها و مطالبات",
+    "tabExpenseCategories": "دسته‌های هزینه",
+    "tabRevenueCategories": "دسته‌های درآمد",
+    "tabCostCentres": "مراکز هزینه"
+  },
+  "chargeCategories": {
+    "name": "نام",
+    "code": "کد",
+    "scope": "دامنه",
+    "description": "توضیحات",
+    "newCategory": "دسته جدید",
+    "editCategory": "ویرایش دسته",
+    "namePlaceholder": "مثلاً حمل‌ونقل",
+    "codePlaceholder": "مثلاً FREIGHT",
+    "descriptionPlaceholder": "یادداشت اختیاری برای این دسته",
+    "codeInvalid": "فقط حروف، اعداد و خط تیره",
+    "codeTaken": "این کد قبلاً برای این جهت استفاده شده است",
+    "created": "دسته ایجاد شد",
+    "updated": "دسته به‌روزرسانی شد",
+    "activated": "دسته فعال شد",
+    "deactivated": "دسته غیرفعال شد"
+  },
+  "chargeScopes": {
+    "INVOICE": "فاکتور",
+    "GENERAL": "عمومی"
+  },
+  "chargeDirections": {
+    "EXPENSE": "هزینه",
+    "REVENUE": "درآمد"
   },
   "payments": {
     "title": "پرداخت‌ها",

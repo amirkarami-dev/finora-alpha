@@ -4,10 +4,10 @@ import {
   ApartmentOutlined,
   AppstoreOutlined,
   BarChartOutlined,
-  ClusterOutlined,
   ContainerOutlined,
   CreditCardOutlined,
   CrownOutlined,
+  DatabaseOutlined,
   FileTextOutlined,
   GoldOutlined,
   SettingOutlined,
@@ -42,7 +42,7 @@ const ICONS: Record<string, ReactNode> = {
   shoppingcart: <ShoppingCartOutlined />,
   tags: <TagsOutlined />,
   gold: <GoldOutlined />,
-  cluster: <ClusterOutlined />,
+  database: <DatabaseOutlined />,
 };
 
 const GROUP_ORDER: NavGroup[] = ['main', 'operations', 'finance', 'system'];

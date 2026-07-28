@@ -1,6 +1,9 @@
 import dayjs from 'dayjs';
 import { db, persistDb } from '@/mock/data';
 import type {
+  ChargeCategory,
+  ChargeDirection,
+  ChargeScope,
   Container,
   ContainerGood,
   ContainerStatus,
@@ -2351,6 +2354,80 @@ export async function setCostCentreActive(id: string, active: boolean): Promise<
   costCentre.active = active;
   persistDb();
   return costCentre;
+}
+
+/* ------------------------ Charge Category CRUD -------------------------- *
+ * Master data behind BaseInfo's Expense/Revenue category tabs (design spec §4). Mirrors the
+ * Cost Centre CRUD immediately above almost exactly — same id/active/persist idioms — with one
+ * deliberate difference: `duplicate-code` is scoped WITHIN a direction (spec §2), so the same
+ * code may exist once under EXPENSE and once under REVENUE, since the two directions are
+ * maintained as fully independent lists.
+ * ------------------------------------------------------------------ */
+
+export interface ChargeCategoryInput {
+  name: string;
+  code: string;
+  direction: ChargeDirection;
+  scope: ChargeScope;
+  description?: string;
+}
+
+function nextChargeCategoryId(): string {
+  let max = 0;
+  for (const cc of db.chargeCategories) {
+    const match = /^ccat-(\d+)$/.exec(cc.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `ccat-${String(max + 1).padStart(4, '0')}`;
+}
+
+export async function getChargeCategories(
+  direction?: ChargeDirection,
+  scope?: ChargeScope,
+): Promise<ChargeCategory[]> {
+  await delay(120);
+  return db.chargeCategories.filter(
+    (c) => (direction ? c.direction === direction : true) && (scope ? c.scope === scope : true),
+  );
+}
+
+export async function createChargeCategory(input: ChargeCategoryInput): Promise<ChargeCategory> {
+  await delay(180);
+  const code = input.code.trim().toUpperCase();
+  if (db.chargeCategories.some((c) => c.code === code && c.direction === input.direction)) {
+    throw new Error('duplicate-code');
+  }
+  const category: ChargeCategory = {
+    id: nextChargeCategoryId(),
+    name: input.name.trim(),
+    code,
+    direction: input.direction,
+    scope: input.scope,
+    description: input.description?.trim() || undefined,
+    active: true,
+  };
+  db.chargeCategories.push(category);
+  persistDb();
+  return category;
+}
+
+export async function updateChargeCategory(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
+  await delay(160);
+  const category = db.chargeCategories.find((c) => c.id === id);
+  if (!category) throw new Error(`Charge category ${id} not found`);
+  category.name = input.name.trim(); // code/direction/scope immutable on edit
+  category.description = input.description?.trim() || undefined;
+  persistDb();
+  return category;
+}
+
+export async function setChargeCategoryActive(id: string, active: boolean): Promise<ChargeCategory> {
+  await delay(140);
+  const category = db.chargeCategories.find((c) => c.id === id);
+  if (!category) throw new Error(`Charge category ${id} not found`);
+  category.active = active;
+  persistDb();
+  return category;
 }
 
 /* --------------------------- Payment mutations ------------------------- */

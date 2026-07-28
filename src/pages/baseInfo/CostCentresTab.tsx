@@ -1,22 +1,34 @@
-import { useMemo, useState } from 'react';
-import { App, Button, Card, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
+import { App, Button, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { PageHeader } from '@/components/common/PageHeader';
 import { useCostCentres, useSetCostCentreActive } from '@/services/queries';
 import type { CostCentre } from '@/types';
 import { CostCentreFormModal } from './CostCentreFormModal';
 
 const { Text } = Typography;
 
-export default function CostCentresPage() {
+/** BaseInfoPage's per-tab PageHeader "New" button (design spec §6) needs to open this tab's
+ *  create modal without lifting the modal's state up to the parent — an imperative handle
+ *  keeps the tab self-contained, matching how CostCentresPage owned its own modal state. */
+export interface CostCentresTabHandle {
+  openCreate: () => void;
+}
+
+/** Body of the former `costCentres/CostCentresPage.tsx` (design spec §6), minus its
+ *  `PageHeader` — BaseInfoPage supplies the shared header and tab shell. */
+export const CostCentresTab = forwardRef<CostCentresTabHandle>(function CostCentresTab(_props, ref) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { data, isLoading } = useCostCentres();
   const setActive = useSetCostCentreActive();
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [formState, setFormState] = useState<{ open: boolean; costCentre?: CostCentre }>({ open: false });
+
+  useImperativeHandle(ref, () => ({
+    openCreate: () => setFormState({ open: true, costCentre: undefined }),
+  }));
 
   const filtered = useMemo(
     () =>
@@ -85,46 +97,31 @@ export default function CostCentresPage() {
   ];
 
   return (
-    <div className="fade-in">
-      <PageHeader
-        title={t('costCentres.title')}
-        subtitle={t('costCentres.subtitle')}
-        extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setFormState({ open: true, costCentre: undefined })}
-          >
-            {t('costCentres.newCostCentre')}
-          </Button>
-        }
-      />
-      <Card variant="borderless" styles={{ body: { padding: 16 } }}>
-        <div style={{ marginBottom: 16 }}>
-          <Segmented
-            value={statusFilter}
-            onChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}
-            options={[
-              { label: t('common.active'), value: 'active' },
-              { label: t('common.inactive'), value: 'inactive' },
-              { label: t('common.all'), value: 'all' },
-            ]}
-          />
-        </div>
-        <Table<CostCentre>
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={filtered}
-          scroll={{ x: 760 }}
-          pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+    <>
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}
+          options={[
+            { label: t('common.active'), value: 'active' },
+            { label: t('common.inactive'), value: 'inactive' },
+            { label: t('common.all'), value: 'all' },
+          ]}
         />
-      </Card>
+      </div>
+      <Table<CostCentre>
+        rowKey="id"
+        loading={isLoading}
+        columns={columns}
+        dataSource={filtered}
+        scroll={{ x: 760 }}
+        pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
+      />
       <CostCentreFormModal
         open={formState.open}
         onClose={() => setFormState((s) => ({ ...s, open: false }))}
         costCentre={formState.costCentre}
       />
-    </div>
+    </>
   );
-}
+});

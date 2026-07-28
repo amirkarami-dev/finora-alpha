@@ -135,5 +135,5 @@ export const ROUTES = {
   settings: '/app/settings',
   partners: '/app/partners',
   portal: '/app/portal',
-  costCentres: '/app/cost-centres',
+  baseInfo: '/app/base-info',
 } as const;

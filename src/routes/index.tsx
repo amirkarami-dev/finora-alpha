@@ -23,7 +23,7 @@ import SalePage from '@/pages/tradeInvoices/SalePage';
 import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
 import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
-import CostCentresPage from '@/pages/costCentres/CostCentresPage';
+import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -78,7 +78,9 @@ export function AppRoutes() {
         <Route path="invoices/purchase" element={<RoleRoute routeKey="purchase"><PurchasePage /></RoleRoute>} />
         <Route path="invoices/sale" element={<RoleRoute routeKey="sale"><SalePage /></RoleRoute>} />
         <Route path="warehouse" element={<RoleRoute routeKey="warehouse"><WarehousePage /></RoleRoute>} />
-        <Route path="cost-centres" element={<RoleRoute routeKey="costCentres"><CostCentresPage /></RoleRoute>} />
+        <Route path="base-info" element={<RoleRoute routeKey="baseInfo"><BaseInfoPage /></RoleRoute>} />
+        {/* Keeps old cost-centres bookmarks alive after the Phase 2 BaseInfo move. */}
+        <Route path="cost-centres" element={<Navigate to="/app/base-info?tab=costCentres" replace />} />
         <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
