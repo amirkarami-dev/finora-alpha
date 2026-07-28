@@ -166,9 +166,12 @@ export async function getAccounts(): Promise<CustomerAccount[]> {
   return computeAccounts().sort((a, b) => b.totalOutstanding - a.totalOutstanding);
 }
 
-export async function getAccount(id: string): Promise<CustomerAccount | undefined> {
+export async function getAccount(id: string): Promise<CustomerAccount | null> {
   await delay(160);
-  return computeAccounts().find((a) => a.id === id);
+  // `?? null`, never a bare `.find()` — TanStack Query rejects `undefined` query data and logs a
+  // console error even though the page renders its 404 fine. Same rule as
+  // `getCustomerPortalSummary`; every "fetch one by id" reader in this file follows it.
+  return computeAccounts().find((a) => a.id === id) ?? null;
 }
 
 export interface ReceivableInvoiceRow {
@@ -259,9 +262,9 @@ export async function getContracts(): Promise<ContractRow[]> {
   return buildContractRows().sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
-export async function getContract(id: string): Promise<ContractRow | undefined> {
+export async function getContract(id: string): Promise<ContractRow | null> {
   await delay(160);
-  return buildContractRows().find((c) => c.id === id);
+  return buildContractRows().find((c) => c.id === id) ?? null;
 }
 
 export async function getContractsByCustomer(customerId: string): Promise<ContractRow[]> {
@@ -1355,10 +1358,10 @@ export interface TradeInvoiceDetail {
   remainingUSD: number;
 }
 
-export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | undefined> {
+export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | null> {
   await delay(160);
   const invoice = findInvoice(id);
-  if (!invoice) return undefined;
+  if (!invoice) return null;
   const contract = contractById.get(invoice.contractId);
   const chain = invoiceChain(invoice);
   const chainIds = new Set(chain.map((c) => c.id));
@@ -2549,10 +2552,10 @@ export async function getChargeDocs(
 /** `invoiceItems` come from the BOOKED invoice (`doc.invoiceId`), never the chain leaf — a
  *  charge's goods picker always shows the exact document it was created against, even after a
  *  later conversion moves the chain leaf elsewhere (spec §2's immutable-`invoiceId` decision). */
-export async function getChargeDoc(id: string): Promise<ChargeDocDetail | undefined> {
+export async function getChargeDoc(id: string): Promise<ChargeDocDetail | null> {
   await delay(140);
   const doc = db.chargeDocs.find((d) => d.id === id);
-  if (!doc) return undefined;
+  if (!doc) return null;
   const invoice = doc.invoiceId ? findInvoice(doc.invoiceId) : undefined;
   return {
     doc,
@@ -3021,10 +3024,10 @@ export async function getClaims(side?: ClaimSide): Promise<ClaimRow[]> {
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
-export async function getClaim(id: string): Promise<ClaimDetail | undefined> {
+export async function getClaim(id: string): Promise<ClaimDetail | null> {
   await delay(140);
   const claim = db.claims.find((c) => c.id === id);
-  if (!claim) return undefined;
+  if (!claim) return null;
   const invoice = findInvoice(claim.invoiceId);
   return { claim, invoice, invoiceItems: invoice ? invoice.items : [] };
 }
@@ -3234,10 +3237,10 @@ export interface InvoiceChargeSummary {
  */
 export async function getInvoiceChargeSummary(
   invoiceId: string,
-): Promise<InvoiceChargeSummary | undefined> {
+): Promise<InvoiceChargeSummary | null> {
   await delay(180);
   const invoice = findInvoice(invoiceId);
-  if (!invoice) return undefined;
+  if (!invoice) return null;
 
   // Chain resolution, carried over VERBATIM from the pre-rework `getExpensesForInvoice`
   // (spec §4) — INCLUDING the `invoice.id` seed, which is NOT redundant: `invoiceChain` walks
