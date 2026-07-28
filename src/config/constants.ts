@@ -132,6 +132,8 @@ export const ROUTES = {
   warehouse: '/app/warehouse',
   payments: '/app/payments',
   expenses: '/app/expenses',
+  revenues: '/app/revenues',
+  claims: '/app/claims',
   reports: '/app/reports',
   settings: '/app/settings',
   partners: '/app/partners',

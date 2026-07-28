@@ -25,7 +25,9 @@ import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
 import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
 import ExpensesPage from '@/pages/charges/ExpensesPage';
+import RevenuesPage from '@/pages/charges/RevenuesPage';
 import ChargeDocDetailPage from '@/pages/charges/ChargeDocDetailPage';
+import ClaimsPage from '@/pages/claims/ClaimsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -89,6 +91,10 @@ export function AppRoutes() {
             registered per-direction at its own list route; Phase 5 adds the `revenues` twin. */}
         <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />
         <Route path="expenses/:id" element={<RoleRoute routeKey="expenses"><ChargeDocDetailPage /></RoleRoute>} />
+        <Route path="revenues" element={<RoleRoute routeKey="revenues"><RevenuesPage /></RoleRoute>} />
+        <Route path="revenues/:id" element={<RoleRoute routeKey="revenues"><ChargeDocDetailPage /></RoleRoute>} />
+        {/* Claims (design spec §9 Phase 6) — one page, tabbed expense/revenue via useTabParam. */}
+        <Route path="claims" element={<RoleRoute routeKey="claims"><ClaimsPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
         <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>

@@ -7,6 +7,10 @@ import type {
   ChargeDoc,
   ChargeLine,
   ChargeScope,
+  Claim,
+  ClaimItem,
+  ClaimSide,
+  ClaimType,
   Container,
   ContainerGood,
   ContainerStatus,
@@ -2892,6 +2896,259 @@ export async function removeChargeLine(docId: string, lineId: string): Promise<C
   recomputeDocTotals(doc);
   persistDb();
   return doc;
+}
+
+/* ------------------------------ Claims ---------------------------------- *
+ * Per-item claims against one invoice's goods, typed as quantity or quality — see
+ * docs/superpowers/specs/2026-07-27-expense-revenue-claim-rework-design.md §1 (claim sides:
+ * expense-claim → PURCHASE invoices, revenue-claim → SALE), §2 (shapes, already declared in
+ * types/index.ts), §4 (this API, guards IN ORDER). Deliberately its own flat `db.claims` table,
+ * not folded into `chargeDocs` — a claim has exactly one line-shaped thing (its items), no
+ * category/cost-centre, and its header amount is a pure read-only sum, so the doc/line/allocation
+ * three-level shape above would be pointless indirection here.
+ * ------------------------------------------------------------------ */
+
+export interface ClaimItemInput {
+  invoiceItemId: string;
+  amount: number;
+  description?: string;
+}
+
+export interface ClaimInput {
+  side: ClaimSide;
+  title: string;
+  invoiceId: string;
+  claimType: ClaimType;
+  date: string;
+  currency: Currency;
+  fxRate: number;
+  description?: string;
+  items: ClaimItemInput[];
+}
+
+export interface ClaimRow extends Claim {
+  invoiceNumber?: string;
+  partyName?: string;
+  itemCount: number;
+}
+
+export interface ClaimDetail {
+  claim: Claim;
+  invoice?: Invoice;
+  invoiceItems: InvoiceItem[];
+}
+
+function nextClaimId(): string {
+  let max = 0;
+  for (const c of db.claims) {
+    const match = /^clm-(\d+)$/.exec(c.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `clm-${String(max + 1).padStart(4, '0')}`;
+}
+
+/** Monotonic max-scanning counter (mirrors `nextChargeLineId`) — NOT length-derived. */
+let claimItemSeq = db.claims.reduce(
+  (max, c) =>
+    c.items.reduce((m, it) => {
+      const match = /^clmitem-(\d+)$/.exec(it.id);
+      return match ? Math.max(m, Number(match[1])) : m;
+    }, max),
+  0,
+);
+function nextClaimItemId(): string {
+  claimItemSeq += 1;
+  return `clmitem-${claimItemSeq}`;
+}
+
+/** Mirrors the claim-side mapping in spec §1's binding-decision table: an expense claim is filed
+ *  against a PURCHASE invoice, a revenue claim against a SALE invoice. */
+function claimInvoiceSide(side: ClaimSide): InvoiceSide {
+  return side === 'EXPENSE' ? 'PURCHASE' : 'SALE';
+}
+
+/** Thin wrapper (spec §4) — the claim picker's invoice universe is IDENTICAL to the charge-doc
+ *  picker's, just entered via `ClaimSide` instead of `InvoiceSide`. */
+export async function getClaimSourceInvoices(side: ClaimSide): Promise<ChargeSourceInvoiceRow[]> {
+  return getChargeSourceInvoices(claimInvoiceSide(side));
+}
+
+/** Includes CANCELLED claims (the UI strikes them through) — date desc. `invoiceNumber`/
+ *  `partyName` joined server-side (the `ChargeDocRow`/`PaymentRow` idiom above). */
+export async function getClaims(side?: ClaimSide): Promise<ClaimRow[]> {
+  await delay(160);
+  return db.claims
+    .filter((c) => (side ? c.side === side : true))
+    .map((c) => {
+      const invoice = findInvoice(c.invoiceId);
+      return {
+        ...c,
+        invoiceNumber: invoice?.invoiceNumber,
+        partyName: customerById.get(c.partyId)?.name,
+        itemCount: c.items.length,
+      };
+    })
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+export async function getClaim(id: string): Promise<ClaimDetail | undefined> {
+  await delay(140);
+  const claim = db.claims.find((c) => c.id === id);
+  if (!claim) return undefined;
+  const invoice = findInvoice(claim.invoiceId);
+  return { claim, invoice, invoiceItems: invoice ? invoice.items : [] };
+}
+
+/**
+ * Shared guard + build pipeline for `createClaim`/`updateClaim`'s claim-type/FX/item half (spec
+ * §4). Title/date validation and invoice resolution/validation are each CALLER's own
+ * responsibility — they diverge (create validates the invoice fully; update never re-validates
+ * it, the `updateChargeDoc` precedent) — so only the part both share lives here.
+ *
+ * Guards IN ORDER: `claim-type-required` (must be `QUANTITY` or `QUALITY`) → `invalid-fx` (USD
+ * forces fxRate = 1 server-side, skipping the check entirely) → drop items whose `amount <= 0`
+ * (client- AND server-side — a blank/zero row is simply not a claim, not an error) →
+ * `no-claim-items` if none remain → PASS 1 (validate the WHOLE item set before building
+ * anything, the `addInvoiceItems`/`buildChargeLine` atomicity idiom): `item-not-on-invoice` →
+ * `invalid-item-amount` → `duplicate-item` (same `referenceDocumentItemId` twice) → PASS 2:
+ * build items deriving `referenceDocumentItemId`/`product`/`quantityMt` from the invoice line —
+ * NEVER the client (the `createInventoryDocument`/`buildChargeLine` precedent) — and
+ * `amountUSD = round(amount / fxRate)` per item, leaf-converted like `recomputeAllocationUSD`.
+ * `partyId = invoice.customerId` — SERVER-DERIVED, which is what deletes the old
+ * `party-required`/`party-invoice-mismatch` codes entirely (spec §4). The header `amount`/
+ * `amountUSD` are READ-ONLY sums of the items — never client-supplied.
+ *
+ * `existing` is present only on update, supplying `id`/`status`/`createdAt` to preserve rather
+ * than mint/reset.
+ */
+function buildClaim(invoice: Invoice, input: ClaimInput, existing?: Claim): Claim {
+  if (input.claimType !== 'QUANTITY' && input.claimType !== 'QUALITY') {
+    throw new Error('claim-type-required');
+  }
+
+  const currency = input.currency;
+  // USD FORCES fxRate = 1 server-side regardless of what the client sent (buildChargeLine
+  // precedent) — only a non-USD claim's fxRate is actually validated.
+  let fxRate = 1;
+  if (currency !== 'USD') {
+    if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
+    fxRate = input.fxRate;
+  }
+
+  const positiveItems = input.items.filter((it) => it.amount > 0);
+  if (positiveItems.length === 0) throw new Error('no-claim-items');
+
+  const seenRef = new Set<string>();
+  const resolved: Array<{ invoiceItem: InvoiceItem; amount: number; description?: string }> = [];
+  for (const it of positiveItems) {
+    const invoiceItem = invoice.items.find((line) => line.id === it.invoiceItemId);
+    if (!invoiceItem) throw new Error('item-not-on-invoice');
+    if (!Number.isFinite(it.amount) || it.amount <= 0) throw new Error('invalid-item-amount');
+    if (seenRef.has(invoiceItem.referenceDocumentItemId)) throw new Error('duplicate-item');
+    seenRef.add(invoiceItem.referenceDocumentItemId);
+    resolved.push({ invoiceItem, amount: it.amount, description: it.description?.trim() || undefined });
+  }
+
+  const claimId = existing?.id ?? nextClaimId();
+  const items: ClaimItem[] = resolved.map((r) => ({
+    id: nextClaimItemId(),
+    claimId,
+    invoiceItemId: r.invoiceItem.id,
+    referenceDocumentItemId: r.invoiceItem.referenceDocumentItemId,
+    product: r.invoiceItem.product,
+    quantityMt: r.invoiceItem.quantityMt,
+    amount: round(r.amount),
+    amountUSD: round(r.amount / fxRate),
+    description: r.description,
+  }));
+
+  return {
+    id: claimId,
+    side: input.side,
+    title: input.title.trim(),
+    invoiceId: invoice.id,
+    partyId: invoice.customerId,
+    claimType: input.claimType,
+    date: input.date,
+    currency,
+    fxRate,
+    amount: round(items.reduce((s, it) => s + it.amount, 0)),
+    amountUSD: round(items.reduce((s, it) => s + it.amountUSD, 0)),
+    description: input.description?.trim() || undefined,
+    status: existing?.status ?? 'ACTIVE',
+    createdAt: existing?.createdAt ?? dayjs().toISOString(),
+    items,
+  };
+}
+
+/**
+ * Guards IN ORDER (spec §4): `title-required` → `date-required` → `invoice-required` →
+ * `invoice-not-found` → `invoice-side-mismatch` (`invoiceSide(inv.invoiceType) !==` the side's
+ * mapped invoice side) → `invoice-not-confirmed` (must be `isPricedType` AND a member of
+ * `chainLeafDocs` — the `createChargeDoc` precedent) → then `buildClaim`'s claim-type/FX/item
+ * guards.
+ */
+export async function createClaim(input: ClaimInput): Promise<Claim> {
+  await delay(200);
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+  if (!input.invoiceId) throw new Error('invoice-required');
+  const invoice = findInvoice(input.invoiceId);
+  if (!invoice) throw new Error('invoice-not-found');
+
+  const invSide = claimInvoiceSide(input.side);
+  if (invoiceSide(invoice.invoiceType) !== invSide) throw new Error('invoice-side-mismatch');
+  const isChainLeafConfirmed =
+    isPricedType(invoice.invoiceType) && chainLeafDocs(invSide).some((inv) => inv.id === invoice.id);
+  if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
+
+  const claim = buildClaim(invoice, input);
+  db.claims.push(claim);
+  persistDb();
+  return claim;
+}
+
+/**
+ * Guards IN ORDER (spec §4): not-found → `claim-cancelled` → `title-required` → `date-required`
+ * → `invoice-immutable` (`input.invoiceId !== existing.invoiceId`) → `side-immutable` → then
+ * `buildClaim`'s claim-type/FX/item guards. Deliberately SKIPS invoice-required/
+ * invoice-not-found/invoice-side-mismatch/invoice-not-confirmed (the chain-leaf re-check)
+ * ENTIRELY — the `updateChargeDoc` precedent (spec §2): editing a claim after its booked invoice
+ * converts to a later document in the chain must never throw.
+ */
+export async function updateClaim(id: string, input: ClaimInput): Promise<Claim> {
+  await delay(200);
+  const index = db.claims.findIndex((c) => c.id === id);
+  if (index === -1) throw new Error(`Claim ${id} not found`);
+  const existing = db.claims[index];
+  if (existing.status === 'CANCELLED') throw new Error('claim-cancelled');
+  const title = input.title.trim();
+  if (!title) throw new Error('title-required');
+  if (!input.date) throw new Error('date-required');
+  if (input.invoiceId !== existing.invoiceId) throw new Error('invoice-immutable');
+  if (input.side !== existing.side) throw new Error('side-immutable');
+
+  // Invoice is looked up fresh (never re-validated — see the guard comment above) purely to
+  // source `invoice.items` for the item-validation pass; documents are never hard-deleted, so
+  // this cannot fail in practice, but `findInvoiceOrThrow` fails loudly instead of silently
+  // producing an empty items list if that invariant is ever broken.
+  const invoice = findInvoiceOrThrow(existing.invoiceId);
+  const claim = buildClaim(invoice, input, existing);
+  db.claims[index] = claim;
+  persistDb();
+  return claim;
+}
+
+/** Sets `status = 'CANCELLED'`. No hard delete (`cancelChargeDoc` precedent, spec §4). */
+export async function cancelClaim(id: string): Promise<Claim> {
+  await delay(160);
+  const claim = db.claims.find((c) => c.id === id);
+  if (!claim) throw new Error(`Claim ${id} not found`);
+  if (claim.status === 'CANCELLED') return claim;
+  claim.status = 'CANCELLED';
+  persistDb();
+  return claim;
 }
 
 /* --------------------------- Payment mutations ------------------------- */

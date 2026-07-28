@@ -9,8 +9,10 @@ import {
   CreditCardOutlined,
   CrownOutlined,
   DatabaseOutlined,
+  ExceptionOutlined,
   FileTextOutlined,
   GoldOutlined,
+  RiseOutlined,
   SettingOutlined,
   ShoppingCartOutlined,
   TagsOutlined,
@@ -45,6 +47,8 @@ const ICONS: Record<string, ReactNode> = {
   gold: <GoldOutlined />,
   database: <DatabaseOutlined />,
   accountbook: <AccountBookOutlined />,
+  rise: <RiseOutlined />,
+  exception: <ExceptionOutlined />,
 };
 
 const GROUP_ORDER: NavGroup[] = ['main', 'operations', 'finance', 'system'];

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ChargeDirection, ChargeScope, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type { ChargeDirection, ChargeScope, ClaimSide, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -47,6 +47,10 @@ export const qk = {
     ['chargeDocs', direction, kind ?? 'all'] as const,
   chargeDoc: (id: string) => ['chargeDoc', id] as const,
   chargeSourceInvoices: (side: InvoiceSide) => ['chargeSourceInvoices', side] as const,
+  // ---- Claims (design spec §4-§5) ----
+  claims: (side?: ClaimSide) => ['claims', side ?? 'all'] as const,
+  claim: (id: string) => ['claim', id] as const,
+  claimSourceInvoices: (side: ClaimSide) => ['claimSourceInvoices', side] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -721,6 +725,63 @@ export const useRemoveChargeLine = () => {
   return useMutation({
     mutationFn: ({ docId, lineId }: { docId: string; lineId: string }) =>
       api.removeChargeLine(docId, lineId),
+    onSuccess: invalidate,
+  });
+};
+
+/* --------------------------------- Claims (design spec §4-§5) --------------------------------- */
+
+export const useClaimSourceInvoices = (side: ClaimSide) =>
+  useQuery({
+    queryKey: qk.claimSourceInvoices(side),
+    queryFn: () => api.getClaimSourceInvoices(side),
+  });
+
+export const useClaims = (side?: ClaimSide) =>
+  useQuery({
+    queryKey: qk.claims(side),
+    queryFn: () => api.getClaims(side),
+  });
+
+export const useClaim = (id: string) =>
+  useQuery({
+    queryKey: qk.claim(id),
+    queryFn: () => api.getClaim(id),
+    enabled: !!id,
+  });
+
+// Bare-prefix invalidation (spec §5, same trap as `useInvalidateCharges` above): TanStack matches
+// query keys element-by-element, so a bare ['claim'] does NOT prefix-match ['claims', side] —
+// 'claim' !== 'claims' as array elements, they just happen to share a text prefix as STRINGS.
+// BOTH bare keys are required below; do not "simplify" either one away.
+function useInvalidateClaims() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['claims'] });
+    qc.invalidateQueries({ queryKey: ['claim'] });
+  };
+}
+
+export const useCreateClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: (input: api.ClaimInput) => api.createClaim(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ClaimInput }) => api.updateClaim(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelClaim = () => {
+  const invalidate = useInvalidateClaims();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelClaim(id),
     onSuccess: invalidate,
   });
 };
