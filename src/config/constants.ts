@@ -2,8 +2,11 @@ import type {
   ContainerStatus,
   ContractStatus,
   Currency,
+  GoodForm,
+  GoodUnit,
   Incoterm,
   Locale,
+  MetalType,
   PaymentMethod,
 } from '@/types';
 
@@ -24,6 +27,35 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
 ];
 
 export const INCOTERMS: Incoterm[] = ['FOB', 'CIF', 'CFR', 'CNF', 'EXW', 'DAP'];
+
+/** Goods master data (BaseInfo → Goods). Labels are i18n keys (`metalTypes.*`, `goodForms.*`),
+ *  never rendered raw — these are the stored values. */
+export const METAL_TYPES: MetalType[] = [
+  'COPPER',
+  'ALUMINIUM',
+  'ZINC',
+  'LEAD',
+  'NICKEL',
+  'TIN',
+  'BRASS',
+  'STEEL',
+  'OTHER',
+];
+
+export const GOOD_FORMS: GoodForm[] = [
+  'CATHODE',
+  'INGOT',
+  'BILLET',
+  'SCRAP',
+  'WIRE_ROD',
+  'GRANULES',
+  'POWDER',
+  'OTHER',
+];
+
+/** One entry today. Every quantity in the app is MT — adding a unit means changing
+ *  `utils/calc.ts` and every `*Mt` field too, so this is not a free-form list. */
+export const GOOD_UNITS: GoodUnit[] = ['MT'];
 
 export const CONTRACT_STATUSES: ContractStatus[] = [
   'ACTIVE',

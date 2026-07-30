@@ -38,6 +38,8 @@ export const qk = {
   inventoryDocLines: (invoiceId: string) => ['inventoryDocLines', invoiceId] as const,
   invoiceOptions: ['invoiceOptions'] as const,
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
+  // ---- Goods master (BaseInfo → Goods) ----
+  goods: ['goods'] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
@@ -566,6 +568,46 @@ export const useCreatePayment = () => {
         invoiceId: payment.invoiceId,
         customerId: payment.customerId,
       }),
+  });
+};
+
+/* -------------------------------- Goods master -------------------------------- */
+
+export const useGoods = () => useQuery({ queryKey: qk.goods, queryFn: api.getGoods });
+
+/** Every goods mutation must also invalidate `['productNames']`: `getProductNames` merges the
+ *  ACTIVE goods master into the contract-form autocomplete, so a create, rename or deactivate
+ *  changes that list too. Missing this is the whole bug class — the master would look updated
+ *  while the contract form kept offering the old set until `staleTime` expired. */
+function useInvalidateGoods() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: qk.goods });
+    qc.invalidateQueries({ queryKey: qk.productNames });
+  };
+}
+
+export const useCreateGood = () => {
+  const invalidate = useInvalidateGoods();
+  return useMutation({
+    mutationFn: (input: api.GoodInput) => api.createGood(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateGood = () => {
+  const invalidate = useInvalidateGoods();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.GoodInput }) => api.updateGood(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetGoodActive = () => {
+  const invalidate = useInvalidateGoods();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setGoodActive(id, active),
+    onSuccess: invalidate,
   });
 };
 

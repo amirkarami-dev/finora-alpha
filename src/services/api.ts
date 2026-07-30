@@ -23,6 +23,9 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
+  Good,
+  GoodForm,
+  GoodUnit,
   Incoterm,
   Invoice,
   InventoryDocument,
@@ -35,6 +38,7 @@ import type {
   Item,
   ItemPartner,
   ItemStatus,
+  MetalType,
   Partner,
   Payment,
   ProductVolume,
@@ -565,14 +569,32 @@ export async function getPartners(): Promise<Partner[]> {
   return [...db.partners];
 }
 
-/** Distinct product names seen across the dataset — used to seed the goods form. */
+/**
+ * Product-name suggestions for the contract goods form.
+ *
+ * ACTIVE goods master entries first, then any name already used on a contract line. Both
+ * sources matter: the master is the list the user curates, but `Item.product` is free text, so
+ * names typed before the master existed (or typed straight past it) must stay suggestable or
+ * the autocomplete would silently push people to re-type them and create a near-duplicate.
+ *
+ * Inactive goods are omitted on purpose — that is the whole effect of deactivating one. Its
+ * name still appears if a contract already uses it, which is correct: history is not rewritten.
+ * De-duplicated case-insensitively, keeping the master's spelling as canonical.
+ */
 export async function getProductNames(): Promise<string[]> {
   await delay(120);
-  const names = new Set<string>();
-  for (const contract of db.contracts) {
-    for (const item of contract.items) if (item.product) names.add(item.product);
+  const byLower = new Map<string, string>();
+  for (const g of db.goods) {
+    if (g.active && g.name) byLower.set(g.name.toLowerCase(), g.name);
   }
-  return [...names].sort((a, b) => a.localeCompare(b));
+  for (const contract of db.contracts) {
+    for (const item of contract.items) {
+      if (item.product && !byLower.has(item.product.toLowerCase())) {
+        byLower.set(item.product.toLowerCase(), item.product);
+      }
+    }
+  }
+  return [...byLower.values()].sort((a, b) => a.localeCompare(b));
 }
 
 function nextContractId(customerCode: string, dateIso: string): string {
@@ -2364,6 +2386,98 @@ export async function setCostCentreActive(id: string, active: boolean): Promise<
   costCentre.active = active;
   persistDb();
   return costCentre;
+}
+
+/* ------------------------------ Goods CRUD ------------------------------ *
+ * Master list of tradeable products (BaseInfo → Goods). Mirrors the cost-centre quintet above.
+ *
+ * Reference data, NOT a foreign key: `Item.product` remains a plain string, so nothing here can
+ * orphan a contract line. Deactivating a good therefore only hides it from the suggestion list;
+ * contracts, invoices and claims already holding that name are untouched — which is why there is
+ * no delete, only `setGoodActive`.
+ * ------------------------------------------------------------------------ */
+
+export interface GoodInput {
+  name: string;
+  code: string;
+  metalType: MetalType;
+  form?: GoodForm;
+  unit: GoodUnit;
+  hsCode?: string;
+  description?: string;
+}
+
+function nextGoodId(): string {
+  let max = 0;
+  for (const g of db.goods) {
+    const match = /^good-(\d+)$/.exec(g.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `good-${String(max + 1).padStart(4, '0')}`;
+}
+
+export async function getGoods(): Promise<Good[]> {
+  await delay(120);
+  return [...db.goods];
+}
+
+/** Guards IN ORDER: `name-required` → `code-required` → `duplicate-code` → `duplicate-name`.
+ *  Name is checked too, not just code: the whole point of this list is one spelling per
+ *  product, and `Item.product` matches on the NAME, so two goods named the same defeat it. */
+export async function createGood(input: GoodInput): Promise<Good> {
+  await delay(180);
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  const code = input.code.trim().toUpperCase();
+  if (!code) throw new Error('code-required');
+  if (db.goods.some((g) => g.code === code)) throw new Error('duplicate-code');
+  if (db.goods.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error('duplicate-name');
+  }
+  const good: Good = {
+    id: nextGoodId(),
+    name,
+    code,
+    metalType: input.metalType,
+    form: input.form,
+    unit: input.unit,
+    hsCode: input.hsCode?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    active: true,
+  };
+  db.goods.push(good);
+  persistDb();
+  return good;
+}
+
+/** Guards IN ORDER: not-found → `name-required` → `duplicate-name` (excluding itself).
+ *  `code` is immutable after create, matching `updateCostCentre`/`updateChargeCategory`. */
+export async function updateGood(id: string, input: GoodInput): Promise<Good> {
+  await delay(160);
+  const good = db.goods.find((g) => g.id === id);
+  if (!good) throw new Error(`Good ${id} not found`);
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  if (db.goods.some((g) => g.id !== id && g.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error('duplicate-name');
+  }
+  good.name = name;
+  good.metalType = input.metalType;
+  good.form = input.form;
+  good.unit = input.unit;
+  good.hsCode = input.hsCode?.trim() || undefined;
+  good.description = input.description?.trim() || undefined;
+  persistDb();
+  return good;
+}
+
+export async function setGoodActive(id: string, active: boolean): Promise<Good> {
+  await delay(140);
+  const good = db.goods.find((g) => g.id === id);
+  if (!good) throw new Error(`Good ${id} not found`);
+  good.active = active;
+  persistDb();
+  return good;
 }
 
 /* ------------------------ Charge Category CRUD -------------------------- *

@@ -6,6 +6,7 @@ import type {
   Contract,
   CostCentre,
   Customer,
+  Good,
   InventoryDocument,
   Invoice,
   Partner,
@@ -53,6 +54,12 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  * `chargeDocs`/`claims` are HARD `Array.isArray` requirements below (not the old v5 soft
  * `!== undefined` probe with a `loadDb` backfill) — every blob that reaches `isCompatible` was
  * persisted under v6 or later, so "missing" now means "not v6", full stop.
+ *
+ * Goods master (2026-07-30): `Good` (BaseInfo → Goods) **reuses v6** — same reasoning as the
+ * Phase-C cost centres above. It is an additive new entity; no persisted record changes shape,
+ * and `Item.product` stays a plain string (the goods list only feeds autocomplete). Bumping
+ * would have discarded live production data for zero benefit, so `goods` gets a SOFT probe
+ * plus a `loadDb` backfill instead of a hard `Array.isArray` requirement.
  */
 const SCHEMA_VERSION = 6;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
@@ -70,6 +77,7 @@ const seed = {
   chargeCategories: [] as ChargeCategory[],
   chargeDocs: [] as ChargeDoc[],
   claims: [] as Claim[],
+  goods: [] as Good[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -95,6 +103,13 @@ function isCompatible(d: unknown): d is typeof seed {
   ) {
     return false;
   }
+  // Goods master (BaseInfo → Goods): additive new entity, so it reuses v6 rather than bumping —
+  // exactly the Phase-C cost-centres precedent noted in the header. That means the probe must be
+  // SOFT (`!== undefined &&`), not the hard `Array.isArray` used for the v6 four above: a db
+  // persisted before this feature shipped legitimately has no `goods` key, and rejecting it here
+  // would wipe real user data on first load. `loadDb` backfills `[]`.
+  // Note this is `o.goods` (the master list) — unrelated to `Container.goods` probed just below.
+  if (o.goods !== undefined && !Array.isArray(o.goods)) return false;
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -177,7 +192,13 @@ function loadDb(): typeof seed {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (isCompatible(parsed)) return parsed;
+      if (isCompatible(parsed)) {
+        // `goods` backfill — see the soft probe in `isCompatible`. A v6 blob written before the
+        // goods master existed has no such key, and every reader assumes an array.
+        const d = parsed as typeof seed & { goods?: Good[] };
+        if (!Array.isArray(d.goods)) d.goods = [];
+        return d;
+      }
     }
   } catch {
     /* corrupt or unavailable — fall back to the (empty) seed */

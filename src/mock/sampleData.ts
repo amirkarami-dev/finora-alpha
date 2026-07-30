@@ -18,6 +18,8 @@ import type {
   Currency,
   Customer,
   CustomerType,
+  Good,
+  GoodForm as GoodFormType,
   Incoterm,
   InventoryDocument,
   Invoice,
@@ -25,6 +27,7 @@ import type {
   InvoiceType,
   Item,
   ItemPartner,
+  MetalType,
   Partner,
   Payment,
   Warehouse,
@@ -93,24 +96,33 @@ function mulberry32(seed: number) {
 /* ------------------------------------------------------------------ *
  * Reference catalogs
  * ------------------------------------------------------------------ */
+/**
+ * One row per product the demo trades. `lme`/`lmePct` seed CONTRACT LINES (commercial terms);
+ * `code`/`metalType`/`form`/`hsCode` seed the GOODS MASTER (facts about the material). Both are
+ * built from this single list on purpose — the master's names must match the names that land on
+ * contract lines, or the autocomplete would offer near-duplicates of the demo's own data.
+ */
 interface ProductRef {
   name: string;
-  metal: string;
+  code: string;
+  metalType: MetalType;
+  form: GoodFormType;
+  hsCode: string;
   lme: number;
   lmePct: number;
 }
 
 const PRODUCTS: ProductRef[] = [
-  { name: '98% Copper Ingots', metal: 'Copper', lme: 11685, lmePct: 94.76 },
-  { name: 'Copper Cathode', metal: 'Copper', lme: 11820, lmePct: 100 },
-  { name: 'Copper Scrap (Berry)', metal: 'Copper', lme: 11200, lmePct: 88 },
-  { name: 'Copper Scrap (Birch/Cliff)', metal: 'Copper', lme: 11200, lmePct: 84 },
-  { name: 'Aluminum Ingots', metal: 'Aluminum', lme: 2485, lmePct: 98 },
-  { name: 'Aluminum Scrap (Tense)', metal: 'Aluminum', lme: 2420, lmePct: 86 },
-  { name: 'Brass Ingots', metal: 'Brass', lme: 6250, lmePct: 92 },
-  { name: 'Brass Honey Scrap', metal: 'Brass', lme: 6100, lmePct: 85 },
-  { name: 'Zinc Ingots', metal: 'Zinc', lme: 2880, lmePct: 96 },
-  { name: 'Lead Ingots', metal: 'Lead', lme: 2095, lmePct: 97 },
+  { name: '98% Copper Ingots', code: 'CU-ING98', metalType: 'COPPER', form: 'INGOT', hsCode: '7403.19', lme: 11685, lmePct: 94.76 },
+  { name: 'Copper Cathode', code: 'CU-CATH', metalType: 'COPPER', form: 'CATHODE', hsCode: '7403.11', lme: 11820, lmePct: 100 },
+  { name: 'Copper Scrap (Berry)', code: 'CU-BERRY', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 88 },
+  { name: 'Copper Scrap (Birch/Cliff)', code: 'CU-BIRCH', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 84 },
+  { name: 'Aluminum Ingots', code: 'AL-ING', metalType: 'ALUMINIUM', form: 'INGOT', hsCode: '7601.10', lme: 2485, lmePct: 98 },
+  { name: 'Aluminum Scrap (Tense)', code: 'AL-TENSE', metalType: 'ALUMINIUM', form: 'SCRAP', hsCode: '7602.00', lme: 2420, lmePct: 86 },
+  { name: 'Brass Ingots', code: 'BR-ING', metalType: 'BRASS', form: 'INGOT', hsCode: '7403.21', lme: 6250, lmePct: 92 },
+  { name: 'Brass Honey Scrap', code: 'BR-HONEY', metalType: 'BRASS', form: 'SCRAP', hsCode: '7404.00', lme: 6100, lmePct: 85 },
+  { name: 'Zinc Ingots', code: 'ZN-ING', metalType: 'ZINC', form: 'INGOT', hsCode: '7901.11', lme: 2880, lmePct: 96 },
+  { name: 'Lead Ingots', code: 'PB-ING', metalType: 'LEAD', form: 'INGOT', hsCode: '7801.10', lme: 2095, lmePct: 97 },
 ];
 
 const DESTINATIONS = [
@@ -970,6 +982,24 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   if (portalCustomer) portalCustomer.portalAccount = true;
 
   /* ------------------------------------------------------------------ *
+   * Goods master, derived 1:1 from PRODUCTS so its names are exactly the names already on the
+   * generated contract lines. Ids are minted literally (`good-0001`…) to match what
+   * `nextGoodId`'s max-scan will continue from after a reload — never via the `next*` helpers,
+   * which read `db` and it does not exist yet here. ZERO rnd() draws, so determinism is
+   * untouched (same rule as the portal-linking pass above).
+   * ------------------------------------------------------------------ */
+  const goods: Good[] = PRODUCTS.map((p, i) => ({
+    id: `good-${String(i + 1).padStart(4, '0')}`,
+    name: p.name,
+    code: p.code,
+    metalType: p.metalType,
+    form: p.form,
+    unit: 'MT' as const,
+    hsCode: p.hsCode,
+    active: true,
+  }));
+
+  /* ------------------------------------------------------------------ *
    * Charge master data (cost centres + the 2×2 of charge categories) and a handful of demo
    * charge documents and claims — docs/superpowers/specs/2026-07-27-expense-revenue-claim-
    * rework-design.md §7 (`mock/sampleData.ts`: "seed real categories + cost centres … the old
@@ -1306,6 +1336,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     chargeCategories,
     chargeDocs,
     claims,
+    goods,
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

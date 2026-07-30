@@ -15,6 +15,33 @@ export type PaymentMethod = 'TT' | 'Cash' | 'Cheque' | 'Offset' | 'Credit Note';
 
 export type Incoterm = 'FOB' | 'CIF' | 'CFR' | 'CNF' | 'EXW' | 'DAP';
 
+/** Base material of a `Good`. Closed set, like `Incoterm` — 'OTHER' is the escape hatch so a
+ *  new alloy never blocks entry while waiting on a code change. */
+export type MetalType =
+  | 'COPPER'
+  | 'ALUMINIUM'
+  | 'ZINC'
+  | 'LEAD'
+  | 'NICKEL'
+  | 'TIN'
+  | 'BRASS'
+  | 'STEEL'
+  | 'OTHER';
+
+/** Physical form a `Good` ships in. */
+export type GoodForm =
+  | 'CATHODE'
+  | 'INGOT'
+  | 'BILLET'
+  | 'SCRAP'
+  | 'WIRE_ROD'
+  | 'GRANULES'
+  | 'POWDER'
+  | 'OTHER';
+
+/** Unit of measure. MT only today — see the note on `Good.unit`. */
+export type GoodUnit = 'MT';
+
 export type ContractStatus = 'ACTIVE' | 'CLOSED' | 'ON HOLD' | 'CANCELLED';
 
 export type ContainerStatus = 'OPEN' | 'PAID' | 'OVERDUE';
@@ -288,6 +315,34 @@ export interface CostCentre {
   id: string;      // 'cc-0001', max-scanning
   name: string;
   code: string;     // trimmed + uppercased; immutable after create
+  description?: string;
+  active: boolean;
+}
+
+/**
+ * A tradeable product, as master data (BaseInfo → Goods).
+ *
+ * Deliberately holds ONLY facts about the material itself — nothing commercial. LME percent,
+ * premium, incoterm and quantity are terms of a specific deal, so they live on `Item` (a
+ * contract line), not here: the same good sold to two customers carries two different
+ * premiums.
+ *
+ * This is a reference list, not a foreign key. `Item.product` stays a plain string, and the
+ * goods list feeds the autocomplete in `ItemFormModal` so names stay spelled consistently
+ * (`ProductVolume` groups by that text, so a typo splits one product into two report rows).
+ */
+export interface Good {
+  id: string;         // 'good-0001', max-scanning
+  name: string;
+  code: string;       // trimmed + uppercased; immutable after create; unique
+  metalType: MetalType;
+  /** Physical form. Optional — not every good has a meaningful one. */
+  form?: GoodForm;
+  /** Unit of measure. Every quantity in the app is MT (`quantityMt`, `round3`), so adding a
+   *  second unit here would ALSO mean changing `utils/calc.ts` and every `*Mt` field. */
+  unit: GoodUnit;
+  /** Customs tariff classification, e.g. '7403.11'. Fixed per product. */
+  hsCode?: string;
   description?: string;
   active: boolean;
 }
