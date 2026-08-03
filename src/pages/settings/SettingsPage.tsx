@@ -56,8 +56,16 @@ export default function SettingsPage() {
   const locale = useUiStore((s) => s.locale);
   const setLocale = useUiStore((s) => s.setLocale);
 
-  const { baseCurrency, fxRate, companyName, setBaseCurrency, setFxRate, setCompanyName } =
-    useSettingsStore();
+  const {
+    baseCurrency,
+    fxRate,
+    fxRateIqd,
+    companyName,
+    setBaseCurrency,
+    setFxRate,
+    setFxRateIqd,
+    setCompanyName,
+  } = useSettingsStore();
 
   const save = () => message.success(t('settings.saved'));
 
@@ -129,6 +137,19 @@ export default function SettingsPage() {
             step={0.0001}
             style={{ width: 160 }}
             addonBefore="AED"
+          />
+        </SettingRow>
+        <Divider style={{ margin: 0 }} />
+        {/* One row per non-USD currency: these are only the values PREFILLED in forms — each
+            record stores the rate that was actually used, so changing this never rewrites history. */}
+        <SettingRow title={t('settings.fxRateIqd')} description={t('settings.fxRateIqdDesc')}>
+          <InputNumber
+            value={fxRateIqd}
+            onChange={(v) => setFxRateIqd(v ?? 0)}
+            min={0}
+            step={1}
+            style={{ width: 160 }}
+            addonBefore="IQD"
           />
         </SettingRow>
       </Card>

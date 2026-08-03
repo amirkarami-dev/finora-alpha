@@ -6,9 +6,17 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { useTabParam } from '@/hooks/useTabParam';
 import { ChargeCategoriesTab, type ChargeCategoriesTabHandle } from './ChargeCategoriesTab';
 import { CostCentresTab, type CostCentresTabHandle } from './CostCentresTab';
+import { FinancialAccountsTab, type FinancialAccountsTabHandle } from './FinancialAccountsTab';
 import { GoodsTab, type GoodsTabHandle } from './GoodsTab';
 
-const TAB_KEYS = ['goods', 'expenseCategories', 'revenueCategories', 'costCentres'] as const;
+const TAB_KEYS = [
+  'goods',
+  'expenseCategories',
+  'revenueCategories',
+  'costCentres',
+  'banks',
+  'cashSafes',
+] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 /** New-button label per tab — a lookup, not an if/else chain, so adding a fifth tab is one
@@ -18,6 +26,8 @@ const NEW_LABEL_KEY: Record<TabKey, string> = {
   expenseCategories: 'chargeCategories.newCategory',
   revenueCategories: 'chargeCategories.newCategory',
   costCentres: 'costCentres.newCostCentre',
+  banks: 'banks.newAccount',
+  cashSafes: 'cashSafes.newAccount',
 };
 
 /** One page, four tabs: Goods, Expense categories, Revenue categories, Cost centres (design
@@ -36,11 +46,15 @@ export default function BaseInfoPage() {
   const expenseTabRef = useRef<ChargeCategoriesTabHandle>(null);
   const revenueTabRef = useRef<ChargeCategoriesTabHandle>(null);
   const costCentresTabRef = useRef<CostCentresTabHandle>(null);
+  const banksTabRef = useRef<FinancialAccountsTabHandle>(null);
+  const cashSafesTabRef = useRef<FinancialAccountsTabHandle>(null);
 
   const handleNew = () => {
     if (tab === 'goods') goodsTabRef.current?.openCreate();
     else if (tab === 'expenseCategories') expenseTabRef.current?.openCreate();
     else if (tab === 'revenueCategories') revenueTabRef.current?.openCreate();
+    else if (tab === 'banks') banksTabRef.current?.openCreate();
+    else if (tab === 'cashSafes') cashSafesTabRef.current?.openCreate();
     else costCentresTabRef.current?.openCreate();
   };
 
@@ -64,6 +78,8 @@ export default function BaseInfoPage() {
           { key: 'expenseCategories', label: t('baseInfo.tabExpenseCategories') },
           { key: 'revenueCategories', label: t('baseInfo.tabRevenueCategories') },
           { key: 'costCentres', label: t('baseInfo.tabCostCentres') },
+          { key: 'banks', label: t('baseInfo.tabBanks') },
+          { key: 'cashSafes', label: t('baseInfo.tabCashSafes') },
         ]}
         activeTabKey={tab}
         onTabChange={(key) => setTab(key as TabKey)}
@@ -72,6 +88,8 @@ export default function BaseInfoPage() {
         {tab === 'expenseCategories' && <ChargeCategoriesTab ref={expenseTabRef} direction="EXPENSE" />}
         {tab === 'revenueCategories' && <ChargeCategoriesTab ref={revenueTabRef} direction="REVENUE" />}
         {tab === 'costCentres' && <CostCentresTab ref={costCentresTabRef} />}
+        {tab === 'banks' && <FinancialAccountsTab ref={banksTabRef} type="BANK" />}
+        {tab === 'cashSafes' && <FinancialAccountsTab ref={cashSafesTabRef} type="CASH_SAFE" />}
       </Card>
     </div>
   );

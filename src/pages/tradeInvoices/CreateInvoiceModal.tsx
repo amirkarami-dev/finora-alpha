@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useContracts, useCreateInvoice, useUpdateInvoiceHeader } from '@/services/queries';
 import { previewInvoiceNumber } from '@/services/api';
-import { useSettingsStore } from '@/store/useSettingsStore';
+import { useDefaultFxRate } from '@/store/useSettingsStore';
+import { CURRENCIES } from '@/config/constants';
 import type { Currency, Invoice, InvoiceType } from '@/types';
 
 const { TextArea } = Input;
@@ -44,7 +45,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const createMut = useCreateInvoice();
   const updateHeaderMut = useUpdateInvoiceHeader();
-  const fxRate = useSettingsStore((s) => s.fxRate);
+  const defaultFx = useDefaultFxRate();
   const isEdit = !!invoice;
 
   const contractType = invoiceType.startsWith('PURCHASE') ? 'PURCHASE' : 'SELL';
@@ -110,7 +111,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
             invoiceNumber: values.invoiceNumber,
             invoiceDate: values.invoiceDate.toISOString(),
             currency: values.currency,
-            exchangeRate: values.currency === 'AED' ? values.exchangeRate : 1,
+            exchangeRate: values.currency === 'USD' ? 1 : values.exchangeRate,
             description: values.description?.trim() || undefined,
           },
         });
@@ -132,7 +133,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         invoiceDate: values.invoiceDate.toISOString(),
         invoiceNumber: values.invoiceNumber,
         currency: values.currency,
-        exchangeRate: values.currency === 'AED' ? values.exchangeRate : 1,
+        exchangeRate: values.currency === 'USD' ? 1 : values.exchangeRate,
         description: values.description?.trim() || undefined,
       });
       message.success(t('tradeInvoices.created'));
@@ -203,12 +204,9 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
           rules={[{ required: true, message: t('common.required') }]}
         >
           <Select
-            options={[
-              { value: 'USD', label: 'USD' },
-              { value: 'AED', label: 'AED' },
-            ]}
+            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
             onChange={(value: Currency) => {
-              form.setFieldValue('exchangeRate', value === 'AED' ? fxRate : 1);
+              form.setFieldValue('exchangeRate', defaultFx(value));
             }}
           />
         </Form.Item>
@@ -221,7 +219,7 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
             style={{ width: '100%' }}
             min={0}
             step={0.0001}
-            disabled={currency !== 'AED'}
+            disabled={currency === 'USD'}
           />
         </Form.Item>
         <Form.Item name="description" label={t('tradeInvoices.description')}>

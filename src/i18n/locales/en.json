@@ -365,7 +365,7 @@
     "detailTitle": "Document detail",
     "referenceLink": "Reference: {{number}}",
     "convertedToLink": "Converted to: {{number}}",
-    "aedEquivalent": "AED equivalent",
+    "localEquivalent": "{{currency}} equivalent",
     "totalDiscount": "Total discount",
     "totalWeight": "Total weight",
     "items": "Items",
@@ -526,7 +526,9 @@
     "tabGoods": "Goods",
     "tabExpenseCategories": "Expense categories",
     "tabRevenueCategories": "Revenue categories",
-    "tabCostCentres": "Cost centres"
+    "tabCostCentres": "Cost centres",
+    "tabBanks": "Banks",
+    "tabCashSafes": "Cash safes"
   },
   "goods": {
     "name": "Name",
@@ -786,6 +788,8 @@
     "baseCurrency": "Base reporting currency",
     "fxRate": "FX rate (AED per 1 USD)",
     "fxRateDesc": "Used to convert AED payments into USD reporting.",
+    "fxRateIqd": "IQD exchange rate",
+    "fxRateIqdDesc": "IQD per 1 USD, prefilled on new records",
     "company": "Company profile",
     "companyName": "Company name",
     "saved": "Settings saved",
@@ -933,5 +937,49 @@
     "goHome": "Go to dashboard",
     "genericTitle": "Something went wrong",
     "genericDesc": "An unexpected error occurred. Please try again."
+  },
+  "financialAccounts": {
+    "name": "Name",
+    "currency": "Currency",
+    "currencyLocked": "Currency cannot change after the account is created",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional notes for this account",
+    "errors": {
+      "name-required": "Name is required",
+      "duplicate-name": "An account with this name already exists",
+      "account-number-required": "Account number is required",
+      "iban-required": "IBAN is required",
+      "duplicate-account-number": "This account number is already in use"
+    }
+  },
+  "banks": {
+    "accountNumber": "Account number",
+    "accountNumberPlaceholder": "e.g. 0123456789",
+    "iban": "IBAN",
+    "ibanPlaceholder": "e.g. AE070331234567890123456",
+    "swiftCode": "SWIFT code",
+    "swiftCodePlaceholder": "e.g. EBILAEAD",
+    "address": "Address",
+    "addressPlaceholder": "Branch address",
+    "newAccount": "New bank account",
+    "editAccount": "Edit bank account",
+    "namePlaceholder": "e.g. Emirates NBD — Main",
+    "created": "Bank account created",
+    "updated": "Bank account updated",
+    "activated": "Bank account activated",
+    "deactivated": "Bank account deactivated",
+    "emptyTitle": "No bank accounts yet",
+    "emptyHint": "Add the bank accounts you receive and send money through. Payments by TT are made against these."
+  },
+  "cashSafes": {
+    "newAccount": "New cash safe",
+    "editAccount": "Edit cash safe",
+    "namePlaceholder": "e.g. Office safe — USD",
+    "created": "Cash safe created",
+    "updated": "Cash safe updated",
+    "activated": "Cash safe activated",
+    "deactivated": "Cash safe deactivated",
+    "emptyTitle": "No cash safes yet",
+    "emptyHint": "Add the cash you hold in-house. Each safe holds one currency."
   }
 }

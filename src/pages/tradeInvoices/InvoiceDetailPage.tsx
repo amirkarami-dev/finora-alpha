@@ -194,7 +194,8 @@ export default function InvoiceDetailPage() {
     label: t(`tradeInvoices.convertTo.${target}`),
   }));
 
-  const showAedEquivalent = invoice.currency === 'AED' && invoice.exchangeRate !== 1;
+  // Any non-USD currency has a local-currency column worth showing, not just AED.
+  const showLocalEquivalent = invoice.currency !== 'USD' && invoice.exchangeRate !== 1;
 
   const itemColumns: ColumnsType<InvoiceItem> = [
     {
@@ -512,16 +513,18 @@ export default function InvoiceDetailPage() {
               key: 'currency',
               label: t('tradeInvoices.currency'),
               children:
-                invoice.currency === 'AED'
-                  ? `AED (${t('tradeInvoices.exchangeRate')}: ${invoice.exchangeRate})`
-                  : 'USD',
+                invoice.currency === 'USD'
+                  ? 'USD'
+                  : `${invoice.currency} (${t('tradeInvoices.exchangeRate')}: ${invoice.exchangeRate})`,
             },
-            ...(showAedEquivalent
+            ...(showLocalEquivalent
               ? [
                   {
-                    key: 'aedEq',
-                    label: t('tradeInvoices.aedEquivalent'),
-                    children: <Money value={invoice.totalAmount * invoice.exchangeRate} currency="AED" />,
+                    key: 'localEq',
+                    label: t('tradeInvoices.localEquivalent', { currency: invoice.currency }),
+                    children: (
+                      <Money value={invoice.totalAmount * invoice.exchangeRate} currency={invoice.currency} />
+                    ),
                   },
                 ]
               : []),

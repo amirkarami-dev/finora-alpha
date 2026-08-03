@@ -16,7 +16,23 @@ export const APP_TAGLINE = 'Metals & Commodities Trading, in control.';
 /** Default AED per 1 USD, taken from the workbook's FX rule. */
 export const DEFAULT_FX_AED_PER_USD = 3.6725;
 
-export const CURRENCIES: Currency[] = ['USD', 'AED'];
+/** Default IQD per 1 USD. Iraq's rate moves, so this is only the value prefilled in forms —
+ *  every record stores the rate that was actually used. */
+export const DEFAULT_FX_IQD_PER_USD = 1310;
+
+export const CURRENCIES: Currency[] = ['USD', 'AED', 'IQD'];
+
+/**
+ * The rate to prefill when a form's currency changes. USD is the base, so it is always 1.
+ *
+ * A helper rather than an inline `=== 'AED' ? rate : 1` at each call site: that shape silently
+ * gave IQD a rate of 1 — a 1310x error that no type check would catch, because the ternary is
+ * perfectly valid for the wider union.
+ */
+export function defaultFxFor(currency: Currency, rates: { aed: number; iqd: number }): number {
+  if (currency === 'USD') return 1;
+  return currency === 'AED' ? rates.aed : rates.iqd;
+}
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
   'TT',

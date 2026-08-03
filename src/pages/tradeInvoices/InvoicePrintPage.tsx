@@ -57,7 +57,7 @@ export default function InvoicePrintPage() {
 
   const { invoice, contract, customerName } = data;
   const side = invoiceSideOf(invoice.invoiceType);
-  const showAed = invoice.currency === 'AED' && invoice.exchangeRate !== 1;
+  const showAed = invoice.currency !== 'USD' && invoice.exchangeRate !== 1;
   const isWatermarked = invoice.status === 'DRAFT' || invoice.status === 'CANCELLED';
   const subtotal = invoice.totalAmount + invoice.totalDiscount;
 
@@ -238,7 +238,7 @@ export default function InvoicePrintPage() {
                 </div>
                 <div>
                   {invoice.currency}
-                  {invoice.currency === 'AED' ? ` (${t('tradeInvoices.exchangeRate')}: ${invoice.exchangeRate})` : ''}
+                  {invoice.currency !== 'USD' ? ` (${t('tradeInvoices.exchangeRate')}: ${invoice.exchangeRate})` : ''}
                 </div>
               </div>
               {invoice.description && (
@@ -343,8 +343,8 @@ export default function InvoicePrintPage() {
                       color: '#8a8478',
                     }}
                   >
-                    <span>{t('tradeInvoices.aedEquivalent')}</span>
-                    <span>{formatCurrency(invoice.totalAmount * invoice.exchangeRate, 'AED')}</span>
+                    <span>{t('tradeInvoices.localEquivalent', { currency: invoice.currency })}</span>
+                    <span>{formatCurrency(invoice.totalAmount * invoice.exchangeRate, invoice.currency)}</span>
                   </div>
                 )}
               </div>

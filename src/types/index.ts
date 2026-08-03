@@ -9,7 +9,9 @@
  *           invoiceUSD   = unitPriceUSD * quantityMt
  */
 
-export type Currency = 'USD' | 'AED';
+/** USD is the base currency — every `*USD` field is computed as `amount / fxRate`, so a
+ *  non-USD currency always carries a rate expressed as "units per 1 USD". */
+export type Currency = 'USD' | 'AED' | 'IQD';
 
 export type PaymentMethod = 'TT' | 'Cash' | 'Cheque' | 'Offset' | 'Credit Note';
 
@@ -321,6 +323,37 @@ export interface CostCentre {
   code: string;     // trimmed + uppercased; immutable after create
   description?: string;
   active: boolean;
+}
+
+export type FinancialAccountType = 'BANK' | 'CASH_SAFE';
+
+/**
+ * A company-owned account that holds money — a bank account or a cash safe.
+ *
+ * ONE entity with a `type` discriminator rather than separate Bank and CashSafe tables. Money
+ * transfers and exchange revaluations reference an account by id, and two id spaces would make
+ * `accountId` ambiguous; the payments spec's §3 also asks for a generic `FinancialAccount` that
+ * "can represent Bank / CashSafe". The BaseInfo UI still shows them as two tabs, because that
+ * is how the desk thinks about them.
+ *
+ * The bank-only fields are optional on the type and required by `createFinancialAccount` when
+ * `type === 'BANK'` — a cash safe has no IBAN.
+ */
+export interface FinancialAccount {
+  id: string;              // 'fa-0001', max-scanning
+  name: string;
+  type: FinancialAccountType;   // immutable after create
+  currency: Currency;           // immutable after create — see the guard in `updateFinancialAccount`
+  active: boolean;
+  description?: string;
+  /** BANK only, required. */
+  accountNumber?: string;
+  /** BANK only, required. */
+  iban?: string;
+  /** BANK only, optional. */
+  swiftCode?: string;
+  /** BANK only, optional. */
+  address?: string;
 }
 
 /**

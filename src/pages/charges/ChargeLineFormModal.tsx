@@ -11,7 +11,7 @@ import { useAddChargeLine, useChargeCategories, useCostCentres, useUpdateChargeL
 import type { ChargeGoodInput, ChargeLineInput } from '@/services/api';
 import { splitEqually } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
-import { useSettingsStore } from '@/store/useSettingsStore';
+import { useDefaultFxRate } from '@/store/useSettingsStore';
 import type { ChargeDoc, ChargeLine, Currency, InvoiceItem } from '@/types';
 
 const { TextArea } = Input;
@@ -99,7 +99,7 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
   const updateMut = useUpdateChargeLine();
   const isEdit = !!line;
   const isInvoiceKind = doc.kind === 'INVOICE';
-  const settingsFxRate = useSettingsStore((s) => s.fxRate);
+  const defaultFx = useDefaultFxRate();
 
   const { data: categoriesRaw } = useChargeCategories(doc.direction);
   const { data: costCentresRaw } = useCostCentres();
@@ -366,14 +366,14 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
                 <Select
                   style={{ width: 90 }}
                   options={CURRENCIES.map((c) => ({ value: c, label: c }))}
-                  onChange={(value: Currency) => form.setFieldValue('fxRate', value === 'AED' ? settingsFxRate : 1)}
+                  onChange={(value: Currency) => form.setFieldValue('fxRate', defaultFx(value))}
                 />
               </Form.Item>
             </Space.Compact>
           </Form.Item>
 
           <Form.Item name="fxRate" label={t('charges.fx')} rules={[{ required: true, message: t('common.required') }]}>
-            <InputNumber style={{ width: '100%' }} min={0.0001} step={0.0001} disabled={currency !== 'AED'} />
+            <InputNumber style={{ width: '100%' }} min={0.0001} step={0.0001} disabled={currency === 'USD'} />
           </Form.Item>
 
           <Form.Item name="costCentreId" label={t('charges.costCentre')}>

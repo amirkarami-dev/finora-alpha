@@ -9,7 +9,7 @@ import { InvoicePickerModal } from '@/pages/charges/InvoicePickerModal';
 import { useClaims, useCreateClaim, useTradeInvoice, useUpdateClaim } from '@/services/queries';
 import type { ChargeSourceInvoiceRow, ClaimInput, ClaimItemInput, ClaimRow } from '@/services/api';
 import { formatMt } from '@/utils/format';
-import { useSettingsStore } from '@/store/useSettingsStore';
+import { useDefaultFxRate } from '@/store/useSettingsStore';
 import type { ClaimSide, ClaimType, Currency } from '@/types';
 
 const { Text } = Typography;
@@ -81,7 +81,7 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
   const createMut = useCreateClaim();
   const updateMut = useUpdateClaim();
   const isEdit = !!claim;
-  const settingsFxRate = useSettingsStore((s) => s.fxRate);
+  const defaultFx = useDefaultFxRate();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedInvoice, setPickedInvoice] = useState<ChargeSourceInvoiceRow | undefined>(undefined);
@@ -304,12 +304,12 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
             <Form.Item name="currency" label={t('claims.currency')} rules={[{ required: true, message: t('common.required') }]}>
               <Select
                 options={CURRENCIES.map((c) => ({ value: c, label: c }))}
-                onChange={(value: Currency) => form.setFieldValue('fxRate', value === 'AED' ? settingsFxRate : 1)}
+                onChange={(value: Currency) => form.setFieldValue('fxRate', defaultFx(value))}
               />
             </Form.Item>
 
             <Form.Item name="fxRate" label={t('claims.fxRate')} rules={[{ required: true, message: t('common.required') }]}>
-              <InputNumber style={{ width: '100%' }} min={0.0001} step={0.0001} disabled={currency !== 'AED'} />
+              <InputNumber style={{ width: '100%' }} min={0.0001} step={0.0001} disabled={currency === 'USD'} />
             </Form.Item>
           </div>
 

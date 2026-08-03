@@ -365,7 +365,7 @@
     "detailTitle": "تفاصيل المستند",
     "referenceLink": "مرجع: {{number}}",
     "convertedToLink": "تم التحويل إلى: {{number}}",
-    "aedEquivalent": "المعادل بالدرهم",
+    "localEquivalent": "المعادل بـ {{currency}}",
     "totalDiscount": "إجمالي الخصم",
     "totalWeight": "إجمالي الوزن",
     "items": "البنود",
@@ -526,7 +526,9 @@
     "tabGoods": "البضائع",
     "tabExpenseCategories": "فئات المصروفات",
     "tabRevenueCategories": "فئات الإيرادات",
-    "tabCostCentres": "مراكز التكلفة"
+    "tabCostCentres": "مراكز التكلفة",
+    "tabBanks": "البنوك",
+    "tabCashSafes": "الخزائن النقدية"
   },
   "goods": {
     "name": "الاسم",
@@ -786,6 +788,8 @@
     "baseCurrency": "عملة التقارير الأساسية",
     "fxRate": "سعر الصرف (درهم لكل دولار)",
     "fxRateDesc": "يُستخدم لتحويل مدفوعات الدرهم إلى تقارير بالدولار.",
+    "fxRateIqd": "سعر صرف الدينار العراقي",
+    "fxRateIqdDesc": "دينار عراقي لكل دولار، يُملأ مسبقاً في السجلات الجديدة",
     "company": "ملف الشركة",
     "companyName": "اسم الشركة",
     "saved": "تم حفظ الإعدادات",
@@ -933,5 +937,49 @@
     "goHome": "الذهاب إلى لوحة التحكم",
     "genericTitle": "حدث خطأ ما",
     "genericDesc": "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى."
+  },
+  "financialAccounts": {
+    "name": "الاسم",
+    "currency": "العملة",
+    "currencyLocked": "لا يمكن تغيير العملة بعد إنشاء الحساب",
+    "description": "الوصف",
+    "descriptionPlaceholder": "ملاحظات اختيارية لهذا الحساب",
+    "errors": {
+      "name-required": "الاسم مطلوب",
+      "duplicate-name": "يوجد حساب بهذا الاسم بالفعل",
+      "account-number-required": "رقم الحساب مطلوب",
+      "iban-required": "رقم الآيبان مطلوب",
+      "duplicate-account-number": "رقم الحساب مستخدم بالفعل"
+    }
+  },
+  "banks": {
+    "accountNumber": "رقم الحساب",
+    "accountNumberPlaceholder": "مثال: 0123456789",
+    "iban": "الآيبان",
+    "ibanPlaceholder": "مثال: AE070331234567890123456",
+    "swiftCode": "رمز السويفت",
+    "swiftCodePlaceholder": "مثال: EBILAEAD",
+    "address": "العنوان",
+    "addressPlaceholder": "عنوان الفرع",
+    "newAccount": "حساب بنكي جديد",
+    "editAccount": "تعديل الحساب البنكي",
+    "namePlaceholder": "مثال: بنك الإمارات دبي الوطني — الرئيسي",
+    "created": "تم إنشاء الحساب البنكي",
+    "updated": "تم تحديث الحساب البنكي",
+    "activated": "تم تفعيل الحساب البنكي",
+    "deactivated": "تم إلغاء تفعيل الحساب البنكي",
+    "emptyTitle": "لا توجد حسابات بنكية بعد",
+    "emptyHint": "أضف الحسابات البنكية التي تستقبل وترسل الأموال عبرها. تتم التحويلات البنكية مقابلها."
+  },
+  "cashSafes": {
+    "newAccount": "خزنة نقدية جديدة",
+    "editAccount": "تعديل الخزنة النقدية",
+    "namePlaceholder": "مثال: خزنة المكتب — دولار",
+    "created": "تم إنشاء الخزنة النقدية",
+    "updated": "تم تحديث الخزنة النقدية",
+    "activated": "تم تفعيل الخزنة النقدية",
+    "deactivated": "تم إلغاء تفعيل الخزنة النقدية",
+    "emptyTitle": "لا توجد خزائن نقدية بعد",
+    "emptyHint": "أضف النقد المحتفظ به داخلياً. كل خزنة تحتفظ بعملة واحدة."
   }
 }

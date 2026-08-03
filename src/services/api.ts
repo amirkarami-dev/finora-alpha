@@ -23,6 +23,8 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
+  FinancialAccount,
+  FinancialAccountType,
   Good,
   GoodForm,
   GoodUnit,
@@ -1522,7 +1524,8 @@ export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
     customerId: contract.customerId,
     status: 'DRAFT',
     currency: input.currency ?? 'USD',
-    exchangeRate: input.currency === 'AED' ? (input.exchangeRate ?? db.fxRate) : 1,
+    // `!== 'USD'`, not `=== 'AED'` — USD is the base, so every other currency carries a rate.
+    exchangeRate: input.currency !== 'USD' ? (input.exchangeRate ?? db.fxRate) : 1,
     description: input.description?.trim() || undefined,
     totalAmount: 0,
     totalDiscount: 0,
@@ -1559,7 +1562,7 @@ export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch)
   if (patch.invoiceDate !== undefined) invoice.invoiceDate = patch.invoiceDate;
   if (patch.currency !== undefined) {
     invoice.currency = patch.currency;
-    invoice.exchangeRate = patch.currency === 'AED' ? (patch.exchangeRate ?? db.fxRate) : 1;
+    invoice.exchangeRate = patch.currency !== 'USD' ? (patch.exchangeRate ?? db.fxRate) : 1;
   } else if (patch.exchangeRate !== undefined) {
     invoice.exchangeRate = patch.exchangeRate;
   }
@@ -2478,6 +2481,136 @@ export async function setGoodActive(id: string, active: boolean): Promise<Good> 
   good.active = active;
   persistDb();
   return good;
+}
+
+/* ------------------------- Financial account CRUD ------------------------ *
+ * Bank accounts and cash safes, one entity with a `type` discriminator (see `FinancialAccount`).
+ * Money transfers and exchange revaluations will reference these by id.
+ * ------------------------------------------------------------------------ */
+
+export interface FinancialAccountInput {
+  name: string;
+  type: FinancialAccountType;
+  currency: Currency;
+  description?: string;
+  accountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  address?: string;
+}
+
+function nextFinancialAccountId(): string {
+  let max = 0;
+  for (const a of db.financialAccounts) {
+    const match = /^fa-(\d+)$/.exec(a.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `fa-${String(max + 1).padStart(4, '0')}`;
+}
+
+export async function getFinancialAccounts(type?: FinancialAccountType): Promise<FinancialAccount[]> {
+  await delay(120);
+  return db.financialAccounts.filter((a) => (type ? a.type === type : true));
+}
+
+/**
+ * Shared by create and update. Guards IN ORDER: `name-required` → `duplicate-name` (within the
+ * same type — a bank and a cash safe may legitimately share a name) → BANK only:
+ * `account-number-required` → `iban-required` → `duplicate-account-number`.
+ *
+ * A cash safe's bank-only fields are STRIPPED rather than stored: leaving an IBAN behind after
+ * someone fills the form, switches type and saves would put data on a record that can never
+ * display it.
+ */
+function normalizeFinancialAccount(
+  input: FinancialAccountInput,
+  excludeId?: string,
+): Omit<FinancialAccount, 'id' | 'active'> {
+  const name = input.name.trim();
+  if (!name) throw new Error('name-required');
+  if (
+    db.financialAccounts.some(
+      (a) => a.id !== excludeId && a.type === input.type && a.name.toLowerCase() === name.toLowerCase(),
+    )
+  ) {
+    throw new Error('duplicate-name');
+  }
+
+  if (input.type !== 'BANK') {
+    return { name, type: input.type, currency: input.currency, description: input.description?.trim() || undefined };
+  }
+
+  const accountNumber = input.accountNumber?.trim();
+  if (!accountNumber) throw new Error('account-number-required');
+  const iban = input.iban?.trim().toUpperCase();
+  if (!iban) throw new Error('iban-required');
+  if (
+    db.financialAccounts.some(
+      (a) => a.id !== excludeId && a.type === 'BANK' && a.accountNumber === accountNumber,
+    )
+  ) {
+    throw new Error('duplicate-account-number');
+  }
+  return {
+    name,
+    type: 'BANK',
+    currency: input.currency,
+    description: input.description?.trim() || undefined,
+    accountNumber,
+    iban,
+    swiftCode: input.swiftCode?.trim().toUpperCase() || undefined,
+    address: input.address?.trim() || undefined,
+  };
+}
+
+export async function createFinancialAccount(input: FinancialAccountInput): Promise<FinancialAccount> {
+  await delay(180);
+  const account: FinancialAccount = {
+    id: nextFinancialAccountId(),
+    ...normalizeFinancialAccount(input),
+    active: true,
+  };
+  db.financialAccounts.push(account);
+  persistDb();
+  return account;
+}
+
+/**
+ * `type` and `currency` are IMMUTABLE after create — both are silently ignored from the input
+ * and re-read off the stored record. An account's currency defines what its balance means, so
+ * changing it would silently reinterpret every transfer already booked against it.
+ */
+export async function updateFinancialAccount(
+  id: string,
+  input: FinancialAccountInput,
+): Promise<FinancialAccount> {
+  await delay(160);
+  const account = db.financialAccounts.find((a) => a.id === id);
+  if (!account) throw new Error(`Financial account ${id} not found`);
+  const next = normalizeFinancialAccount(
+    { ...input, type: account.type, currency: account.currency },
+    id,
+  );
+  Object.assign(account, next);
+  // A cash safe never has these, and `Object.assign` would leave stale values from an earlier
+  // shape rather than clearing them.
+  if (account.type !== 'BANK') {
+    account.accountNumber = undefined;
+    account.iban = undefined;
+    account.swiftCode = undefined;
+    account.address = undefined;
+  }
+  persistDb();
+  return account;
+}
+
+export async function setFinancialAccountActive(id: string, active: boolean): Promise<FinancialAccount> {
+  await delay(140);
+  const account = db.financialAccounts.find((a) => a.id === id);
+  if (!account) throw new Error(`Financial account ${id} not found`);
+  account.active = active;
+  persistDb();
+  return account;
 }
 
 /* ------------------------ Charge Category CRUD -------------------------- *

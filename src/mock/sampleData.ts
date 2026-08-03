@@ -18,6 +18,7 @@ import type {
   Currency,
   Customer,
   CustomerType,
+  FinancialAccount,
   Good,
   GoodForm as GoodFormType,
   Incoterm,
@@ -988,6 +989,32 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * which read `db` and it does not exist yet here. ZERO rnd() draws, so determinism is
    * untouched (same rule as the portal-linking pass above).
    * ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------ *
+   * Financial accounts (banks + cash safes). Literal ids to match `nextFinancialAccountId`'s
+   * max-scan, ZERO rnd() draws — same rules as the goods pass below. The IQD safe is
+   * deliberate: transfers and exchange revaluation need a non-USD account to be worth demoing.
+   * ------------------------------------------------------------------ */
+  const financialAccounts: FinancialAccount[] = [
+    {
+      id: 'fa-0001', name: 'Emirates NBD — Main', type: 'BANK', currency: 'AED', active: true,
+      accountNumber: '1015234567801', iban: 'AE070331234567890123456', swiftCode: 'EBILAEAD',
+      address: 'Baniyas Road, Deira, Dubai',
+    },
+    {
+      id: 'fa-0002', name: 'Mashreq — USD Trade', type: 'BANK', currency: 'USD', active: true,
+      accountNumber: '019100234567', iban: 'AE180330000019100234567', swiftCode: 'BOMLAEAD',
+      address: 'Omar Bin Al Khattab Road, Dubai',
+    },
+    {
+      id: 'fa-0003', name: 'Trade Bank of Iraq — Basra', type: 'BANK', currency: 'IQD', active: true,
+      accountNumber: '77120045890', iban: 'IQ98TBIQ771200458900011', swiftCode: 'TBIQIQBA',
+      address: 'Al Ashar, Basra',
+    },
+    { id: 'fa-0004', name: 'Office safe — USD', type: 'CASH_SAFE', currency: 'USD', active: true },
+    { id: 'fa-0005', name: 'Office safe — AED', type: 'CASH_SAFE', currency: 'AED', active: true },
+    { id: 'fa-0006', name: 'Basra safe — IQD', type: 'CASH_SAFE', currency: 'IQD', active: true },
+  ];
+
   const goods: Good[] = PRODUCTS.map((p, i) => ({
     id: `good-${String(i + 1).padStart(4, '0')}`,
     name: p.name,
@@ -1337,6 +1364,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     chargeDocs,
     claims,
     goods,
+    financialAccounts,
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

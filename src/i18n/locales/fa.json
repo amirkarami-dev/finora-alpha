@@ -365,7 +365,7 @@
     "detailTitle": "جزئیات سند",
     "referenceLink": "مرجع: {{number}}",
     "convertedToLink": "تبدیل‌شده به: {{number}}",
-    "aedEquivalent": "معادل درهم",
+    "localEquivalent": "معادل {{currency}}",
     "totalDiscount": "جمع تخفیف",
     "totalWeight": "جمع وزن",
     "items": "اقلام",
@@ -526,7 +526,9 @@
     "tabGoods": "کالاها",
     "tabExpenseCategories": "دسته‌های هزینه",
     "tabRevenueCategories": "دسته‌های درآمد",
-    "tabCostCentres": "مراکز هزینه"
+    "tabCostCentres": "مراکز هزینه",
+    "tabBanks": "بانک‌ها",
+    "tabCashSafes": "صندوق‌های نقدی"
   },
   "goods": {
     "name": "نام",
@@ -786,6 +788,8 @@
     "baseCurrency": "ارز پایه گزارش",
     "fxRate": "نرخ تبدیل (درهم به ازای هر دلار)",
     "fxRateDesc": "برای تبدیل پرداخت‌های درهمی به گزارش دلاری استفاده می‌شود.",
+    "fxRateIqd": "نرخ تبدیل دینار عراق",
+    "fxRateIqdDesc": "دینار عراق به ازای هر دلار، در رکوردهای جدید از پیش پر می‌شود",
     "company": "پروفایل شرکت",
     "companyName": "نام شرکت",
     "saved": "تنظیمات ذخیره شد",
@@ -933,5 +937,49 @@
     "goHome": "رفتن به داشبورد",
     "genericTitle": "خطایی رخ داد",
     "genericDesc": "خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید."
+  },
+  "financialAccounts": {
+    "name": "نام",
+    "currency": "ارز",
+    "currencyLocked": "ارز پس از ایجاد حساب قابل تغییر نیست",
+    "description": "توضیحات",
+    "descriptionPlaceholder": "یادداشت اختیاری برای این حساب",
+    "errors": {
+      "name-required": "نام الزامی است",
+      "duplicate-name": "حسابی با این نام از قبل وجود دارد",
+      "account-number-required": "شماره حساب الزامی است",
+      "iban-required": "شماره شبا (IBAN) الزامی است",
+      "duplicate-account-number": "این شماره حساب قبلاً استفاده شده است"
+    }
+  },
+  "banks": {
+    "accountNumber": "شماره حساب",
+    "accountNumberPlaceholder": "مثال: 0123456789",
+    "iban": "شبا (IBAN)",
+    "ibanPlaceholder": "مثال: AE070331234567890123456",
+    "swiftCode": "کد سوئیفت",
+    "swiftCodePlaceholder": "مثال: EBILAEAD",
+    "address": "نشانی",
+    "addressPlaceholder": "نشانی شعبه",
+    "newAccount": "حساب بانکی جدید",
+    "editAccount": "ویرایش حساب بانکی",
+    "namePlaceholder": "مثال: بانک امارات — مرکزی",
+    "created": "حساب بانکی ایجاد شد",
+    "updated": "حساب بانکی به‌روزرسانی شد",
+    "activated": "حساب بانکی فعال شد",
+    "deactivated": "حساب بانکی غیرفعال شد",
+    "emptyTitle": "هنوز حساب بانکی ثبت نشده",
+    "emptyHint": "حساب‌های بانکی که پول را از طریق آن‌ها دریافت و ارسال می‌کنید اضافه کنید. حواله‌های بانکی از این حساب‌ها انجام می‌شود."
+  },
+  "cashSafes": {
+    "newAccount": "صندوق نقدی جدید",
+    "editAccount": "ویرایش صندوق نقدی",
+    "namePlaceholder": "مثال: صندوق دفتر — دلار",
+    "created": "صندوق نقدی ایجاد شد",
+    "updated": "صندوق نقدی به‌روزرسانی شد",
+    "activated": "صندوق نقدی فعال شد",
+    "deactivated": "صندوق نقدی غیرفعال شد",
+    "emptyTitle": "هنوز صندوق نقدی ثبت نشده",
+    "emptyHint": "وجه نقدی که در محل نگهداری می‌کنید را اضافه کنید. هر صندوق فقط یک ارز دارد."
   }
 }

@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ChargeDirection, ChargeScope, ClaimSide, InventoryDocType, InvoiceSide, InvoiceType } from '@/types';
+import type {
+  ChargeDirection,
+  ChargeScope,
+  ClaimSide,
+  FinancialAccountType,
+  InventoryDocType,
+  InvoiceSide,
+  InvoiceType,
+} from '@/types';
 import * as api from './api';
 
 export const qk = {
@@ -40,6 +48,8 @@ export const qk = {
   inventorySourceInvoices: (type: InventoryDocType) => ['inventorySourceInvoices', type] as const,
   // ---- Goods master (BaseInfo → Goods) ----
   goods: ['goods'] as const,
+  // ---- Financial accounts (BaseInfo → Banks / Cash safes) ----
+  financialAccounts: (type?: FinancialAccountType) => ['financialAccounts', type ?? 'all'] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
@@ -607,6 +617,43 @@ export const useSetGoodActive = () => {
   const invalidate = useInvalidateGoods();
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setGoodActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+/* ------------------------------ Financial accounts ------------------------------ */
+
+export const useFinancialAccounts = (type?: FinancialAccountType) =>
+  useQuery({ queryKey: qk.financialAccounts(type), queryFn: () => api.getFinancialAccounts(type) });
+
+/** Bare prefix so it covers every `type` variant, including the unfiltered 'all' list. */
+function useInvalidateFinancialAccounts() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ['financialAccounts'] });
+}
+
+export const useCreateFinancialAccount = () => {
+  const invalidate = useInvalidateFinancialAccounts();
+  return useMutation({
+    mutationFn: (input: api.FinancialAccountInput) => api.createFinancialAccount(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateFinancialAccount = () => {
+  const invalidate = useInvalidateFinancialAccounts();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.FinancialAccountInput }) =>
+      api.updateFinancialAccount(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetFinancialAccountActive = () => {
+  const invalidate = useInvalidateFinancialAccounts();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.setFinancialAccountActive(id, active),
     onSuccess: invalidate,
   });
 };

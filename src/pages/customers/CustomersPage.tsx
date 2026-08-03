@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { useAccounts, useSetCustomerActive } from '@/services/queries';
 import { initials } from '@/utils/format';
-import { ROUTES } from '@/config/constants';
+import { CURRENCIES, ROUTES } from '@/config/constants';
 import type { CustomerAccount, CustomerType } from '@/types';
 import { CustomerFormModal } from './CustomerFormModal';
 
@@ -81,10 +81,9 @@ export default function CustomersPage() {
       dataIndex: 'defaultCurrency',
       width: 100,
       align: 'center',
-      filters: [
-        { text: 'USD', value: 'USD' },
-        { text: 'AED', value: 'AED' },
-      ],
+      // From CURRENCIES, not a hand-written pair: a hardcoded list silently made any person in
+      // a newly-added currency unfilterable.
+      filters: CURRENCIES.map((c) => ({ text: c, value: c })),
       onFilter: (v, r) => r.defaultCurrency === v,
       render: (v) => <Tag>{v}</Tag>,
     },
