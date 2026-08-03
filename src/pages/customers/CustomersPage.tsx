@@ -14,6 +14,18 @@ import { CustomerFormModal } from './CustomerFormModal';
 
 const { Text } = Typography;
 
+/** Every person type, in display order — one list drives both the column filter and the tag
+ *  colours, so adding a type cannot leave the two out of step. */
+const PERSON_TYPES: CustomerType[] = ['BUYER', 'SUPPLIER', 'BOTH', 'EMPLOYEE', 'OTHER'];
+
+const TYPE_COLOR: Record<CustomerType, string> = {
+  BUYER: 'green',
+  SUPPLIER: 'gold',
+  BOTH: 'purple',
+  EMPLOYEE: 'blue',
+  OTHER: 'default',
+};
+
 export default function CustomersPage() {
   const { t } = useTranslation();
   const { token } = theme.useToken();
@@ -81,16 +93,9 @@ export default function CustomersPage() {
       dataIndex: 'customerType',
       width: 150,
       align: 'center',
-      filters: [
-        { text: t('customerTypes.BUYER'), value: 'BUYER' },
-        { text: t('customerTypes.SUPPLIER'), value: 'SUPPLIER' },
-        { text: t('customerTypes.BOTH'), value: 'BOTH' },
-      ],
+      filters: PERSON_TYPES.map((v) => ({ text: t(`customerTypes.${v}`), value: v })),
       onFilter: (v, r) => r.customerType === v,
-      render: (v: CustomerType) => {
-        const color = v === 'BUYER' ? 'green' : v === 'SUPPLIER' ? 'gold' : 'purple';
-        return <Tag color={color}>{t(`customerTypes.${v}`)}</Tag>;
-      },
+      render: (v: CustomerType) => <Tag color={TYPE_COLOR[v]}>{t(`customerTypes.${v}`)}</Tag>,
     },
     {
       title: t('customers.terms'),

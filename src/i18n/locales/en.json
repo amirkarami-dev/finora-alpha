@@ -65,7 +65,7 @@
   "nav": {
     "executive": "Executive",
     "dashboard": "Dashboard",
-    "customers": "Customers",
+    "customers": "Persons",
     "contracts": "Contracts",
     "containers": "Containers",
     "purchase": "Purchase",
@@ -179,10 +179,10 @@
     "overdue": "Overdue"
   },
   "customers": {
-    "title": "Customers",
-    "subtitle": "Accounts, balances and trade history",
-    "newCustomer": "New customer",
-    "name": "Customer",
+    "title": "Persons",
+    "subtitle": "Buyers, suppliers and employees",
+    "newCustomer": "New person",
+    "name": "Person",
     "code": "Code",
     "currency": "Currency",
     "contact": "Contact",
@@ -194,8 +194,8 @@
     "paid": "Paid",
     "invoiced": "Invoiced",
     "contracts": "Contracts",
-    "totalCustomers": "{{count}} customers",
-    "detailTitle": "Customer overview",
+    "totalCustomers": "{{count}} persons",
+    "detailTitle": "Person overview",
     "ledger": "Ledger",
     "profile": "Profile",
     "creditUsed": "Credit used",
@@ -207,11 +207,12 @@
     "portalAccount": "Customer portal access",
     "portalAccountHelp": "Lets this customer sign in to the customer portal. Only one customer can be linked at a time — enabling it here unlinks any other customer.",
     "portalBadge": "Portal",
-    "editCustomer": "Edit customer",
-    "created": "Customer created",
-    "updated": "Customer updated",
-    "deactivated": "Customer deactivated",
-    "activated": "Customer activated",
+    "editCustomer": "Edit person",
+    "nonTradingHint": "This person type is not a trading counterparty, so payment terms, credit limit and portal access do not apply. They cannot be selected on a contract.",
+    "created": "Person created",
+    "updated": "Person updated",
+    "deactivated": "Person deactivated",
+    "activated": "Person activated",
     "status": "Status",
     "codeTaken": "This code is already in use",
     "codeInvalid": "Letters, numbers and hyphens only",
@@ -814,7 +815,9 @@
   "customerTypes": {
     "BUYER": "Buyer",
     "SUPPLIER": "Supplier",
-    "BOTH": "Buyer & supplier"
+    "BOTH": "Buyer & supplier",
+    "EMPLOYEE": "Employee",
+    "OTHER": "Other"
   },
   "partners": {
     "title": "Partners",

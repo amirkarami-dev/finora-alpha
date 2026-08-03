@@ -1,11 +1,27 @@
-import { App, Col, Form, Input, InputNumber, Modal, Row, Select, Switch } from 'antd';
+import { Alert, App, Col, Form, Input, InputNumber, Modal, Row, Select, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useCreateCustomer, useUpdateCustomer } from '@/services/queries';
 import { CURRENCIES } from '@/config/constants';
 import type { CustomerInput } from '@/services/api';
 import type { Customer, CustomerType } from '@/types';
 
-const CUSTOMER_TYPES: CustomerType[] = ['BUYER', 'SUPPLIER', 'BOTH'];
+const CUSTOMER_TYPES: CustomerType[] = ['BUYER', 'SUPPLIER', 'BOTH', 'EMPLOYEE', 'OTHER'];
+
+/** Person types that never trade, so the trading fields do not apply to them. Kept as a list
+ *  rather than `=== 'EMPLOYEE'` checks so adding a third such type is one entry, not a hunt. */
+const NON_TRADING_TYPES: CustomerType[] = ['EMPLOYEE', 'OTHER'];
+
+/** Values forced for a non-trading person. Their trading fields are hidden, and
+ *  `preserve={false}` drops an unmounted field's value, so the form would otherwise submit
+ *  `undefined` for three fields `Customer` requires. Writing them explicitly also means
+ *  switching an existing buyer to Employee clears their old credit limit rather than leaving a
+ *  stale number hidden behind the type. */
+const NON_TRADING_DEFAULTS = {
+  defaultCurrency: 'AED',
+  paymentTermsDays: 0,
+  creditLimit: 0,
+  portalAccount: false,
+} satisfies Partial<CustomerInput>;
 
 interface CustomerFormValues {
   name: string;
@@ -35,6 +51,8 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
   const createMut = useCreateCustomer();
   const updateMut = useUpdateCustomer();
   const isEdit = !!customer;
+  const selectedType = Form.useWatch('customerType', form) ?? customer?.customerType ?? 'BUYER';
+  const isNonTrading = NON_TRADING_TYPES.includes(selectedType);
 
   const initialValues: Partial<CustomerFormValues> = customer
     ? {
@@ -63,14 +81,20 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
       name: values.name.trim(),
       code: values.code.trim(),
       customerType: values.customerType,
-      defaultCurrency: values.defaultCurrency,
       contactName: values.contactName?.trim() || undefined,
       email: values.email?.trim() || undefined,
       phone: values.phone?.trim() || undefined,
       country: values.country?.trim() || undefined,
-      paymentTermsDays: values.paymentTermsDays,
-      creditLimit: values.creditLimit,
-      portalAccount: values.portalAccount ?? false,
+      // A non-trading person's trading fields are not rendered, so read them from the constant
+      // rather than from `values`, where they are `undefined`.
+      ...(isNonTrading
+        ? NON_TRADING_DEFAULTS
+        : {
+            defaultCurrency: values.defaultCurrency,
+            paymentTermsDays: values.paymentTermsDays,
+            creditLimit: values.creditLimit,
+            portalAccount: values.portalAccount ?? false,
+          }),
     };
     try {
       if (isEdit && customer) {
@@ -127,11 +151,16 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
               <Select options={CUSTOMER_TYPES.map((v) => ({ value: v, label: t(`customerTypes.${v}`) }))} />
             </Form.Item>
           </Col>
-          <Col xs={24} sm={12}>
-            <Form.Item name="defaultCurrency" label={t('customers.currency')} rules={[{ required: true, message: t('common.required') }]}>
-              <Select options={CURRENCIES.map((v) => ({ value: v, label: v }))} />
-            </Form.Item>
-          </Col>
+          {/* Trading fields, hidden for a non-trading person — see NON_TRADING_DEFAULTS.
+              Rendering is skipped rather than the input disabled, so a required rule on an
+              irrelevant field can never block the save. */}
+          {!isNonTrading && (
+            <Col xs={24} sm={12}>
+              <Form.Item name="defaultCurrency" label={t('customers.currency')} rules={[{ required: true, message: t('common.required') }]}>
+                <Select options={CURRENCIES.map((v) => ({ value: v, label: v }))} />
+              </Form.Item>
+            </Col>
+          )}
           <Col xs={24} sm={12}>
             <Form.Item name="contactName" label={t('customers.contact')}>
               <Input />
@@ -152,26 +181,35 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
               <Input placeholder={t('customers.countryPlaceholder')} />
             </Form.Item>
           </Col>
-          <Col xs={24} sm={12}>
-            <Form.Item name="paymentTermsDays" label={t('customers.termsLabel')} rules={[{ required: true, message: t('common.required') }]}>
-              <InputNumber min={0} step={1} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Form.Item name="creditLimit" label={t('customers.creditLimit')} rules={[{ required: true, message: t('common.required') }]}>
-              <InputNumber min={0} step={1000} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24}>
-            <Form.Item
-              name="portalAccount"
-              label={t('customers.portalAccount')}
-              valuePropName="checked"
-              extra={t('customers.portalAccountHelp')}
-            >
-              <Switch />
-            </Form.Item>
-          </Col>
+          {!isNonTrading && (
+            <>
+              <Col xs={24} sm={12}>
+                <Form.Item name="paymentTermsDays" label={t('customers.termsLabel')} rules={[{ required: true, message: t('common.required') }]}>
+                  <InputNumber min={0} step={1} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item name="creditLimit" label={t('customers.creditLimit')} rules={[{ required: true, message: t('common.required') }]}>
+                  <InputNumber min={0} step={1000} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item
+                  name="portalAccount"
+                  label={t('customers.portalAccount')}
+                  valuePropName="checked"
+                  extra={t('customers.portalAccountHelp')}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </>
+          )}
+          {isNonTrading && (
+            <Col xs={24}>
+              <Alert type="info" showIcon message={t('customers.nonTradingHint')} />
+            </Col>
+          )}
         </Row>
       </Form>
     </Modal>

@@ -48,7 +48,11 @@ export type ContainerStatus = 'OPEN' | 'PAID' | 'OVERDUE';
 
 export type ItemStatus = ContractStatus;
 
-export type CustomerType = 'BUYER' | 'SUPPLIER' | 'BOTH';
+/** 'EMPLOYEE' and 'OTHER' are people who are not trading counterparties: no credit limit, no
+ *  payment terms, no contracts. `ContractFormModal`'s picker allows only BUYER/BOTH or
+ *  SUPPLIER/BOTH, so both are excluded from contracts by that existing allow-list rather than
+ *  by a new check. See `NON_TRADING_TYPES` in `CustomerFormModal`. */
+export type CustomerType = 'BUYER' | 'SUPPLIER' | 'BOTH' | 'EMPLOYEE' | 'OTHER';
 export type ContractType = 'SELL' | 'PURCHASE';
 
 export interface Partner {
