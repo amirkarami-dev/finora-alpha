@@ -24,7 +24,6 @@ import {
   ArrowRightOutlined,
   CheckOutlined,
   CloseOutlined,
-  DollarOutlined,
   EditOutlined,
   LinkOutlined,
   PlusOutlined,
@@ -58,7 +57,6 @@ import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
 import { ConvertContainerModal } from './ConvertContainerModal';
 import { EditLineModal } from './EditLineModal';
-import { RecordPaymentModal } from './RecordPaymentModal';
 
 const { Text } = Typography;
 
@@ -79,7 +77,7 @@ const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
   SALE_INVOICE: [],
 };
 
-type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'payment' | 'convertContainer' | null;
+type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'convertContainer' | null;
 
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
@@ -130,7 +128,9 @@ export default function InvoiceDetailPage() {
   const priced = isPricedType(invoice.invoiceType);
   const canSend = invoice.invoiceType !== 'PURCHASE_ORDER' && invoice.invoiceType !== 'SALE_ORDER';
   // Payments apply to provisional/final documents only (spec §7) — orders are unpriced.
-  const canRecordPayment = priced;
+  // Payments are now created from the Payments menu (header + items), not from an invoice, so
+  // this gates the read-only payments list only — it no longer implies a "record" action.
+  const showsPayments = priced;
   const invoiceNumberById = new Map(chain.map((c) => [c.id, c.invoiceNumber]));
   const isOverpaid = paidUSD > invoice.totalAmount;
   const progressPercent =
@@ -445,16 +445,6 @@ export default function InvoiceDetailPage() {
                     <Button icon={<SendOutlined />}>{t('tradeInvoices.send')}</Button>
                   </Popconfirm>
                 )}
-                {canRecordPayment && (
-                  <Button
-                    type="primary"
-                    ghost
-                    icon={<DollarOutlined />}
-                    onClick={() => setActiveModal('payment')}
-                  >
-                    {t('tradeInvoices.recordPayment')}
-                  </Button>
-                )}
                 <Button
                   icon={<PrinterOutlined />}
                   onClick={() => navigate(`/app/invoices/${encodeURIComponent(invoice.id)}/print`)}
@@ -602,7 +592,7 @@ export default function InvoiceDetailPage() {
         />
       </Card>
 
-      {canRecordPayment && (isConfirmed || payments.length > 0) && (
+      {showsPayments && (isConfirmed || payments.length > 0) && (
         <Card
           variant="borderless"
           title={`${t('tradeInvoices.payments')} · ${payments.length}`}
@@ -718,15 +708,6 @@ export default function InvoiceDetailPage() {
             onConfirmed={() => setShowUninvoicedAlert(true)}
           />
         </>
-      )}
-
-      {canRecordPayment && (
-        <RecordPaymentModal
-          open={activeModal === 'payment'}
-          onClose={() => setActiveModal(null)}
-          invoice={invoice}
-          remainingUSD={remainingUSD}
-        />
       )}
 
       {pendingConvertTarget && (

@@ -12,7 +12,6 @@ import { formatMt } from '@/utils/format';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ClaimSide, ClaimType, Currency } from '@/types';
 
-const { TextArea } = Input;
 const { Text } = Typography;
 
 /*
@@ -65,7 +64,6 @@ interface HeaderFormValues {
   date: Dayjs;
   currency: Currency;
   fxRate: number;
-  description?: string;
 }
 
 interface ClaimFormModalProps {
@@ -161,7 +159,6 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
         date: dayjs(claim.date),
         currency: claim.currency,
         fxRate: claim.fxRate,
-        description: claim.description,
       }
     : { currency: 'USD', fxRate: 1, date: dayjs() };
 
@@ -200,7 +197,10 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
       date: values.date.toISOString(),
       currency: values.currency,
       fxRate: values.currency === 'USD' ? 1 : values.fxRate,
-      description: values.description?.trim() || undefined,
+      // Carried through from the existing record, not from the form — the header description
+      // field is gone, and dropping it here would silently wipe the note on any claim created
+      // before that change the first time someone edits it.
+      description: claim?.description,
       items,
     };
     try {
@@ -313,9 +313,10 @@ export function ClaimFormModal({ open, side, claim, onClose }: ClaimFormModalPro
             </Form.Item>
           </div>
 
-          <Form.Item name="description" label={t('claims.description')}>
-            <TextArea rows={2} maxLength={500} showCount placeholder={t('claims.descriptionPlaceholder')} />
-          </Form.Item>
+          {/* The header description was removed on request: it duplicated the per-item
+              description column below, which is where a claim reason actually belongs.
+              `Claim.description` is left on the type — existing records keep theirs and it
+              still renders read-only on the list. */}
         </Form>
 
         <div

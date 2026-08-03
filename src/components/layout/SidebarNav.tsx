@@ -79,10 +79,15 @@ export function SidebarNav({ collapsed = false, onNavigate }: Props) {
   }).filter(Boolean) as MenuProps['items'];
 
   const navPaths = visible.map((i) => i.route);
-  const selectedKey =
-    navPaths
-      .filter((p) => location.pathname.startsWith(p))
-      .sort((a, b) => b.length - a.length)[0] ?? navPaths[0];
+  // Longest matching prefix wins, so `/app/invoices/purchase` beats a shorter sibling.
+  //
+  // No `?? navPaths[0]` fallback: a detail route that matches nothing — `/app/invoices/:id`,
+  // whose nav entries are `/app/invoices/purchase` and `/app/invoices/sale`, so neither is a
+  // prefix of `/app/invoices/inv-po-0001` — used to fall back to the FIRST nav item and light
+  // up Dashboard. Highlighting the wrong page is worse than highlighting none.
+  const selectedKey = navPaths
+    .filter((p) => location.pathname.startsWith(p))
+    .sort((a, b) => b.length - a.length)[0];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
