@@ -37,6 +37,10 @@ export const qk = {
   partners: ['partners'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
   tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
+  // Person-detail tabs. Bare prefixes `['tradeInvoices']` / `['claims']` already cover these,
+  // so no invalidator needs changing.
+  invoicesByCustomer: (customerId: string) => ['tradeInvoices', 'customer', customerId] as const,
+  claimsByCustomer: (customerId: string) => ['claims', 'customer', customerId] as const,
   tradeInvoice: (id: string) => ['tradeInvoice', id] as const,
   contractRemaining: (contractId: string, side: InvoiceSide, invoiceId?: string) =>
     ['contractRemaining', contractId, side, invoiceId] as const,
@@ -132,6 +136,20 @@ export const usePortalCustomer = () =>
       const customers = await api.getCustomers();
       return customers.find((c) => c.portalAccount && c.active) ?? null;
     },
+  });
+
+export const useInvoicesByCustomer = (customerId: string) =>
+  useQuery({
+    queryKey: qk.invoicesByCustomer(customerId),
+    queryFn: () => api.getInvoicesByCustomer(customerId),
+    enabled: !!customerId,
+  });
+
+export const useClaimsByCustomer = (customerId: string) =>
+  useQuery({
+    queryKey: qk.claimsByCustomer(customerId),
+    queryFn: () => api.getClaimsByCustomer(customerId),
+    enabled: !!customerId,
   });
 
 export const useReceivableInvoices = (customerId?: string) =>

@@ -7,7 +7,13 @@ import { useNavigate } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Money } from '@/components/common/Money';
 import { CURRENCIES, ROUTES } from '@/config/constants';
-import { useAddChargeLine, useChargeCategories, useCostCentres, useUpdateChargeLine } from '@/services/queries';
+import {
+  useAddChargeLine,
+  useChargeCategories,
+  useCostCentres,
+  useCustomers,
+  useUpdateChargeLine,
+} from '@/services/queries';
 import type { ChargeGoodInput, ChargeLineInput } from '@/services/api';
 import { splitEqually } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
@@ -52,6 +58,8 @@ const KNOWN_ERROR_CODES = [
   'date-required',
   'invalid-amount',
   'invalid-fx',
+  'person-required',
+  'person-not-found',
   'cost-centre-not-found',
   'goods-not-allowed',
   'goods-required',
@@ -76,6 +84,7 @@ interface LineFormValues {
   amount: number;
   currency: Currency;
   fxRate: number;
+  personId?: string;
   costCentreId?: string;
   description?: string;
 }
@@ -103,6 +112,7 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
 
   const { data: categoriesRaw } = useChargeCategories(doc.direction);
   const { data: costCentresRaw } = useCostCentres();
+  const { data: personsRaw } = useCustomers();
 
   const [goods, setGoods] = useState<GoodRow[]>(() => {
     if (!isInvoiceKind) return [];
@@ -203,6 +213,18 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
     return list;
   }, [categoriesRaw, doc.kind, line, t]);
 
+  // Active persons, plus the saved one when it has since been deactivated — the same union
+  // idiom as the category and cost-centre pickers, so an unrelated edit to an old line cannot
+  // be blocked by a person who has since left.
+  const personOptions = useMemo(() => {
+    const list = (personsRaw ?? []).filter((p) => p.active).map((p) => ({ value: p.id, label: p.name }));
+    if (line?.personId && !list.some((o) => o.value === line.personId)) {
+      const saved = (personsRaw ?? []).find((p) => p.id === line.personId);
+      if (saved) list.unshift({ value: saved.id, label: `${saved.name} (${t('common.inactive')})` });
+    }
+    return list;
+  }, [personsRaw, line, t]);
+
   const costCentreOptions = useMemo(() => {
     const list = (costCentresRaw ?? []).filter((c) => c.active).map((c) => ({ value: c.id, label: c.name }));
     if (line?.costCentreId && !list.some((o) => o.value === line.costCentreId)) {
@@ -219,6 +241,7 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
         amount: line.amount,
         currency: line.currency,
         fxRate: line.fxRate,
+        personId: line.personId,
         costCentreId: line.costCentreId,
         description: line.description,
       }
@@ -242,6 +265,7 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
       amount: values.amount,
       currency: values.currency,
       fxRate: values.currency === 'USD' ? 1 : values.fxRate,
+      personId: values.personId,
       costCentreId: values.costCentreId,
       description: values.description?.trim() || undefined,
       goods: goodsInput,
@@ -374,6 +398,19 @@ export function ChargeLineFormModal({ open, onClose, doc, invoiceItems, line }: 
 
           <Form.Item name="fxRate" label={t('charges.fx')} rules={[{ required: true, message: t('common.required') }]}>
             <InputNumber style={{ width: '100%' }} min={0.0001} step={0.0001} disabled={currency === 'USD'} />
+          </Form.Item>
+
+          <Form.Item
+            name="personId"
+            label={t('charges.person')}
+            rules={[{ required: true, message: t('common.required') }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder={t('charges.personPlaceholder')}
+              options={personOptions}
+            />
           </Form.Item>
 
           <Form.Item name="costCentreId" label={t('charges.costCentre')}>

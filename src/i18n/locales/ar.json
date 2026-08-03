@@ -221,7 +221,11 @@
     "codePlaceholder": "مثال: AM",
     "emailPlaceholder": "name@company.com",
     "phonePlaceholder": "+971 50 000 0000",
-    "countryPlaceholder": "مثال: الإمارات"
+    "countryPlaceholder": "مثال: الإمارات",
+    "tabInvoices": "الفواتير",
+    "tabClaims": "المطالبات",
+    "noInvoices": "لا توجد فواتير لهذا الشخص بعد",
+    "noClaims": "لا توجد مطالبات على هذا الشخص بعد"
   },
   "contracts": {
     "title": "العقود",
@@ -438,7 +442,8 @@
     "paidToDate": "المدفوع حتى الآن",
     "remaining": "المتبقي",
     "overpaidBy": "دفع زائد بمقدار {{amount}}",
-    "emptyTab": "لا توجد مستندات في هذا التبويب بعد"
+    "emptyTab": "لا توجد مستندات في هذا التبويب بعد",
+    "typeLabel": "النوع"
   },
   "warehouse": {
     "title": "المستودع",
@@ -715,8 +720,12 @@
       "goods-required": "اختر بضاعة واحدة على الأقل",
       "good-not-on-invoice": "هذه البضاعة ليست ضمن هذه الفاتورة",
       "duplicate-good": "هذه البضاعة موجودة بالفعل في هذا البند",
-      "invalid-good-amount": "أدخل مبلغًا صالحًا لكل بضاعة"
-    }
+      "invalid-good-amount": "أدخل مبلغًا صالحًا لكل بضاعة",
+      "person-required": "اختر شخصاً",
+      "person-not-found": "هذا الشخص لم يعد موجوداً"
+    },
+    "person": "الشخص",
+    "personPlaceholder": "لمن هذا البند؟"
   },
   "invoiceCharges": {
     "title": "الرسوم والمطالبات",
@@ -891,7 +900,8 @@
       "claim-cancelled": "هذه المطالبة ملغاة",
       "invoice-immutable": "لا يمكن تغيير الفاتورة بعد إنشاء المطالبة",
       "side-immutable": "لا يمكن تغيير الجهة بعد الإنشاء"
-    }
+    },
+    "side": "الجهة"
   },
   "executive": {
     "subtitle": "أداء الشركة في لمحة",

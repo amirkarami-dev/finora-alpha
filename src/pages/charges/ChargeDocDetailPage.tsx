@@ -22,7 +22,14 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
-import { useCancelChargeDoc, useChargeCategories, useChargeDoc, useCostCentres, useRemoveChargeLine } from '@/services/queries';
+import {
+  useCancelChargeDoc,
+  useChargeCategories,
+  useChargeDoc,
+  useCostCentres,
+  useCustomers,
+  useRemoveChargeLine,
+} from '@/services/queries';
 import { formatDate, formatMt, formatNumber } from '@/utils/format';
 import type { ChargeAllocation, ChargeLine } from '@/types';
 import { chargeListRoute } from './routes';
@@ -58,6 +65,7 @@ export default function ChargeDocDetailPage() {
 
   const { data: categories } = useChargeCategories(data?.doc.direction);
   const { data: costCentres } = useCostCentres();
+  const { data: persons } = useCustomers();
 
   // Auto-opens the add-line modal exactly once, right after `ChargeDocFormModal` creates this
   // document (spec §6: "a header with no lines is the flow's main confusion point") — gated on
@@ -90,6 +98,7 @@ export default function ChargeDocDetailPage() {
   const isActive = doc.status === 'ACTIVE';
   const categoryById = new Map((categories ?? []).map((c) => [c.id, c]));
   const costCentreById = new Map((costCentres ?? []).map((c) => [c.id, c]));
+  const personById = new Map((persons ?? []).map((p) => [p.id, p]));
 
   const invoiceInfo: ChargeDocInvoiceInfo | undefined =
     doc.kind === 'INVOICE' && doc.invoiceId
@@ -157,6 +166,15 @@ export default function ChargeDocDetailPage() {
       width: 140,
       align: 'right',
       render: (v?: number) => (v === undefined ? <Text type="secondary">—</Text> : <Money value={v} fractionDigits={2} />),
+    },
+    {
+      title: t('charges.person'),
+      key: 'person',
+      width: 160,
+      // Lines saved before a person was required have none — "—" rather than a blank cell, and
+      // the form makes them pick one the next time the line is edited.
+      render: (_, r) =>
+        r.personId ? (personById.get(r.personId)?.name ?? '—') : <Text type="secondary">—</Text>,
     },
     {
       title: t('charges.costCentre'),

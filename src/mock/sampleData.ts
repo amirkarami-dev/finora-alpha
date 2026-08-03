@@ -1135,6 +1135,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       currency: spec.currency,
       fxRate,
       amountUSD: 0,
+      // Person is required on every charge line. For an invoice-kind doc the counterparty is
+      // the obvious answer; a GENERAL doc has no invoice, so it falls back to the first seeded
+      // customer. No rnd() draw either way.
+      personId: invoice?.customerId ?? customers[0]?.id,
       costCentreId: spec.costCentreId,
       description: spec.description,
       quantityBasisMt: undefined,

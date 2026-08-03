@@ -1369,6 +1369,21 @@ export async function getTradeInvoices(side: InvoiceSide): Promise<TradeInvoiceR
     .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
 }
 
+/** Every trade document for one person, both sides — the person-detail Invoices tab. Sides are
+ *  NOT split here: a counterparty can be both buyer and supplier, and the tab shows their whole
+ *  trading history in one list with a type column. */
+export async function getInvoicesByCustomer(customerId: string): Promise<TradeInvoiceRow[]> {
+  await delay(160);
+  return db.invoices
+    .filter((inv) => inv.customerId === customerId)
+    .map((inv) => ({
+      ...inv,
+      customerName: customerById.get(inv.customerId)?.name ?? '—',
+      itemCount: inv.items.length,
+    }))
+    .sort((a, b) => dayjs(b.invoiceDate).valueOf() - dayjs(a.invoiceDate).valueOf());
+}
+
 export interface TradeInvoiceDetail {
   invoice: Invoice;
   items: InvoiceItem[];
@@ -2995,6 +3010,9 @@ export interface ChargeLineInput {
   amount: number;
   currency: Currency;
   fxRate: number;
+  /** Required — see the `person-required` guard. Optional in the TYPE only so a caller cannot
+   *  be forced to invent one for a legacy line it is not changing. */
+  personId?: string;
   costCentreId?: string;
   description?: string;
   /** INVOICE kind only; omitted → every item of the booked invoice (spec §4). */
@@ -3018,8 +3036,9 @@ export interface ChargeLineInput {
  * Guards IN ORDER: `category-required` → `category-not-found` → `category-inactive` (only when
  * the category id changes) → `category-mismatch` (`category.direction !== doc.direction ||
  * category.scope !== doc.kind`) → `date-required` → `invalid-amount` → `invalid-fx` (USD forces
- * fxRate = 1 server-side, skipping the check entirely) → `cost-centre-not-found` (when
- * supplied) → GENERAL: `goods-not-allowed` if goods supplied → INVOICE PASS 1 (validate ALL
+ * fxRate = 1 server-side, skipping the check entirely) → `person-required` → `person-not-found`
+ * → `cost-centre-not-found` (when supplied) → GENERAL: `goods-not-allowed` if goods supplied →
+ * INVOICE PASS 1 (validate ALL
  * before building anything): resolve the goods set (supplied, else default = every item of the
  * booked invoice) → `goods-required` if empty (the `last-allocation` invariant: an INVOICE line
  * must keep ≥1 good, on create AND on update) → per good, in order: `good-not-on-invoice` →
@@ -3048,6 +3067,14 @@ function buildChargeLine(doc: ChargeDoc, input: ChargeLineInput, existing?: Char
     fxRate = input.fxRate;
   }
 
+  // Person is REQUIRED on every charge line, expense and revenue alike. Applied to both rather
+  // than expenses only: the two directions are one mirrored implementation, and "who was this
+  // revenue from" is as meaningful as "who was this expense to" — a rule on one side only would
+  // fork the module. Existence is checked, active is NOT: deactivating a person must not make
+  // their historical lines unsaveable.
+  if (!input.personId) throw new Error('person-required');
+  if (!db.customers.some((c) => c.id === input.personId)) throw new Error('person-not-found');
+
   if (input.costCentreId && !db.costCentres.some((cc) => cc.id === input.costCentreId)) {
     throw new Error('cost-centre-not-found');
   }
@@ -3062,6 +3089,7 @@ function buildChargeLine(doc: ChargeDoc, input: ChargeLineInput, existing?: Char
     currency,
     fxRate,
     amountUSD: 0,
+    personId: input.personId,
     costCentreId: input.costCentreId || undefined,
     description: input.description?.trim() || undefined,
     quantityBasisMt: undefined,
@@ -3259,6 +3287,29 @@ export async function getClaims(side?: ClaimSide): Promise<ClaimRow[]> {
   await delay(160);
   return db.claims
     .filter((c) => (side ? c.side === side : true))
+    .map((c) => {
+      const invoice = findInvoice(c.invoiceId);
+      return {
+        ...c,
+        invoiceNumber: invoice?.invoiceNumber,
+        partyName: customerById.get(c.partyId)?.name,
+        itemCount: c.items.length,
+      };
+    })
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+/**
+ * Claims raised against one person — the person-detail Claims tab.
+ *
+ * Filters on `partyId`, which `buildClaim` derives from the claim's invoice rather than taking
+ * from the client. So "claims for this person" and "claims on this person's invoices" are the
+ * same set by construction, which is what the requirement asks for.
+ */
+export async function getClaimsByCustomer(customerId: string): Promise<ClaimRow[]> {
+  await delay(160);
+  return db.claims
+    .filter((c) => c.partyId === customerId)
     .map((c) => {
       const invoice = findInvoice(c.invoiceId);
       return {

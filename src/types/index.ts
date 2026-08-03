@@ -427,6 +427,15 @@ export interface ChargeLine {              // inline on ChargeDoc
   fxRate: number;             // forced to 1 server-side when currency==='USD'
   amountUSD: number;          // SERVER-DERIVED
   costCentreId?: string;
+  /**
+   * Who this line is for — the person the money went to or came from.
+   *
+   * REQUIRED by `buildChargeLine`, but OPTIONAL on the type: lines saved before this rule
+   * existed have none, and marking it required would make every one of them invalid at runtime
+   * while TypeScript stayed quiet. They render as "—" and must pick a person the next time
+   * they are edited, which migrates the data forward instead of destroying it.
+   */
+  personId?: string;
   description?: string;
   quantityBasisMt?: number;   // SERVER-DERIVED round3(Σ allocations[].quantityMt)
   unitPriceUSD?: number;      // SERVER-DERIVED amountUSD / quantityBasisMt (cost per MT)

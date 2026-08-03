@@ -221,7 +221,11 @@
     "codePlaceholder": "e.g. AM",
     "emailPlaceholder": "name@company.com",
     "phonePlaceholder": "+971 50 000 0000",
-    "countryPlaceholder": "e.g. UAE"
+    "countryPlaceholder": "e.g. UAE",
+    "tabInvoices": "Invoices",
+    "tabClaims": "Claims",
+    "noInvoices": "No invoices for this person yet",
+    "noClaims": "No claims raised against this person yet"
   },
   "contracts": {
     "title": "Contracts",
@@ -438,7 +442,8 @@
     "paidToDate": "Paid to date",
     "remaining": "Remaining",
     "overpaidBy": "Overpaid by {{amount}}",
-    "emptyTab": "No documents in this tab yet"
+    "emptyTab": "No documents in this tab yet",
+    "typeLabel": "Type"
   },
   "warehouse": {
     "title": "Warehouse",
@@ -715,8 +720,12 @@
       "goods-required": "Select at least one good",
       "good-not-on-invoice": "That good isn't on this invoice",
       "duplicate-good": "That good is already on this line",
-      "invalid-good-amount": "Enter a valid amount for every good"
-    }
+      "invalid-good-amount": "Enter a valid amount for every good",
+      "person-required": "Select a person",
+      "person-not-found": "That person no longer exists"
+    },
+    "person": "Person",
+    "personPlaceholder": "Who is this for?"
   },
   "invoiceCharges": {
     "title": "Charges & claims",
@@ -891,7 +900,8 @@
       "claim-cancelled": "This claim is cancelled",
       "invoice-immutable": "The invoice on a claim can't be changed after creation",
       "side-immutable": "The side can't be changed after creation"
-    }
+    },
+    "side": "Side"
   },
   "executive": {
     "subtitle": "Company performance at a glance",

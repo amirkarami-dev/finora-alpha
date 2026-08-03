@@ -221,7 +221,11 @@
     "codePlaceholder": "مثال: AM",
     "emailPlaceholder": "name@company.com",
     "phonePlaceholder": "+971 50 000 0000",
-    "countryPlaceholder": "مثال: امارات"
+    "countryPlaceholder": "مثال: امارات",
+    "tabInvoices": "فاکتورها",
+    "tabClaims": "مطالبات",
+    "noInvoices": "هنوز فاکتوری برای این شخص ثبت نشده",
+    "noClaims": "هنوز مطالبه‌ای برای این شخص ثبت نشده"
   },
   "contracts": {
     "title": "قراردادها",
@@ -438,7 +442,8 @@
     "paidToDate": "پرداخت‌شده تاکنون",
     "remaining": "باقی‌مانده",
     "overpaidBy": "اضافه‌پرداخت به مبلغ {{amount}}",
-    "emptyTab": "هنوز سندی در این برگه وجود ندارد"
+    "emptyTab": "هنوز سندی در این برگه وجود ندارد",
+    "typeLabel": "نوع"
   },
   "warehouse": {
     "title": "انبار",
@@ -715,8 +720,12 @@
       "goods-required": "دست‌کم یک کالا انتخاب کنید",
       "good-not-on-invoice": "این کالا در این فاکتور نیست",
       "duplicate-good": "این کالا از قبل در این ردیف وجود دارد",
-      "invalid-good-amount": "برای هر کالا مبلغ معتبری وارد کنید"
-    }
+      "invalid-good-amount": "برای هر کالا مبلغ معتبری وارد کنید",
+      "person-required": "یک شخص انتخاب کنید",
+      "person-not-found": "این شخص دیگر وجود ندارد"
+    },
+    "person": "شخص",
+    "personPlaceholder": "این مورد برای چه کسی است؟"
   },
   "invoiceCharges": {
     "title": "هزینه‌ها، درآمدها و مطالبات",
@@ -891,7 +900,8 @@
       "claim-cancelled": "این مطالبه لغو شده است",
       "invoice-immutable": "فاکتور پس از ایجاد مطالبه قابل تغییر نیست",
       "side-immutable": "سمت پس از ایجاد قابل تغییر نیست"
-    }
+    },
+    "side": "طرف"
   },
   "executive": {
     "subtitle": "عملکرد شرکت در یک نگاه",
