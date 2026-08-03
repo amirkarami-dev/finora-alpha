@@ -15,6 +15,7 @@ import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 import ContainersPage from '@/pages/containers/ContainersPage';
 import PaymentsPage from '@/pages/payments/PaymentsPage';
+import PaymentDetailPage from '@/pages/payments/PaymentDetailPage';
 import ReportsPage from '@/pages/reports/ReportsPage';
 import SettingsPage from '@/pages/settings/SettingsPage';
 import PartnersPage from '@/pages/partners/PartnersPage';
@@ -87,6 +88,7 @@ export function AppRoutes() {
         <Route path="cost-centres" element={<Navigate to="/app/base-info?tab=costCentres" replace />} />
         <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
         <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
+        <Route path="payments/:id" element={<RoleRoute routeKey="payments"><PaymentDetailPage /></RoleRoute>} />
         {/* Charge documents (design spec §9 Phase 4b) — one detail component for both directions,
             registered per-direction at its own list route; Phase 5 adds the `revenues` twin. */}
         <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />

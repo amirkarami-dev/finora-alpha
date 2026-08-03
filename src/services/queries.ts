@@ -6,6 +6,7 @@ import type {
   ClaimSide,
   FinancialAccountType,
   PaymentStatus,
+  PaymentType,
   InventoryDocType,
   InvoiceSide,
   InvoiceType,
@@ -24,6 +25,9 @@ export const qk = {
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
   containerOptions: ['containerOptions'] as const,
   payments: ['payments'] as const,
+  // Nested under the `payments` prefix so every existing bare-prefix invalidator covers them.
+  paymentsByType: (type?: PaymentType) => ['payments', 'type', type ?? 'all'] as const,
+  payment: (id: string) => ['payments', 'detail', id] as const,
   paymentsByCustomer: (id: string) => ['payments', 'customer', id] as const,
   kpis: ['kpis'] as const,
   cashflow: ['cashflow'] as const,
@@ -103,7 +107,11 @@ export const useContainersByContract = (id: string) =>
 export const useContainerOptions = () =>
   useQuery({ queryKey: qk.containerOptions, queryFn: api.getContainerOptions });
 
-export const usePayments = () => useQuery({ queryKey: qk.payments, queryFn: api.getPayments });
+export const usePayments = (type?: PaymentType) =>
+  useQuery({ queryKey: qk.paymentsByType(type), queryFn: () => api.getPayments(type) });
+
+export const usePayment = (id: string) =>
+  useQuery({ queryKey: qk.payment(id), queryFn: () => api.getPayment(id), enabled: !!id });
 export const usePaymentsByCustomer = (id: string) =>
   useQuery({
     queryKey: qk.paymentsByCustomer(id),
@@ -686,6 +694,15 @@ export const useSetChequeStatus = () => {
 };
 
 /* ------------------------------ Payment items ------------------------------ */
+
+export const useUpdatePaymentHeader = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.PaymentHeaderInput }) =>
+      api.updatePaymentHeader(id, input),
+    onSuccess: () => invalidate({}),
+  });
+};
 
 export const useAddPaymentItem = () => {
   const invalidate = useInvalidateInvoices();

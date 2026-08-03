@@ -360,16 +360,31 @@ export interface PaymentRow extends Payment {
   customerName: string;
   /** Number of the trade invoice this payment is recorded against, when linked. */
   invoiceNumber?: string;
+  /** Resolved through the legacy-safe helpers so the list never has to default them itself. */
+  resolvedType: PaymentType;
+  resolvedStatus: PaymentStatus;
+  itemCount: number;
 }
 
-export async function getPayments(): Promise<PaymentRow[]> {
+/** ONE place that widens a Payment into a row. Four call sites build these; without a shared
+ *  builder each would have to remember to default `status`/`type` itself, and the one that
+ *  forgot would quietly show every legacy payment as a draft. */
+export function toPaymentRow(p: Payment): PaymentRow {
+  return {
+    ...p,
+    customerName: customerById.get(p.customerId)?.name ?? '—',
+    invoiceNumber: p.invoiceId ? findInvoice(p.invoiceId)?.invoiceNumber : undefined,
+    resolvedType: paymentType(p),
+    resolvedStatus: paymentStatus(p),
+    itemCount: paymentItems(p).length,
+  };
+}
+
+export async function getPayments(type?: PaymentType): Promise<PaymentRow[]> {
   await delay();
   return db.payments
-    .map((p) => ({
-      ...p,
-      customerName: customerById.get(p.customerId)?.name ?? '—',
-      invoiceNumber: p.invoiceId ? findInvoice(p.invoiceId)?.invoiceNumber : undefined,
-    }))
+    .filter((p) => (type ? paymentType(p) === type : true))
+    .map(toPaymentRow)
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
@@ -377,7 +392,7 @@ export async function getPaymentsByCustomer(customerId: string): Promise<Payment
   await delay(140);
   return db.payments
     .filter((p) => p.customerId === customerId)
-    .map((p) => ({ ...p, customerName: customerById.get(p.customerId)?.name ?? '—' }))
+    .map(toPaymentRow)
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
@@ -985,7 +1000,7 @@ export async function getCustomerPortalSummary(
 
   const recentPayments: PaymentRow[] = db.payments
     .filter((p) => p.customerId === customerId)
-    .map((p) => ({ ...p, customerName: account.name }))
+    .map(toPaymentRow)
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 
   // Aging buckets over this customer's open (unpaid) invoices.
@@ -1420,7 +1435,7 @@ export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | 
   const chainIds = new Set(chain.map((c) => c.id));
   const payments = db.payments
     .filter((p) => p.invoiceId && chainIds.has(p.invoiceId))
-    .map((p) => ({ ...p, customerName: customerById.get(p.customerId)?.name ?? '—' }))
+    .map(toPaymentRow)
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
   // §7: paidUSD is a straight sum over the chain's payments regardless of direction — a
   // purchase invoice settles via 'OUT' payments and must still show them as paid. The
@@ -3658,6 +3673,9 @@ export interface PaymentInput {
   method: Payment['method'];
   notes?: string;
   invoiceId?: string;
+  /** Set by the header/items flow. Omitted by the legacy single-shot path, which stays
+   *  CONFIRMED — see the note in `createPayment`. */
+  type?: PaymentType;
 }
 
 /* -------------------------------- Cheques -------------------------------- *
@@ -4161,8 +4179,91 @@ export async function createPayment(input: PaymentInput): Promise<Payment> {
     notes: input.notes ?? '',
     invoiceId: input.invoiceId,
     direction,
+    // Headers created through the new flow start as a DRAFT with an explicit type. Callers that
+    // omit `type` are the old single-shot path, which stays CONFIRMED so nothing that worked
+    // before starts landing in a draft nobody looks at.
+    type: input.type,
+    status: input.type ? 'DRAFT' : undefined,
+    items: input.type ? [] : undefined,
   };
   db.payments.push(payment);
   persistDb();
   return payment;
+}
+
+/** Header edits only. The amount stays the user-declared control total; `amountUSD` is left to
+ *  `recomputePaymentTotals` whenever items exist. */
+export async function updatePaymentHeader(id: string, input: PaymentHeaderInput): Promise<Payment> {
+  await delay(180);
+  const payment = db.payments.find((p) => p.id === id);
+  if (!payment) throw new Error('payment-not-found');
+  if (paymentStatus(payment) === 'CONFIRMED') throw new Error('payment-confirmed');
+  if (!input.date) throw new Error('date-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+  if (!input.customerId || !db.customers.some((c) => c.id === input.customerId)) {
+    throw new Error('person-not-found');
+  }
+  payment.customerId = input.customerId;
+  payment.date = input.date;
+  payment.amount = round(input.amount);
+  payment.currency = input.currency;
+  payment.notes = input.notes?.trim() ?? '';
+  if (paymentItems(payment).length === 0) {
+    payment.amountUSD = payment.currency === 'USD' ? payment.amount : round(payment.amount / payment.fxRate);
+  }
+  persistDb();
+  return payment;
+}
+
+export interface PaymentHeaderInput {
+  customerId: string;
+  date: string;
+  amount: number;
+  currency: Currency;
+  notes?: string;
+}
+
+export interface PaymentItemRow extends PaymentItem {
+  invoiceNumber?: string;
+  bankAccountName?: string;
+  chequeNumber?: string;
+  chequeStatus?: ChequeStatus;
+}
+
+export interface PaymentDetail {
+  payment: Payment;
+  customerName: string;
+  type: PaymentType;
+  status: PaymentStatus;
+  items: PaymentItemRow[];
+  /** Declared header amount minus what the items already allocate, in the header currency —
+   *  what the item form offers as the next line's default. */
+  unallocated: number;
+}
+
+export async function getPayment(id: string): Promise<PaymentDetail | null> {
+  await delay(160);
+  const payment = db.payments.find((p) => p.id === id);
+  if (!payment) return null;
+  const items = paymentItems(payment).map((it) => {
+    const cheque = it.chequeId ? db.cheques.find((c) => c.id === it.chequeId) : undefined;
+    return {
+      ...it,
+      invoiceNumber: findInvoice(it.invoiceId)?.invoiceNumber,
+      bankAccountName: it.bankAccountId
+        ? db.financialAccounts.find((a) => a.id === it.bankAccountId)?.name
+        : undefined,
+      chequeNumber: cheque?.number,
+      chequeStatus: cheque?.status,
+    };
+  });
+  const allocated = round(items.reduce((s, it) => s + it.amount, 0));
+  return {
+    payment,
+    customerName: customerById.get(payment.customerId)?.name ?? '—',
+    type: paymentType(payment),
+    status: paymentStatus(payment),
+    items,
+    unallocated: round(Math.max(payment.amount - allocated, 0)),
+  };
 }
