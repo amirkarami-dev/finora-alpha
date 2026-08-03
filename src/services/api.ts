@@ -26,6 +26,9 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
+  ExchangeGainLossType,
+  ExchangeRealization,
+  ExchangeRevaluation,
   FinancialAccount,
   FinancialAccountType,
   Good,
@@ -44,6 +47,7 @@ import type {
   ItemPartner,
   ItemStatus,
   MetalType,
+  MoneyTransfer,
   Partner,
   Payment,
   PaymentItem,
@@ -53,6 +57,7 @@ import type {
   ProductVolume,
   StatusBreakdown,
   TimeSeriesPoint,
+  TransferStatus,
   Warehouse,
 } from '@/types';
 import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
@@ -3676,6 +3681,493 @@ export interface PaymentInput {
   /** Set by the header/items flow. Omitted by the legacy single-shot path, which stays
    *  CONFIRMED — see the note in `createPayment`. */
   type?: PaymentType;
+}
+
+/* ------------------- Money transfers + exchange revaluation ---------------- *
+ * Two SEPARATE concepts (spec §1): a transfer moves money between company accounts; a
+ * revaluation restates what a foreign-currency balance is worth. Neither requires an invoice,
+ * contract or person, and a transfer can exist with no gain or loss attached at all.
+ *
+ * Rates throughout are "units of the currency per 1 USD", matching the rest of the app, and USD
+ * is the base currency (spec §17).
+ * -------------------------------------------------------------------------- */
+
+/** Value of `amount` in the base currency. `rate` is units-per-USD, so USD passes through. */
+function toBaseUSD(amount: number, currency: Currency, rate: number): number {
+  return currency === 'USD' ? round(amount) : round(amount / rate);
+}
+
+function nextTransferId(): string {
+  let max = 0;
+  for (const tr of db.moneyTransfers) {
+    const m = /^tr-(\d+)$/.exec(tr.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `tr-${String(max + 1).padStart(4, '0')}`;
+}
+
+let transferAllocSeq = 0;
+let revalAllocSeq = 0;
+function seedTransferChildCounters(): void {
+  if (transferAllocSeq || revalAllocSeq) return;
+  for (const tr of db.moneyTransfers) {
+    for (const a of tr.allocations) {
+      const m = /^tralloc-(\d+)$/.exec(a.id);
+      if (m) transferAllocSeq = Math.max(transferAllocSeq, Number(m[1]));
+    }
+  }
+  for (const rv of db.exchangeRevaluations) {
+    for (const a of rv.allocations) {
+      const m = /^revalloc-(\d+)$/.exec(a.id);
+      if (m) revalAllocSeq = Math.max(revalAllocSeq, Number(m[1]));
+    }
+  }
+}
+
+/**
+ * An account's balance IN ITS OWN CURRENCY, and its carrying value in USD.
+ *
+ * Both come from CONFIRMED transfers only — a draft or cancelled transfer has not moved money.
+ * `baseUSD` additionally absorbs every confirmed revaluation's gain/loss, and that is the
+ * mechanism that satisfies spec §16: after a revaluation books +3.33, the carrying value is
+ * 103.33, so the NEXT revaluation measures from 103.33 rather than from the original 100 and
+ * cannot count the same 3.33 twice.
+ *
+ * NOTE: payments are deliberately NOT included. A TT or cleared cheque names a bank account,
+ * but the spec models account balances as transfer-driven, and folding settlements in would
+ * need a direction convention this module has no stake in. Stated here rather than left for
+ * someone to discover from a number that looks wrong.
+ */
+export interface AccountBalance {
+  accountId: string;
+  currency: Currency;
+  /** In the account's own currency. */
+  balance: number;
+  /** What that balance is currently carried at, in USD. */
+  baseUSD: number;
+  /** balance / baseUSD — the rate the balance is currently on the books at. `undefined` when
+   *  either side is zero, since no meaningful rate exists yet. */
+  bookRate?: number;
+}
+
+export function computeAccountBalance(accountId: string): AccountBalance {
+  const account = db.financialAccounts.find((a) => a.id === accountId);
+  const currency: Currency = account?.currency ?? 'USD';
+  let balance = 0;
+  let baseUSD = 0;
+  for (const tr of db.moneyTransfers) {
+    if (tr.status !== 'CONFIRMED') continue;
+    if (tr.fromAccountId === accountId) {
+      balance -= tr.fromAmount;
+      baseUSD -= tr.baseAmount;
+    }
+    if (tr.toAccountId === accountId) {
+      balance += tr.toAmount;
+      // The receiving side is worth exactly what the sending side gave up — that is what makes
+      // the implied book rate come out as the transfer's own rate.
+      baseUSD += tr.baseAmount;
+    }
+  }
+  for (const rv of db.exchangeRevaluations) {
+    if (rv.status !== 'CONFIRMED' || rv.accountId !== accountId) continue;
+    baseUSD += rv.gainLossAmount;
+  }
+  balance = round(balance);
+  baseUSD = round(baseUSD);
+  const bookRate = balance !== 0 && baseUSD !== 0 ? round4(balance / baseUSD) : undefined;
+  return { accountId, currency, balance, baseUSD, bookRate };
+}
+
+/** 4dp, for rates. Money stays on `round`, quantities on `round3`. */
+function round4(v: number): number {
+  return Math.round(v * 10000) / 10000;
+}
+
+export interface MoneyTransferInput {
+  date: string;
+  fromAccountId: string;
+  toAccountId: string;
+  fromAmount: number;
+  /** Units of the destination currency per 1 unit of the source. 1 for same-currency. */
+  exchangeRate: number;
+  notes?: string;
+  allocations?: Array<{ invoiceId?: string; invoiceItemId?: string; amount: number }>;
+}
+
+/**
+ * Guards IN ORDER: `date-required` → `from-account-required` / `from-account-not-found` →
+ * `to-account-required` / `to-account-not-found` → `same-account` → `account-inactive` →
+ * `invalid-amount` → `invalid-rate` → per allocation `invalid-allocation-amount` →
+ * `invoice-not-found` → `over-allocated` (allocations may not exceed the transfer).
+ *
+ * Allocations are entirely OPTIONAL and may cover part of the transfer — spec §12 requires the
+ * unallocated remainder to stay valid, so there is deliberately no "must equal" check here.
+ */
+function buildTransfer(input: MoneyTransferInput, existing?: MoneyTransfer): MoneyTransfer {
+  if (!input.date) throw new Error('date-required');
+  if (!input.fromAccountId) throw new Error('from-account-required');
+  const from = db.financialAccounts.find((a) => a.id === input.fromAccountId);
+  if (!from) throw new Error('from-account-not-found');
+  if (!input.toAccountId) throw new Error('to-account-required');
+  const to = db.financialAccounts.find((a) => a.id === input.toAccountId);
+  if (!to) throw new Error('to-account-not-found');
+  if (from.id === to.id) throw new Error('same-account');
+  if (!from.active || !to.active) throw new Error('account-inactive');
+  if (!Number.isFinite(input.fromAmount) || input.fromAmount <= 0) throw new Error('invalid-amount');
+  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) throw new Error('invalid-rate');
+  // Same currency can only ever be 1:1 — a rate here would silently create or destroy money.
+  if (from.currency === to.currency && Math.abs(input.exchangeRate - 1) > 0.000001) {
+    throw new Error('same-currency-rate');
+  }
+
+  const fromAmount = round(input.fromAmount);
+  const toAmount = round(fromAmount * input.exchangeRate);
+  // The sending side defines what left the company, so the base value is measured there. For a
+  // USD source that is the amount itself; otherwise it converts at that account's book rate,
+  // falling back to the transfer rate when the account has no history yet.
+  const fromBook = computeAccountBalance(from.id).bookRate;
+  const baseAmount =
+    from.currency === 'USD'
+      ? fromAmount
+      : toBaseUSD(fromAmount, from.currency, fromBook ?? (to.currency === 'USD' ? input.exchangeRate : 1));
+
+  seedTransferChildCounters();
+  const id = existing?.id ?? nextTransferId();
+  const allocations = (input.allocations ?? []).map((a) => {
+    if (!Number.isFinite(a.amount) || a.amount <= 0) throw new Error('invalid-allocation-amount');
+    if (a.invoiceId && !findInvoice(a.invoiceId)) throw new Error('invoice-not-found');
+    transferAllocSeq += 1;
+    return {
+      id: `tralloc-${transferAllocSeq}`,
+      transferId: id,
+      invoiceId: a.invoiceId,
+      invoiceItemId: a.invoiceItemId,
+      amount: round(a.amount),
+      currency: from.currency,
+      baseAmount: toBaseUSD(a.amount, from.currency, fromBook ?? input.exchangeRate),
+      baseCurrency: 'USD' as Currency,
+    };
+  });
+  const allocTotal = round(allocations.reduce((s, a) => s + a.amount, 0));
+  if (allocTotal > fromAmount + 0.005) throw new Error('over-allocated');
+
+  return {
+    id,
+    number: existing?.number ?? `TR-${id.slice(3)}`,
+    date: input.date,
+    fromAccountId: from.id,
+    toAccountId: to.id,
+    fromCurrency: from.currency,
+    toCurrency: to.currency,
+    fromAmount,
+    toAmount,
+    exchangeRate: input.exchangeRate,
+    baseAmount,
+    status: existing?.status ?? 'DRAFT',
+    notes: input.notes?.trim() || undefined,
+    allocations,
+  };
+}
+
+export async function createMoneyTransfer(input: MoneyTransferInput): Promise<MoneyTransfer> {
+  await delay(200);
+  const transfer = buildTransfer(input);
+  db.moneyTransfers.push(transfer);
+  persistDb();
+  return transfer;
+}
+
+export async function updateMoneyTransfer(id: string, input: MoneyTransferInput): Promise<MoneyTransfer> {
+  await delay(200);
+  const idx = db.moneyTransfers.findIndex((t) => t.id === id);
+  if (idx < 0) throw new Error('transfer-not-found');
+  const current = db.moneyTransfers[idx];
+  if (current.status !== 'DRAFT') throw new Error('transfer-not-draft');
+  db.moneyTransfers[idx] = buildTransfer(input, current);
+  persistDb();
+  return db.moneyTransfers[idx];
+}
+
+/** DRAFT → CONFIRMED → CANCELLED. Confirming is what actually moves the balance. */
+export async function setTransferStatus(id: string, status: TransferStatus): Promise<MoneyTransfer> {
+  await delay(160);
+  const transfer = db.moneyTransfers.find((t) => t.id === id);
+  if (!transfer) throw new Error('transfer-not-found');
+  if (transfer.status === status) return transfer;
+  if (transfer.status === 'CANCELLED') throw new Error('transfer-cancelled');
+  // Cancelling a confirmed transfer that a revaluation has already measured would silently
+  // rewrite the balance those gains were computed from.
+  if (transfer.status === 'CONFIRMED' && status === 'CANCELLED') {
+    const measured = db.exchangeRevaluations.some(
+      (rv) =>
+        rv.status === 'CONFIRMED' &&
+        (rv.accountId === transfer.fromAccountId || rv.accountId === transfer.toAccountId),
+    );
+    if (measured) throw new Error('transfer-revalued');
+  }
+  transfer.status = status;
+  persistDb();
+  return transfer;
+}
+
+export interface MoneyTransferRow extends MoneyTransfer {
+  fromAccountName: string;
+  toAccountName: string;
+  allocatedAmount: number;
+  unallocatedAmount: number;
+}
+
+export async function getMoneyTransfers(status?: TransferStatus): Promise<MoneyTransferRow[]> {
+  await delay(160);
+  const nameOf = (id: string) => db.financialAccounts.find((a) => a.id === id)?.name ?? '—';
+  return db.moneyTransfers
+    .filter((t) => (status ? t.status === status : true))
+    .map((t) => {
+      const allocated = round(t.allocations.reduce((s, a) => s + a.amount, 0));
+      return {
+        ...t,
+        fromAccountName: nameOf(t.fromAccountId),
+        toAccountName: nameOf(t.toAccountId),
+        allocatedAmount: allocated,
+        unallocatedAmount: round(Math.max(t.fromAmount - allocated, 0)),
+      };
+    })
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+/* ----------------------------- Revaluation ----------------------------- */
+
+function nextRevaluationId(): string {
+  let max = 0;
+  for (const rv of db.exchangeRevaluations) {
+    const m = /^rev-(\d+)$/.exec(rv.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `rev-${String(max + 1).padStart(4, '0')}`;
+}
+
+export interface RevaluationPreview {
+  accountId: string;
+  accountName: string;
+  currency: Currency;
+  balance: number;
+  oldExchangeRate?: number;
+  oldBaseAmount: number;
+  newExchangeRate: number;
+  newBaseAmount: number;
+  gainLossAmount: number;
+  type: ExchangeGainLossType;
+  /** Transfers that fed this account, so the confirm screen can show what is being revalued. */
+  sourceTransferIds: string[];
+}
+
+/**
+ * What a revaluation WOULD book, without writing anything — spec §19 wants the calculation
+ * shown before confirming.
+ *
+ * `oldExchangeRate` comes from the account's current carrying value, NOT from the original
+ * transfer, which is the whole of spec §16.
+ */
+export async function previewRevaluation(accountId: string, newRate: number): Promise<RevaluationPreview> {
+  await delay(140);
+  const account = db.financialAccounts.find((a) => a.id === accountId);
+  if (!account) throw new Error('account-not-found');
+  if (account.currency === 'USD') throw new Error('base-currency-account');
+  if (!Number.isFinite(newRate) || newRate <= 0) throw new Error('invalid-rate');
+
+  const { balance, baseUSD, bookRate } = computeAccountBalance(accountId);
+  if (balance <= 0) throw new Error('no-balance');
+
+  const newBaseAmount = round(balance / newRate);
+  const gainLossAmount = round(newBaseAmount - baseUSD);
+  return {
+    accountId,
+    accountName: account.name,
+    currency: account.currency,
+    balance,
+    oldExchangeRate: bookRate,
+    oldBaseAmount: baseUSD,
+    newExchangeRate: newRate,
+    newBaseAmount,
+    gainLossAmount,
+    type: gainLossAmount >= 0 ? 'GAIN' : 'LOSS',
+    sourceTransferIds: db.moneyTransfers
+      .filter((t) => t.status === 'CONFIRMED' && t.toAccountId === accountId)
+      .map((t) => t.id),
+  };
+}
+
+export interface RevaluationInput {
+  accountId: string;
+  date: string;
+  newExchangeRate: number;
+  realization?: ExchangeRealization;
+  notes?: string;
+}
+
+/**
+ * Creates a DRAFT revaluation from the same figures `previewRevaluation` showed.
+ *
+ * Allocations are derived, not asked for: the gain is split across the confirmed transfers that
+ * fed this account, in proportion to what each contributed. That is spec §11's "allocated
+ * proportionally", and it means traceability exists without forcing the user to enter it. An
+ * account funded by nothing traceable simply gets no allocations, which spec §9 requires to
+ * stay valid.
+ */
+export async function createRevaluation(input: RevaluationInput): Promise<ExchangeRevaluation> {
+  await delay(220);
+  const preview = await previewRevaluation(input.accountId, input.newExchangeRate);
+  if (!input.date) throw new Error('date-required');
+
+  seedTransferChildCounters();
+  const id = nextRevaluationId();
+  const feeding = db.moneyTransfers.filter(
+    (t) => t.status === 'CONFIRMED' && t.toAccountId === input.accountId,
+  );
+  const feedTotal = round(feeding.reduce((s, t) => s + t.baseAmount, 0));
+
+  const allocations = feedTotal > 0
+    ? feeding.map((t) => {
+        revalAllocSeq += 1;
+        const share = t.baseAmount / feedTotal;
+        const original = round(preview.oldBaseAmount * share);
+        const revalued = round(preview.newBaseAmount * share);
+        return {
+          id: `revalloc-${revalAllocSeq}`,
+          revaluationId: id,
+          moneyTransferId: t.id,
+          // Carried through from the transfer's own allocation when it has exactly one, so the
+          // chain back to an invoice survives. Never copied wholesale — spec §14 forbids
+          // duplicating source data into the gain/loss record.
+          invoiceId: t.allocations.length === 1 ? t.allocations[0].invoiceId : undefined,
+          invoiceItemId: t.allocations.length === 1 ? t.allocations[0].invoiceItemId : undefined,
+          originalBaseAmount: original,
+          revaluedBaseAmount: revalued,
+          gainLossAmount: round(revalued - original),
+        };
+      })
+    : [];
+
+  const revaluation: ExchangeRevaluation = {
+    id,
+    number: `REV-${id.slice(4)}`,
+    date: input.date,
+    accountId: input.accountId,
+    currency: preview.currency,
+    oldExchangeRate: preview.oldExchangeRate ?? preview.newExchangeRate,
+    newExchangeRate: preview.newExchangeRate,
+    balance: preview.balance,
+    oldBaseAmount: preview.oldBaseAmount,
+    newBaseAmount: preview.newBaseAmount,
+    gainLossAmount: preview.gainLossAmount,
+    type: preview.type,
+    realization: input.realization ?? 'UNREALIZED',
+    status: 'DRAFT',
+    notes: input.notes?.trim() || undefined,
+    allocations,
+  };
+  db.exchangeRevaluations.push(revaluation);
+  persistDb();
+  return revaluation;
+}
+
+export async function setRevaluationStatus(id: string, status: TransferStatus): Promise<ExchangeRevaluation> {
+  await delay(160);
+  const rv = db.exchangeRevaluations.find((r) => r.id === id);
+  if (!rv) throw new Error('revaluation-not-found');
+  if (rv.status === status) return rv;
+  if (rv.status === 'CANCELLED') throw new Error('revaluation-cancelled');
+  // A later revaluation measured from the carrying value THIS one produced. Undoing it now
+  // would leave that one measuring from a book value that never existed.
+  if (rv.status === 'CONFIRMED') {
+    const laterConfirmed = db.exchangeRevaluations.some(
+      (o) =>
+        o.id !== rv.id &&
+        o.accountId === rv.accountId &&
+        o.status === 'CONFIRMED' &&
+        dayjs(o.date).valueOf() >= dayjs(rv.date).valueOf(),
+    );
+    if (laterConfirmed) throw new Error('revaluation-superseded');
+  }
+  rv.status = status;
+  persistDb();
+  return rv;
+}
+
+export interface RevaluationRow extends ExchangeRevaluation {
+  accountName: string;
+}
+
+export async function getRevaluations(status?: TransferStatus): Promise<RevaluationRow[]> {
+  await delay(160);
+  return db.exchangeRevaluations
+    .filter((r) => (status ? r.status === status : true))
+    .map((r) => ({
+      ...r,
+      accountName: db.financialAccounts.find((a) => a.id === r.accountId)?.name ?? '—',
+    }))
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+/* ------------------------------ Reporting ------------------------------ */
+
+export interface GainLossGroup {
+  key: string;
+  label: string;
+  gain: number;
+  loss: number;
+  net: number;
+}
+
+export type GainLossGrouping = 'person' | 'contract' | 'invoice' | 'currency' | 'account';
+
+/**
+ * Gain/loss totalled by one dimension (spec §21). Walks the traceability chain
+ * revaluation → allocation → invoice → contract → person, and drops anything that cannot
+ * reach the requested dimension rather than inventing an "unknown" bucket — a standalone
+ * cash-safe gain genuinely has no person, and showing it under one would be a lie.
+ */
+export async function getGainLossReport(grouping: GainLossGrouping): Promise<GainLossGroup[]> {
+  await delay(200);
+  const groups = new Map<string, GainLossGroup>();
+  const add = (key: string, label: string, amount: number) => {
+    const g = groups.get(key) ?? { key, label, gain: 0, loss: 0, net: 0 };
+    if (amount >= 0) g.gain += amount;
+    else g.loss += Math.abs(amount);
+    g.net += amount;
+    groups.set(key, g);
+  };
+
+  for (const rv of db.exchangeRevaluations) {
+    if (rv.status !== 'CONFIRMED') continue;
+
+    if (grouping === 'currency') {
+      add(rv.currency, rv.currency, rv.gainLossAmount);
+      continue;
+    }
+    if (grouping === 'account') {
+      const acc = db.financialAccounts.find((a) => a.id === rv.accountId);
+      add(rv.accountId, acc?.name ?? rv.accountId, rv.gainLossAmount);
+      continue;
+    }
+
+    for (const alloc of rv.allocations) {
+      const invoice = alloc.invoiceId ? findInvoice(alloc.invoiceId) : undefined;
+      if (!invoice) continue;
+      if (grouping === 'invoice') {
+        add(invoice.id, invoice.invoiceNumber, alloc.gainLossAmount);
+      } else if (grouping === 'contract') {
+        add(invoice.contractId, invoice.contractId, alloc.gainLossAmount);
+      } else {
+        const person = customerById.get(invoice.customerId);
+        add(invoice.customerId, person?.name ?? invoice.customerId, alloc.gainLossAmount);
+      }
+    }
+  }
+
+  return [...groups.values()]
+    .map((g) => ({ ...g, gain: round(g.gain), loss: round(g.loss), net: round(g.net) }))
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 }
 
 /* -------------------------------- Cheques -------------------------------- *

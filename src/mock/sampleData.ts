@@ -1372,6 +1372,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     // Cheques are created through the payments flow, so the demo starts with none rather than
     // inventing paper that no payment line points at.
     cheques: [],
+    // Transfers and revaluations are created through the Finance screens; seeding them would
+    // also bake a book value into every account, which the revaluation maths then measures from.
+    moneyTransfers: [],
+    exchangeRevaluations: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

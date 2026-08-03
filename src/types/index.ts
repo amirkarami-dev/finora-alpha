@@ -230,6 +230,95 @@ export interface PaymentItemAllocation {
   amountUSD: number;                // SERVER-DERIVED
 }
 
+/* ------------------------------------------------------------------ *
+ * Money movement vs. exchange valuation — deliberately SEPARATE concepts (spec §1).
+ *
+ * A MoneyTransfer moves money between company-owned accounts. An ExchangeRevaluation restates
+ * what a foreign-currency balance is worth at a new rate. A transfer can exist with no gain or
+ * loss attached, and a revaluation can exist with no invoice, contract or person behind it.
+ * ------------------------------------------------------------------ */
+
+export type TransferStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+
+export interface MoneyTransfer {
+  id: string;              // 'tr-0001', max-scanning
+  number: string;          // 'TR-0001'
+  date: string;
+  fromAccountId: string;
+  toAccountId: string;
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  fromAmount: number;
+  toAmount: number;
+  /** How many `toCurrency` units one `fromCurrency` unit buys: toAmount = fromAmount × rate.
+   *  1 for a same-currency transfer. */
+  exchangeRate: number;
+  /** SERVER-DERIVED value of `fromAmount` in the base currency (USD). */
+  baseAmount: number;
+  status: TransferStatus;
+  notes?: string;
+  /** OPTIONAL business links. A transfer is valid with none (spec §5, §22.4-6). */
+  allocations: MoneyTransferAllocation[];
+}
+
+/** Optionally ties part of a transfer to a trade document. One transfer may span several
+ *  invoices, and may be left partly or wholly unallocated (spec §11, §12). */
+export interface MoneyTransferAllocation {
+  id: string;              // 'tralloc-<n>'
+  transferId: string;
+  invoiceId?: string;
+  invoiceItemId?: string;
+  amount: number;
+  currency: Currency;
+  baseAmount: number;      // SERVER-DERIVED
+  baseCurrency: Currency;  // always the company base
+}
+
+export type ExchangeGainLossType = 'GAIN' | 'LOSS';
+
+/** Unrealized = still holding the currency, only its value moved. Realized = actually
+ *  converted or settled at a different rate (spec §15). */
+export type ExchangeRealization = 'UNREALIZED' | 'REALIZED';
+
+export interface ExchangeRevaluation {
+  id: string;              // 'rev-0001'
+  number: string;          // 'REV-0001'
+  date: string;
+  accountId: string;
+  currency: Currency;
+  /**
+   * The rate this balance was LAST carried at — the previous confirmed revaluation's new rate,
+   * or the account's opening rate when there is none. Taking it from the book rather than from
+   * the original transfer is what stops repeated revaluations double-counting (spec §16).
+   */
+  oldExchangeRate: number;
+  newExchangeRate: number;
+  /** Balance in the account's own currency at the moment of revaluation. */
+  balance: number;
+  oldBaseAmount: number;   // SERVER-DERIVED balance / oldExchangeRate
+  newBaseAmount: number;   // SERVER-DERIVED balance / newExchangeRate
+  /** SERVER-DERIVED newBaseAmount − oldBaseAmount. Positive is a gain. */
+  gainLossAmount: number;
+  type: ExchangeGainLossType;
+  realization: ExchangeRealization;
+  status: TransferStatus;
+  notes?: string;
+  allocations: ExchangeRevaluationAllocation[];
+}
+
+/** Optional traceability back to what produced the balance (spec §8). Every reference is
+ *  optional, so a standalone cash-safe revaluation is entirely valid. */
+export interface ExchangeRevaluationAllocation {
+  id: string;              // 'revalloc-<n>'
+  revaluationId: string;
+  moneyTransferId?: string;
+  invoiceId?: string;
+  invoiceItemId?: string;
+  originalBaseAmount: number;
+  revaluedBaseAmount: number;
+  gainLossAmount: number;
+}
+
 export type ChequeType = 'NORMAL' | 'SECURITY';
 
 /** PENDING → PAID (cleared), RETURNED (bounced), EXPIRED (past due, uncleared) or CHANGED

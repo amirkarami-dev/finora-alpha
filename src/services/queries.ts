@@ -7,6 +7,7 @@ import type {
   FinancialAccountType,
   PaymentStatus,
   PaymentType,
+  TransferStatus,
   InventoryDocType,
   InvoiceSide,
   InvoiceType,
@@ -62,6 +63,10 @@ export const qk = {
   financialAccounts: (type?: FinancialAccountType) => ['financialAccounts', type ?? 'all'] as const,
   // ---- Cheques (Payments → Cheques tab) ----
   cheques: (status?: ChequeStatus) => ['cheques', status ?? 'all'] as const,
+  // ---- Finance → Transfers / Exchange gain-loss ----
+  moneyTransfers: (status?: TransferStatus) => ['moneyTransfers', status ?? 'all'] as const,
+  revaluations: (status?: TransferStatus) => ['revaluations', status ?? 'all'] as const,
+  gainLossReport: (grouping: string) => ['gainLossReport', grouping] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
@@ -647,6 +652,73 @@ export const useSetGoodActive = () => {
   const invalidate = useInvalidateGoods();
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setGoodActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+/* -------------------- Transfers + exchange gain/loss -------------------- */
+
+export const useMoneyTransfers = (status?: TransferStatus) =>
+  useQuery({ queryKey: qk.moneyTransfers(status), queryFn: () => api.getMoneyTransfers(status) });
+
+export const useRevaluations = (status?: TransferStatus) =>
+  useQuery({ queryKey: qk.revaluations(status), queryFn: () => api.getRevaluations(status) });
+
+export const useGainLossReport = (grouping: api.GainLossGrouping) =>
+  useQuery({ queryKey: qk.gainLossReport(grouping), queryFn: () => api.getGainLossReport(grouping) });
+
+/**
+ * A transfer changes an account's balance, and a revaluation changes what that balance is
+ * carried at — which every later revaluation measures from. So both invalidate the whole
+ * finance surface, not just their own list.
+ */
+function useInvalidateFinance() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['moneyTransfers'] });
+    qc.invalidateQueries({ queryKey: ['revaluations'] });
+    qc.invalidateQueries({ queryKey: ['gainLossReport'] });
+    qc.invalidateQueries({ queryKey: ['financialAccounts'] });
+  };
+}
+
+export const useCreateMoneyTransfer = () => {
+  const invalidate = useInvalidateFinance();
+  return useMutation({
+    mutationFn: (input: api.MoneyTransferInput) => api.createMoneyTransfer(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateMoneyTransfer = () => {
+  const invalidate = useInvalidateFinance();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.MoneyTransferInput }) =>
+      api.updateMoneyTransfer(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetTransferStatus = () => {
+  const invalidate = useInvalidateFinance();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TransferStatus }) => api.setTransferStatus(id, status),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCreateRevaluation = () => {
+  const invalidate = useInvalidateFinance();
+  return useMutation({
+    mutationFn: (input: api.RevaluationInput) => api.createRevaluation(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetRevaluationStatus = () => {
+  const invalidate = useInvalidateFinance();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TransferStatus }) => api.setRevaluationStatus(id, status),
     onSuccess: invalidate,
   });
 };

@@ -7,8 +7,10 @@ import type {
   Contract,
   CostCentre,
   Customer,
+  ExchangeRevaluation,
   FinancialAccount,
   Good,
+  MoneyTransfer,
   InventoryDocument,
   Invoice,
   Partner,
@@ -82,6 +84,8 @@ const seed = {
   goods: [] as Good[],
   financialAccounts: [] as FinancialAccount[],
   cheques: [] as Cheque[],
+  moneyTransfers: [] as MoneyTransfer[],
+  exchangeRevaluations: [] as ExchangeRevaluation[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -121,6 +125,9 @@ function isCompatible(d: unknown): d is typeof seed {
   // each Payment (and equally optional), so they need no probe of their own: a legacy payment
   // simply has no `items` key and `paymentItems()` reads that as [].
   if (o.cheques !== undefined && !Array.isArray(o.cheques)) return false;
+  // Transfers + revaluations — additive again, SOFT probes and a `loadDb` backfill.
+  if (o.moneyTransfers !== undefined && !Array.isArray(o.moneyTransfers)) return false;
+  if (o.exchangeRevaluations !== undefined && !Array.isArray(o.exchangeRevaluations)) return false;
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -210,10 +217,14 @@ function loadDb(): typeof seed {
           goods?: Good[];
           financialAccounts?: FinancialAccount[];
           cheques?: Cheque[];
+          moneyTransfers?: MoneyTransfer[];
+          exchangeRevaluations?: ExchangeRevaluation[];
         };
         if (!Array.isArray(d.goods)) d.goods = [];
         if (!Array.isArray(d.financialAccounts)) d.financialAccounts = [];
         if (!Array.isArray(d.cheques)) d.cheques = [];
+        if (!Array.isArray(d.moneyTransfers)) d.moneyTransfers = [];
+        if (!Array.isArray(d.exchangeRevaluations)) d.exchangeRevaluations = [];
         return d;
       }
     }
