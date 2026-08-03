@@ -179,6 +179,8 @@ export const ROUTES = {
   sale: '/app/invoices/sale',
   warehouse: '/app/warehouse',
   payments: '/app/payments',
+  transfers: '/app/transfers',
+  exchange: '/app/exchange',
   expenses: '/app/expenses',
   revenues: '/app/revenues',
   claims: '/app/claims',

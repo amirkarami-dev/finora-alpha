@@ -10,6 +10,8 @@ import {
   CrownOutlined,
   DatabaseOutlined,
   ExceptionOutlined,
+  LineChartOutlined,
+  SwapOutlined,
   FileTextOutlined,
   GoldOutlined,
   RiseOutlined,
@@ -49,6 +51,8 @@ const ICONS: Record<string, ReactNode> = {
   accountbook: <AccountBookOutlined />,
   rise: <RiseOutlined />,
   exception: <ExceptionOutlined />,
+  swap: <SwapOutlined />,
+  linechart: <LineChartOutlined />,
 };
 
 const GROUP_ORDER: NavGroup[] = ['main', 'operations', 'finance', 'system'];
