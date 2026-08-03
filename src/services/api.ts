@@ -7,6 +7,9 @@ import type {
   ChargeDoc,
   ChargeLine,
   ChargeScope,
+  Cheque,
+  ChequeStatus,
+  ChequeType,
   Claim,
   ClaimItem,
   ClaimSide,
@@ -43,6 +46,10 @@ import type {
   MetalType,
   Partner,
   Payment,
+  PaymentItem,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
   ProductVolume,
   StatusBreakdown,
   TimeSeriesPoint,
@@ -102,7 +109,10 @@ function receivablePaidUSD(inv: Invoice): number {
   const chainIds = new Set(invoiceChain(inv).map((c) => c.id));
   return round(
     db.payments
-      .filter((p) => p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN')
+      .filter(
+        (p) =>
+          isSettled(p) && p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN',
+      )
       .reduce((s, p) => s + p.amountUSD, 0),
   );
 }
@@ -131,6 +141,7 @@ function saleReceivables(): Map<string, SaleReceivable> {
   }
   // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
   for (const p of db.payments) {
+    if (!isSettled(p)) continue;
     if ((p.direction ?? 'IN') !== 'IN') continue;
     const entry = map.get(p.customerId);
     if (entry) entry.paid += p.amountUSD;
@@ -407,7 +418,9 @@ export async function getCashflowSeries(): Promise<TimeSeriesPoint[]> {
       .reduce((s, inv) => s + inv.totalAmount, 0);
     // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
-      .filter((p) => dayjs(p.date).format('YYYY-MM') === key && (p.direction ?? 'IN') === 'IN')
+      .filter(
+        (p) => isSettled(p) && dayjs(p.date).format('YYYY-MM') === key && (p.direction ?? 'IN') === 'IN',
+      )
       .reduce((s, p) => s + p.amountUSD, 0);
     months.push({ month: m.format('MMM'), invoiced: round(invoiced), collected: round(collected) });
   }
@@ -1009,6 +1022,7 @@ export async function getCustomerPortalSummary(
     const collected = db.payments
       .filter(
         (p) =>
+          isSettled(p) &&
           p.customerId === customerId &&
           dayjs(p.date).format('YYYY-MM') === key &&
           (p.direction ?? 'IN') === 'IN',
@@ -3646,6 +3660,213 @@ export interface PaymentInput {
   invoiceId?: string;
 }
 
+/* -------------------------------- Cheques -------------------------------- *
+ * A cheque is its own record because one may settle lines on several invoices — the spec's
+ * "maybe use this cheque for other invoice". Payment lines point at it by id.
+ * -------------------------------------------------------------------------- */
+
+export interface ChequeInput {
+  type: ChequeType;
+  number: string;
+  bankName: string;
+  dueDate: string;
+  amount: number;
+  currency: Currency;
+  ownerName: string;
+  notes?: string;
+}
+
+function nextChequeId(): string {
+  let max = 0;
+  for (const c of db.cheques) {
+    const match = /^chq-(\d+)$/.exec(c.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `chq-${String(max + 1).padStart(4, '0')}`;
+}
+
+/** Which statuses a cheque may move to. PAID / EXPIRED are terminal; a RETURNED cheque is
+ *  finished as a document but its NUMBER becomes reusable (see `assertChequeNumberFree`). */
+const CHEQUE_TRANSITIONS: Record<ChequeStatus, ChequeStatus[]> = {
+  PENDING: ['PAID', 'RETURNED', 'EXPIRED', 'CHANGED'],
+  RETURNED: ['CHANGED', 'PENDING'],
+  EXPIRED: ['PAID', 'RETURNED', 'CHANGED'],
+  CHANGED: [],
+  PAID: [],
+};
+
+/**
+ * Cheque numbers are unique PER ISSUING BANK, not globally — two banks may legitimately issue
+ * the same number. The one exception, straight from the spec: a RETURNED cheque's number may be
+ * re-entered, because the customer replaces a bounced cheque with a fresh one bearing the same
+ * number. Comparison is trimmed and case-insensitive on the bank so "ENBD" and "enbd " do not
+ * create a second namespace.
+ */
+function assertChequeNumberFree(number: string, bankName: string, excludeId?: string): void {
+  const n = number.trim().toLowerCase();
+  const b = bankName.trim().toLowerCase();
+  const clash = db.cheques.some(
+    (c) =>
+      c.id !== excludeId &&
+      c.status !== 'RETURNED' &&
+      c.number.trim().toLowerCase() === n &&
+      c.bankName.trim().toLowerCase() === b,
+  );
+  if (clash) throw new Error('duplicate-cheque-number');
+}
+
+/** Guards IN ORDER: `number-required` → `bank-name-required` → `owner-required` →
+ *  `due-date-required` → `invalid-amount` → `duplicate-cheque-number`. */
+export async function createCheque(input: ChequeInput): Promise<Cheque> {
+  await delay(180);
+  const number = input.number.trim();
+  if (!number) throw new Error('number-required');
+  const bankName = input.bankName.trim();
+  if (!bankName) throw new Error('bank-name-required');
+  const ownerName = input.ownerName.trim();
+  if (!ownerName) throw new Error('owner-required');
+  if (!input.dueDate) throw new Error('due-date-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+  assertChequeNumberFree(number, bankName);
+
+  const cheque: Cheque = {
+    id: nextChequeId(),
+    type: input.type,
+    number,
+    bankName,
+    dueDate: input.dueDate,
+    amount: round(input.amount),
+    currency: input.currency,
+    ownerName,
+    status: 'PENDING',
+    notes: input.notes?.trim() || undefined,
+  };
+  db.cheques.push(cheque);
+  persistDb();
+  return cheque;
+}
+
+export async function updateCheque(id: string, input: ChequeInput): Promise<Cheque> {
+  await delay(160);
+  const cheque = db.cheques.find((c) => c.id === id);
+  if (!cheque) throw new Error('cheque-not-found');
+  // A cleared cheque is a historical fact — editing its amount would silently change what the
+  // payment lines pointing at it are worth.
+  if (cheque.status === 'PAID') throw new Error('cheque-paid');
+  const number = input.number.trim();
+  if (!number) throw new Error('number-required');
+  const bankName = input.bankName.trim();
+  if (!bankName) throw new Error('bank-name-required');
+  const ownerName = input.ownerName.trim();
+  if (!ownerName) throw new Error('owner-required');
+  if (!input.dueDate) throw new Error('due-date-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+  assertChequeNumberFree(number, bankName, id);
+
+  Object.assign(cheque, {
+    type: input.type,
+    number,
+    bankName,
+    dueDate: input.dueDate,
+    amount: round(input.amount),
+    currency: input.currency,
+    ownerName,
+    notes: input.notes?.trim() || undefined,
+  });
+  persistDb();
+  return cheque;
+}
+
+/**
+ * Moves a cheque through its lifecycle.
+ *
+ * Guards IN ORDER: `cheque-not-found` → `invalid-transition` (per `CHEQUE_TRANSITIONS`) →
+ * PAID only: `bank-account-required` → `bank-account-not-found` → `bank-account-inactive`.
+ *
+ * The spec requires naming the receiving bank when a cheque is marked paid — that is the whole
+ * point of the payments-menu cheque tab, so it is enforced here rather than left to the UI.
+ */
+export async function setChequeStatus(
+  id: string,
+  status: ChequeStatus,
+  bankAccountId?: string,
+): Promise<Cheque> {
+  await delay(160);
+  const cheque = db.cheques.find((c) => c.id === id);
+  if (!cheque) throw new Error('cheque-not-found');
+  if (cheque.status === status) return cheque;
+  if (!CHEQUE_TRANSITIONS[cheque.status].includes(status)) throw new Error('invalid-transition');
+
+  if (status === 'PAID') {
+    if (!bankAccountId) throw new Error('bank-account-required');
+    const account = db.financialAccounts.find((a) => a.id === bankAccountId);
+    if (!account) throw new Error('bank-account-not-found');
+    if (!account.active) throw new Error('bank-account-inactive');
+    cheque.bankAccountId = bankAccountId;
+  }
+  cheque.status = status;
+  persistDb();
+  return cheque;
+}
+
+export interface ChequeRow extends Cheque {
+  /** Company account it was banked into, resolved server-side. */
+  bankAccountName?: string;
+  /** How many payment lines rely on this cheque — a cheque may settle several invoices. */
+  usageCount: number;
+  /** True once `dueDate` has passed and it is still uncleared, so the tab can surface exactly
+   *  the cheques the spec says need a bank chosen. */
+  dueForAction: boolean;
+}
+
+export async function getCheques(status?: ChequeStatus): Promise<ChequeRow[]> {
+  await delay(160);
+  const today = dayjs();
+  const usage = new Map<string, number>();
+  for (const p of db.payments) {
+    for (const it of paymentItems(p)) {
+      if (it.chequeId) usage.set(it.chequeId, (usage.get(it.chequeId) ?? 0) + 1);
+    }
+  }
+  return db.cheques
+    .filter((c) => (status ? c.status === status : true))
+    .map((c) => ({
+      ...c,
+      bankAccountName: c.bankAccountId
+        ? db.financialAccounts.find((a) => a.id === c.bankAccountId)?.name
+        : undefined,
+      usageCount: usage.get(c.id) ?? 0,
+      dueForAction: c.status === 'PENDING' && dayjs(c.dueDate).isBefore(today, 'day'),
+    }))
+    .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf());
+}
+
+/* ------------------------- Payment header/items rework -------------------- *
+ * Read every legacy-optional field through these three, never raw. A payment written before the
+ * rework has no `status`, no `type` and no `items`; reading `p.status === 'CONFIRMED'` directly
+ * would treat all of that real, banked money as unconfirmed and wipe it out of every balance,
+ * KPI and aging bucket in the app. Same defaulting discipline as `direction ?? 'IN'`.
+ * -------------------------------------------------------------------------- */
+
+/** Legacy rows predate DRAFT, so they are CONFIRMED — they represent money already recorded. */
+function paymentStatus(p: Payment): PaymentStatus {
+  return p.status ?? 'CONFIRMED';
+}
+
+/** Legacy rows are INVOICE when they were linked to a document, GENERAL otherwise. */
+function paymentType(p: Payment): PaymentType {
+  return p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL');
+}
+
+function paymentItems(p: Payment): PaymentItem[] {
+  return p.items ?? [];
+}
+
+/** Only confirmed money moves a balance. The single predicate every aggregate must go through. */
+function isSettled(p: Payment): boolean {
+  return paymentStatus(p) === 'CONFIRMED';
+}
+
 function nextPaymentId(): string {
   let max = 0;
   for (const p of db.payments) {
@@ -3653,6 +3874,262 @@ function nextPaymentId(): string {
     if (match) max = Math.max(max, Number(match[1]));
   }
   return `NIZ${String(max + 1).padStart(3, '0')}`;
+}
+
+let paymentItemSeq = 0;
+let paymentAllocSeq = 0;
+
+/** Max-scan seeded, like every other child counter — never length-derived, so deleting a line
+ *  can never make the next one collide with a live id. */
+function seedPaymentChildCounters(): void {
+  if (paymentItemSeq || paymentAllocSeq) return;
+  for (const p of db.payments) {
+    for (const it of paymentItems(p)) {
+      const m = /^payitem-(\d+)$/.exec(it.id);
+      if (m) paymentItemSeq = Math.max(paymentItemSeq, Number(m[1]));
+      for (const a of it.allocations) {
+        const am = /^payalloc-(\d+)$/.exec(a.id);
+        if (am) paymentAllocSeq = Math.max(paymentAllocSeq, Number(am[1]));
+      }
+    }
+  }
+}
+
+function nextPaymentItemId(): string {
+  seedPaymentChildCounters();
+  paymentItemSeq += 1;
+  return `payitem-${paymentItemSeq}`;
+}
+
+function nextPaymentAllocId(): string {
+  seedPaymentChildCounters();
+  paymentAllocSeq += 1;
+  return `payalloc-${paymentAllocSeq}`;
+}
+
+/** header.amountUSD = round(Σ items[].amountUSD) once items exist — that sum is what every
+ *  balance reads. A payment with no items keeps its own declared converted amount, which is
+ *  what legacy rows and simple GENERAL payments rely on. */
+function recomputePaymentTotals(p: Payment): void {
+  const items = paymentItems(p);
+  if (items.length === 0) return;
+  p.amountUSD = round(items.reduce((s, it) => s + it.amountUSD, 0));
+}
+
+/**
+ * What one invoice item still owes, in USD.
+ *
+ * Counts allocations from every payment EXCEPT the one being edited, and only from CONFIRMED
+ * payments plus the draft being worked on — otherwise two open drafts could each be validated
+ * against the full outstanding and together overpay the invoice.
+ */
+function invoiceItemRemainingUSD(invoiceItemId: string, excludePaymentId?: string): number {
+  const item = db.invoices.flatMap((i) => i.items).find((it) => it.id === invoiceItemId);
+  if (!item) return 0;
+  let allocated = 0;
+  for (const p of db.payments) {
+    if (p.id === excludePaymentId) continue;
+    if (!isSettled(p)) continue;
+    for (const it of paymentItems(p)) {
+      for (const a of it.allocations) {
+        if (a.invoiceItemId === invoiceItemId) allocated += a.amountUSD;
+      }
+    }
+  }
+  return round(Math.max(item.amount - allocated, 0));
+}
+
+export interface PaymentItemInput {
+  invoiceId: string;
+  date: string;
+  amount: number;
+  currency: Currency;
+  fxRate: number;
+  method: PaymentMethod;
+  bankAccountId?: string;
+  chequeId?: string;
+  /** Per invoice-item split. Omitted → auto-filled from the first item down, each taking what
+   *  it still owes until the line's amount runs out (the spec's "start from item 1 to end"). */
+  allocations?: Array<{ invoiceItemId: string; amount: number }>;
+}
+
+/**
+ * Fills a line's amount across an invoice's items, first to last, each taking what it still
+ * owes — the spec's "by default start from item 1 to end fill the amount for each row".
+ * Returns USD amounts; the caller converts back to the line currency.
+ */
+function autoFillAllocations(
+  invoice: Invoice,
+  amountUSD: number,
+  excludePaymentId?: string,
+): Array<{ invoiceItemId: string; amountUSD: number }> {
+  let left = round(amountUSD);
+  const out: Array<{ invoiceItemId: string; amountUSD: number }> = [];
+  for (const item of invoice.items) {
+    if (left <= 0) break;
+    const owed = invoiceItemRemainingUSD(item.id, excludePaymentId);
+    if (owed <= 0) continue;
+    const take = round(Math.min(owed, left));
+    out.push({ invoiceItemId: item.id, amountUSD: take });
+    left = round(left - take);
+  }
+  return out;
+}
+
+/**
+ * Guards IN ORDER: `payment-not-found` → `payment-confirmed` (a confirmed payment is reopened
+ * before editing) → `invoice-required` → `invoice-not-found` → `date-required` →
+ * `invalid-amount` → `invalid-fx` (USD forces 1) → method: TT `bank-account-required` /
+ * `bank-account-not-found` / `bank-account-inactive`; Cheque `cheque-required` /
+ * `cheque-not-found` → then per allocation `item-not-on-invoice` → `invalid-allocation-amount`
+ * → `over-allocated` (an item may not receive more than it still owes) → `allocation-mismatch`
+ * (Σ allocations must equal the line amount).
+ */
+export async function addPaymentItem(paymentId: string, input: PaymentItemInput): Promise<Payment> {
+  await delay(200);
+  const payment = db.payments.find((p) => p.id === paymentId);
+  if (!payment) throw new Error('payment-not-found');
+  if (paymentStatus(payment) === 'CONFIRMED') throw new Error('payment-confirmed');
+
+  const item = buildPaymentItem(payment, input);
+  payment.items = [...paymentItems(payment), item];
+  recomputePaymentTotals(payment);
+  persistDb();
+  return payment;
+}
+
+export async function updatePaymentItem(
+  paymentId: string,
+  itemId: string,
+  input: PaymentItemInput,
+): Promise<Payment> {
+  await delay(200);
+  const payment = db.payments.find((p) => p.id === paymentId);
+  if (!payment) throw new Error('payment-not-found');
+  if (paymentStatus(payment) === 'CONFIRMED') throw new Error('payment-confirmed');
+  const idx = paymentItems(payment).findIndex((i) => i.id === itemId);
+  if (idx < 0) throw new Error('payment-item-not-found');
+
+  const rebuilt = buildPaymentItem(payment, input, paymentItems(payment)[idx]);
+  const next = [...paymentItems(payment)];
+  next[idx] = rebuilt;
+  payment.items = next;
+  recomputePaymentTotals(payment);
+  persistDb();
+  return payment;
+}
+
+export async function removePaymentItem(paymentId: string, itemId: string): Promise<Payment> {
+  await delay(160);
+  const payment = db.payments.find((p) => p.id === paymentId);
+  if (!payment) throw new Error('payment-not-found');
+  if (paymentStatus(payment) === 'CONFIRMED') throw new Error('payment-confirmed');
+  payment.items = paymentItems(payment).filter((i) => i.id !== itemId);
+  recomputePaymentTotals(payment);
+  persistDb();
+  return payment;
+}
+
+/**
+ * Builds one payment line, validating everything BEFORE anything is attached — the
+ * `buildChargeLine` atomicity idiom, so a rejected edit cannot leave `payment.items` half
+ * mutated. `existing` is the line being replaced, so its own allocations are excluded from the
+ * remaining-owed maths and editing a line does not fight itself.
+ */
+function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: PaymentItem): PaymentItem {
+  if (!input.invoiceId) throw new Error('invoice-required');
+  const invoice = findInvoice(input.invoiceId);
+  if (!invoice) throw new Error('invoice-not-found');
+  if (!input.date) throw new Error('date-required');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
+
+  let fxRate = 1;
+  if (input.currency !== 'USD') {
+    if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
+    fxRate = input.fxRate;
+  }
+
+  if (input.method === 'TT') {
+    if (!input.bankAccountId) throw new Error('bank-account-required');
+    const account = db.financialAccounts.find((a) => a.id === input.bankAccountId);
+    if (!account) throw new Error('bank-account-not-found');
+    if (!account.active) throw new Error('bank-account-inactive');
+  }
+  if (input.method === 'Cheque') {
+    if (!input.chequeId) throw new Error('cheque-required');
+    if (!db.cheques.some((c) => c.id === input.chequeId)) throw new Error('cheque-not-found');
+  }
+
+  const amount = round(input.amount);
+  const amountUSD = round(amount / fxRate);
+  const itemId = existing?.id ?? nextPaymentItemId();
+
+  // Auto-fill when the caller sent nothing, else honour their split. `payment.id` is excluded
+  // from the remaining-owed maths so this payment's own existing lines do not count against it.
+  const requested =
+    input.allocations ??
+    autoFillAllocations(invoice, amountUSD, payment.id).map((a) => ({
+      invoiceItemId: a.invoiceItemId,
+      amount: round(a.amountUSD * fxRate),
+    }));
+
+  const invoiceItemIds = new Set(invoice.items.map((i) => i.id));
+  const seen = new Set<string>();
+  for (const a of requested) {
+    if (!invoiceItemIds.has(a.invoiceItemId)) throw new Error('item-not-on-invoice');
+    if (seen.has(a.invoiceItemId)) throw new Error('duplicate-allocation');
+    seen.add(a.invoiceItemId);
+    if (!Number.isFinite(a.amount) || a.amount <= 0) throw new Error('invalid-allocation-amount');
+    // The spec's validation: a line may never pay an item more than it still owes. `existing`
+    // is excluded via `payment.id` above so re-saving an unchanged line is not self-blocking.
+    const owedUSD = invoiceItemRemainingUSD(a.invoiceItemId, payment.id);
+    if (round(a.amount / fxRate) > owedUSD + 0.005) throw new Error('over-allocated');
+  }
+  if (requested.length === 0) throw new Error('allocations-required');
+  const allocTotal = round(requested.reduce((s, a) => s + a.amount, 0));
+  if (Math.abs(allocTotal - amount) > 0.005) throw new Error('allocation-mismatch');
+
+  return {
+    id: itemId,
+    paymentId: payment.id,
+    invoiceId: invoice.id,
+    date: input.date,
+    amount,
+    currency: input.currency,
+    fxRate,
+    amountUSD,
+    method: input.method,
+    bankAccountId: input.method === 'TT' ? input.bankAccountId : undefined,
+    chequeId: input.method === 'Cheque' ? input.chequeId : undefined,
+    allocations: requested.map((a) => {
+      const line = invoice.items.find((i) => i.id === a.invoiceItemId)!;
+      return {
+        id: nextPaymentAllocId(),
+        paymentItemId: itemId,
+        invoiceItemId: line.id,
+        // Derived from the invoice, never the client — survives provisional→final conversion.
+        referenceDocumentItemId: line.referenceDocumentItemId,
+        product: line.product,
+        amount: round(a.amount),
+        amountUSD: round(a.amount / fxRate),
+      };
+    }),
+  };
+}
+
+/** DRAFT ⇄ CONFIRMED. Confirming is reversible, which is the spec's "open payment". */
+export async function setPaymentStatus(id: string, status: PaymentStatus): Promise<Payment> {
+  await delay(160);
+  const payment = db.payments.find((p) => p.id === id);
+  if (!payment) throw new Error('payment-not-found');
+  // Confirming an INVOICE payment with nothing allocated would move a balance by zero and read
+  // as a real settlement in every report.
+  if (status === 'CONFIRMED' && paymentType(payment) === 'INVOICE' && paymentItems(payment).length === 0) {
+    throw new Error('no-payment-items');
+  }
+  payment.status = status;
+  persistDb();
+  return payment;
 }
 
 /**

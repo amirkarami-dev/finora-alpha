@@ -1369,6 +1369,9 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     claims,
     goods,
     financialAccounts,
+    // Cheques are created through the payments flow, so the demo starts with none rather than
+    // inventing paper that no payment line points at.
+    cheques: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

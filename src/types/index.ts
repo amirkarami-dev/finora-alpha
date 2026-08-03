@@ -155,6 +155,14 @@ export interface Container {
   sealNumber?: string;
 }
 
+/** INVOICE settles specific trade documents through items; GENERAL is money moved with a person
+ *  and no invoice behind it, which sits on their account as an on-account balance. */
+export type PaymentType = 'INVOICE' | 'GENERAL';
+
+/** DRAFT is an open payment being built up; only CONFIRMED money counts towards balances,
+ *  KPIs and aging. Confirming is reversible — reopening returns it to DRAFT. */
+export type PaymentStatus = 'DRAFT' | 'CONFIRMED';
+
 export interface Payment {
   id: string;
   customerId: string;
@@ -173,6 +181,76 @@ export interface Payment {
   /** Money direction. 'IN' = received from customer (receivable), 'OUT' = paid to
    *  supplier. Optional for legacy rows — undefined MUST be treated as 'IN'. */
   direction?: 'IN' | 'OUT';
+
+  /* ---- header/items rework. All three are OPTIONAL because rows written before it exist ---- *
+   * and must keep working. Read them through `paymentType()` / `paymentStatus()` in api.ts,
+   * never raw: a legacy row has no `status`, and treating that as anything but CONFIRMED would
+   * silently erase real money from every balance in the app.                                   */
+
+  /** undefined on legacy rows → derived from whether `invoiceId` is set. */
+  type?: PaymentType;
+  /** undefined on legacy rows → CONFIRMED. */
+  status?: PaymentStatus;
+  /**
+   * Settlement lines. When present, the header's `amountUSD` is SERVER-DERIVED as their sum —
+   * that is the figure every balance reads. `amount`/`currency` on the header stay the
+   * user-declared control total the items are checked against.
+   */
+  items?: PaymentItem[];
+}
+
+export interface PaymentItem {
+  id: string;              // 'payitem-<n>', monotonic counter
+  paymentId: string;
+  /** The trade document this line settles. */
+  invoiceId: string;
+  date: string;
+  amount: number;          // SERVER-DERIVED round(Σ allocations[].amount)
+  currency: Currency;
+  fxRate: number;          // forced to 1 when currency === 'USD'
+  amountUSD: number;       // SERVER-DERIVED
+  method: PaymentMethod;
+  /** Required when method is 'TT' — which company account the money moved through. */
+  bankAccountId?: string;
+  /** Required when method is 'Cheque'. One cheque may settle lines on several invoices, which
+   *  is why this points at a shared `Cheque` rather than embedding its fields. */
+  chequeId?: string;
+  allocations: PaymentItemAllocation[];
+}
+
+/** How much of a payment line lands on one invoice item — the "invoice item payment item" of
+ *  the spec. Auto-filled from the first item down, each taking what it still owes. */
+export interface PaymentItemAllocation {
+  id: string;              // 'payalloc-<n>'
+  paymentItemId: string;
+  invoiceItemId: string;
+  referenceDocumentItemId: string;  // SERVER-DERIVED — survives provisional→final conversion
+  product: string;                  // SERVER-DERIVED snapshot
+  amount: number;
+  amountUSD: number;                // SERVER-DERIVED
+}
+
+export type ChequeType = 'NORMAL' | 'SECURITY';
+
+/** PENDING → PAID (cleared), RETURNED (bounced), EXPIRED (past due, uncleared) or CHANGED
+ *  (replaced by another cheque). */
+export type ChequeStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'RETURNED' | 'CHANGED';
+
+export interface Cheque {
+  id: string;              // 'chq-0001', max-scanning
+  type: ChequeType;
+  number: string;
+  /** Issuing bank, as written on the cheque — free text, not a company account. Cheque numbers
+   *  are unique per issuing bank: two banks may legitimately issue the same number. */
+  bankName: string;
+  dueDate: string;
+  amount: number;
+  currency: Currency;
+  ownerName: string;
+  /** The company account it was finally banked into. Set when the status becomes PAID. */
+  bankAccountId?: string;
+  status: ChequeStatus;
+  notes?: string;
 }
 
 /* ------------------------------------------------------------------ *

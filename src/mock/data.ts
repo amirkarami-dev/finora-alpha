@@ -2,6 +2,7 @@ import type {
   ChargeCategory,
   ChargeDoc,
   Claim,
+  Cheque,
   Container,
   Contract,
   CostCentre,
@@ -80,6 +81,7 @@ const seed = {
   claims: [] as Claim[],
   goods: [] as Good[],
   financialAccounts: [] as FinancialAccount[],
+  cheques: [] as Cheque[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -115,6 +117,10 @@ function isCompatible(d: unknown): d is typeof seed {
   // `financialAccounts` (Bank + CashSafe) — same additive-entity reasoning and the same SOFT
   // probe as `goods` above. `loadDb` backfills `[]`.
   if (o.financialAccounts !== undefined && !Array.isArray(o.financialAccounts)) return false;
+  // `cheques` — additive again, SOFT probe + `loadDb` backfill. Payment items are inline on
+  // each Payment (and equally optional), so they need no probe of their own: a legacy payment
+  // simply has no `items` key and `paymentItems()` reads that as [].
+  if (o.cheques !== undefined && !Array.isArray(o.cheques)) return false;
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -200,9 +206,14 @@ function loadDb(): typeof seed {
       if (isCompatible(parsed)) {
         // `goods` backfill — see the soft probe in `isCompatible`. A v6 blob written before the
         // goods master existed has no such key, and every reader assumes an array.
-        const d = parsed as typeof seed & { goods?: Good[]; financialAccounts?: FinancialAccount[] };
+        const d = parsed as typeof seed & {
+          goods?: Good[];
+          financialAccounts?: FinancialAccount[];
+          cheques?: Cheque[];
+        };
         if (!Array.isArray(d.goods)) d.goods = [];
         if (!Array.isArray(d.financialAccounts)) d.financialAccounts = [];
+        if (!Array.isArray(d.cheques)) d.cheques = [];
         return d;
       }
     }

@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ChargeDirection,
   ChargeScope,
+  ChequeStatus,
   ClaimSide,
   FinancialAccountType,
+  PaymentStatus,
   InventoryDocType,
   InvoiceSide,
   InvoiceType,
@@ -54,6 +56,8 @@ export const qk = {
   goods: ['goods'] as const,
   // ---- Financial accounts (BaseInfo → Banks / Cash safes) ----
   financialAccounts: (type?: FinancialAccountType) => ['financialAccounts', type ?? 'all'] as const,
+  // ---- Cheques (Payments → Cheques tab) ----
+  cheques: (status?: ChequeStatus) => ['cheques', status ?? 'all'] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
@@ -636,6 +640,87 @@ export const useSetGoodActive = () => {
   return useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setGoodActive(id, active),
     onSuccess: invalidate,
+  });
+};
+
+/* ---------------------------------- Cheques ---------------------------------- */
+
+export const useCheques = (status?: ChequeStatus) =>
+  useQuery({ queryKey: qk.cheques(status), queryFn: () => api.getCheques(status) });
+
+/**
+ * A cheque change moves money, so it must invalidate the payment side too: marking one PAID is
+ * what settles the lines pointing at it, and those feed balances, KPIs and the invoice's
+ * payment list. Bare prefixes, per the rule at the top of this file.
+ */
+function useInvalidateCheques() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['cheques'] });
+    qc.invalidateQueries({ queryKey: ['payments'] });
+    qc.invalidateQueries({ queryKey: ['accounts'] });
+    qc.invalidateQueries({ queryKey: ['kpis'] });
+  };
+}
+
+export const useCreateCheque = () => {
+  const invalidate = useInvalidateCheques();
+  return useMutation({ mutationFn: (input: api.ChequeInput) => api.createCheque(input), onSuccess: invalidate });
+};
+
+export const useUpdateCheque = () => {
+  const invalidate = useInvalidateCheques();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: api.ChequeInput }) => api.updateCheque(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetChequeStatus = () => {
+  const invalidate = useInvalidateCheques();
+  return useMutation({
+    mutationFn: ({ id, status, bankAccountId }: { id: string; status: ChequeStatus; bankAccountId?: string }) =>
+      api.setChequeStatus(id, status, bankAccountId),
+    onSuccess: invalidate,
+  });
+};
+
+/* ------------------------------ Payment items ------------------------------ */
+
+export const useAddPaymentItem = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ paymentId, input }: { paymentId: string; input: api.PaymentItemInput }) =>
+      api.addPaymentItem(paymentId, input),
+    onSuccess: () => invalidate({}),
+  });
+};
+
+export const useUpdatePaymentItem = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ paymentId, itemId, input }: { paymentId: string; itemId: string; input: api.PaymentItemInput }) =>
+      api.updatePaymentItem(paymentId, itemId, input),
+    onSuccess: () => invalidate({}),
+  });
+};
+
+export const useRemovePaymentItem = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ paymentId, itemId }: { paymentId: string; itemId: string }) =>
+      api.removePaymentItem(paymentId, itemId),
+    onSuccess: () => invalidate({}),
+  });
+};
+
+/** Confirming or reopening changes what counts towards every balance, so it invalidates the
+ *  same wide set an invoice mutation does. */
+export const useSetPaymentStatus = () => {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: PaymentStatus }) => api.setPaymentStatus(id, status),
+    onSuccess: () => invalidate({}),
   });
 };
 
