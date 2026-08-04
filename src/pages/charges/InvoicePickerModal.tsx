@@ -69,7 +69,9 @@ export function InvoicePickerModal({
   // BOTH hooks are called unconditionally (rules of hooks) and gated with TanStack's `enabled`,
   // then the active result is selected — never a conditional hook call.
   const chargeSource = useChargeSourceInvoices(undefined, { enabled: open && !claimSide });
-  const claimSource = useClaimSourceInvoices(claimSide ?? 'EXPENSE', { enabled: open && !!claimSide });
+  // The placeholder side is inert — the hook is disabled whenever `claimSide` is absent, so this
+  // value only has to satisfy the type, never fetch.
+  const claimSource = useClaimSourceInvoices(claimSide ?? 'SALE', { enabled: open && !!claimSide });
   const { data: invoices, isLoading } = claimSide ? claimSource : chargeSource;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);

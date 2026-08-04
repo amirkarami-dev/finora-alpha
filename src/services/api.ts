@@ -3303,16 +3303,13 @@ function nextClaimItemId(): string {
   return `clmitem-${claimItemSeq}`;
 }
 
-/** Mirrors the claim-side mapping in spec §1's binding-decision table: an expense claim is filed
- *  against a PURCHASE invoice, a revenue claim against a SALE invoice. */
-function claimInvoiceSide(side: ClaimSide): InvoiceSide {
-  return side === 'EXPENSE' ? 'PURCHASE' : 'SALE';
-}
-
 /** Thin wrapper (spec §4) — the claim picker's invoice universe is IDENTICAL to the charge-doc
- *  picker's, just entered via `ClaimSide` instead of `InvoiceSide`. */
+ *  picker's. Since 2026-08-04 `ClaimSide` and `InvoiceSide` are the same two values with the
+ *  same meaning, so this is an identity, not a mapping: a SALE claim offers sale invoices.
+ *  The old `claimInvoiceSide` indirection (EXPENSE→PURCHASE) is deliberately gone — keeping a
+ *  translation function around invites re-introducing the inversion it used to encode. */
 export async function getClaimSourceInvoices(side: ClaimSide): Promise<ChargeSourceInvoiceRow[]> {
-  return getChargeSourceInvoices(claimInvoiceSide(side));
+  return getChargeSourceInvoices(side);
 }
 
 /** Includes CANCELLED claims (the UI strikes them through) — date desc. `invoiceNumber`/
@@ -3448,10 +3445,10 @@ function buildClaim(invoice: Invoice, input: ClaimInput, existing?: Claim): Clai
 
 /**
  * Guards IN ORDER (spec §4): `title-required` → `date-required` → `invoice-required` →
- * `invoice-not-found` → `invoice-side-mismatch` (`invoiceSide(inv.invoiceType) !==` the side's
- * mapped invoice side) → `invoice-not-confirmed` (must be `isPricedType` AND a member of
- * `chainLeafDocs` — the `createChargeDoc` precedent) → then `buildClaim`'s claim-type/FX/item
- * guards.
+ * `invoice-not-found` → `invoice-side-mismatch` (`invoiceSide(inv.invoiceType) !== input.side`,
+ * a direct comparison now that the two unions carry the same meaning) → `invoice-not-confirmed`
+ * (must be `isPricedType` AND a member of `chainLeafDocs` — the `createChargeDoc` precedent) →
+ * then `buildClaim`'s claim-type/FX/item guards.
  */
 export async function createClaim(input: ClaimInput): Promise<Claim> {
   await delay(200);
@@ -3462,10 +3459,10 @@ export async function createClaim(input: ClaimInput): Promise<Claim> {
   const invoice = findInvoice(input.invoiceId);
   if (!invoice) throw new Error('invoice-not-found');
 
-  const invSide = claimInvoiceSide(input.side);
-  if (invoiceSide(invoice.invoiceType) !== invSide) throw new Error('invoice-side-mismatch');
+  if (invoiceSide(invoice.invoiceType) !== input.side) throw new Error('invoice-side-mismatch');
   const isChainLeafConfirmed =
-    isPricedType(invoice.invoiceType) && chainLeafDocs(invSide).some((inv) => inv.id === invoice.id);
+    isPricedType(invoice.invoiceType) &&
+    chainLeafDocs(input.side).some((inv) => inv.id === invoice.id);
   if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
 
   const claim = buildClaim(invoice, input);

@@ -622,7 +622,11 @@ export interface ChargeAllocation {        // inline on ChargeLine
   amountUSD: number;                // SERVER-DERIVED round(amount / line.fxRate)
 }
 
-export type ClaimSide = 'EXPENSE' | 'REVENUE';
+/** A claim is named after the document it is filed against: a SALE claim sits on a sale
+ *  invoice, a PURCHASE claim on a purchase invoice. The side IS the invoice side — there is
+ *  no mapping. (Before 2026-08-04 these were 'EXPENSE'/'REVENUE' and mapped to the OPPOSITE
+ *  invoice side; `loadDb` re-derives every stored claim's side from its own invoice.) */
+export type ClaimSide = 'SALE' | 'PURCHASE';
 export type ClaimType = 'QUANTITY' | 'QUALITY';   // name kept, values replaced
 
 export interface Claim {                   // db.claims (flat)

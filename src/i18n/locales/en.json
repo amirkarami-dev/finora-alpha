@@ -933,8 +933,8 @@
   "claims": {
     "title": "Claims",
     "subtitle": "Per-item claims against invoice goods, typed as quantity or quality",
-    "tabExpense": "Expense claims",
-    "tabRevenue": "Revenue claims",
+    "tabSale": "Sale claims",
+    "tabPurchase": "Purchase claims",
     "newClaim": "New claim",
     "editClaim": "Edit claim",
     "selectInvoice": "Select invoice",
@@ -962,8 +962,8 @@
     "cancelConfirm": "Cancel this claim?",
     "emptyTab": "No claims in this tab yet",
     "pickInvoiceFirst": "Select an invoice to list its items",
-    "emptyExpenseHint": "Expense claims are filed against purchase documents — pick one and enter an amount per good.",
-    "emptyRevenueHint": "Revenue claims are filed against sale documents — pick one and enter an amount per good.",
+    "emptySaleHint": "Sale claims are filed against sale documents — pick one and enter an amount per good.",
+    "emptyPurchaseHint": "Purchase claims are filed against purchase documents — pick one and enter an amount per good.",
     "errors": {
       "title-required": "Title is required",
       "date-required": "Date is required",

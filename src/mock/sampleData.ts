@@ -1320,12 +1320,15 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     });
   }
 
-  // clm-0001 / clm-0002: expense-claim → PURCHASE, revenue-claim → SALE (spec §1's binding
-  // table). Both claim only the FIRST TWO goods of a ≥3-good document, so the detail modal
-  // demonstrates a partial claim rather than a whole-document one.
+  // clm-0001 / clm-0002: a claim's side IS its invoice's side, so the purchase claim sits on a
+  // PURCHASE document and the sale claim on a SALE one. (These two seeds already sat on those
+  // documents under the old EXPENSE/REVENUE labels — the 2026-08-04 rename changed what the
+  // labels are called, not which invoice each claim was filed against.) Both claim only the
+  // FIRST TWO goods of a ≥3-good document, so the detail modal demonstrates a partial claim
+  // rather than a whole-document one.
   if (multiGoodPurchase) {
     pushClaim({
-      side: 'EXPENSE',
+      side: 'PURCHASE',
       title: `Short weight ${multiGoodPurchase.invoiceNumber}`,
       invoice: multiGoodPurchase,
       claimType: 'QUANTITY',
@@ -1340,7 +1343,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   }
   if (multiGoodSales[1]) {
     pushClaim({
-      side: 'REVENUE',
+      side: 'SALE',
       title: `Quality claim ${multiGoodSales[1].invoiceNumber}`,
       invoice: multiGoodSales[1],
       claimType: 'QUALITY',

@@ -15,9 +15,11 @@ import { ClaimFormModal } from './ClaimFormModal';
 
 const { Text } = Typography;
 
-const TAB_KEYS = ['expense', 'revenue'] as const;
+// Sale first — a claim is named after the document it is filed against, and the sale side is
+// the one users work in daily. The tab key IS the side; no lookup table can drift out of step.
+const TAB_KEYS = ['sale', 'purchase'] as const;
 type TabKey = (typeof TAB_KEYS)[number];
-const TAB_SIDE: Record<TabKey, ClaimSide> = { expense: 'EXPENSE', revenue: 'REVENUE' };
+const TAB_SIDE: Record<TabKey, ClaimSide> = { sale: 'SALE', purchase: 'PURCHASE' };
 
 // Volcano for quantity, gold for quality — arbitrary but consistent tag colors distinguishing the
 // two claim types at a glance (design spec §6).
@@ -26,7 +28,7 @@ const CLAIM_TYPE_COLOR: Record<ClaimType, string> = { QUANTITY: 'volcano', QUALI
 type ListModal = 'form' | null;
 
 /**
- * design spec §6/§9 Phase 6 — one page, tabbed expense/revenue via `useTabParam` (the
+ * design spec §6/§9 Phase 6 — one page, tabbed sale/purchase via `useTabParam` (the
  * `ChargeListPage` precedent), expandable rows render claim items READ-ONLY — no detail page
  * needed. The modal (`ClaimFormModal`) reuses the shared `InvoicePickerModal` from the charges
  * module.
@@ -35,7 +37,7 @@ export default function ClaimsPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const navigate = useNavigate();
-  const [tab, setTab] = useTabParam(TAB_KEYS, 'expense');
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'sale');
   const side = TAB_SIDE[tab];
 
   const { data, isLoading } = useClaims(side);
@@ -220,8 +222,8 @@ export default function ClaimsPage() {
         variant="borderless"
         styles={{ body: { padding: 16 } }}
         tabList={[
-          { key: 'expense', label: t('claims.tabExpense') },
-          { key: 'revenue', label: t('claims.tabRevenue') },
+          { key: 'sale', label: t('claims.tabSale') },
+          { key: 'purchase', label: t('claims.tabPurchase') },
         ]}
         activeTabKey={tab}
         onTabChange={(key) => setTab(key as TabKey)}
@@ -254,7 +256,7 @@ export default function ClaimsPage() {
                     <Space direction="vertical" size={2}>
                       <Text>{t('claims.emptyTab')}</Text>
                       <Text type="secondary">
-                        {tab === 'expense' ? t('claims.emptyExpenseHint') : t('claims.emptyRevenueHint')}
+                        {tab === 'sale' ? t('claims.emptySaleHint') : t('claims.emptyPurchaseHint')}
                       </Text>
                     </Space>
                   }

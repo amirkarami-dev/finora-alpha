@@ -204,6 +204,44 @@ function purgeStaleSchemaKeys(): void {
   }
 }
 
+/**
+ * 2026-08-04: `ClaimSide` changed value domain from `'EXPENSE' | 'REVENUE'` to
+ * `'SALE' | 'PURCHASE'`, AND changed meaning. The old values mapped to the OPPOSITE invoice
+ * side (`api.ts`'s deleted `claimInvoiceSide`: EXPENSE → PURCHASE), so a textual rename would
+ * re-side every stored claim onto the wrong document type — and because the person balance now
+ * signs sale and purchase claims oppositely, that silently INVERTS the claim's sign.
+ *
+ * There is deliberately no `isCompatible` probe for this. A probe would REJECT a db holding old
+ * values, and rejection means `loadDb` falls back to the empty seed — destroying the user's
+ * customers, contracts, invoices and payments to fix one field on one entity. Old values must be
+ * ACCEPTED and migrated, which is what this does.
+ *
+ * The side is re-derived from the claim's OWN invoice rather than from the old label, so a claim
+ * whose stored side was already inconsistent with its invoice is repaired rather than preserved.
+ * The label map is only a fallback for the (impossible-by-construction) case of a missing
+ * invoice, and it uses the TRUE historical mapping — EXPENSE → PURCHASE — not the renaming that
+ * prompted this migration.
+ *
+ * Idempotent: a claim already carrying a valid new value is left untouched.
+ */
+function migrateClaimSides(claims: Claim[], invoices: Invoice[]): void {
+  if (!Array.isArray(claims) || claims.length === 0) return;
+  let byId: Map<string, Invoice> | undefined;
+  for (const claim of claims) {
+    const side: unknown = claim.side;
+    if (side === 'SALE' || side === 'PURCHASE') continue;
+    if (!byId) byId = new Map(invoices.map((inv) => [inv.id, inv]));
+    const invoiceType = byId.get(claim.invoiceId)?.invoiceType;
+    claim.side = invoiceType
+      ? invoiceType.startsWith('PURCHASE')
+        ? 'PURCHASE'
+        : 'SALE'
+      : side === 'EXPENSE'
+        ? 'PURCHASE'
+        : 'SALE';
+  }
+}
+
 function loadDb(): typeof seed {
   purgeStaleSchemaKeys();
   try {
@@ -225,6 +263,7 @@ function loadDb(): typeof seed {
         if (!Array.isArray(d.cheques)) d.cheques = [];
         if (!Array.isArray(d.moneyTransfers)) d.moneyTransfers = [];
         if (!Array.isArray(d.exchangeRevaluations)) d.exchangeRevaluations = [];
+        migrateClaimSides(d.claims, d.invoices);
         return d;
       }
     }

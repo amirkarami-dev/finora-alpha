@@ -136,7 +136,7 @@ export default function CustomerDetailPage() {
       dataIndex: 'side',
       align: 'center',
       render: (v: ClaimRow['side']) => (
-        <Tag bordered={false}>{v === 'EXPENSE' ? t('claims.tabExpense') : t('claims.tabRevenue')}</Tag>
+        <Tag bordered={false}>{v === 'SALE' ? t('claims.tabSale') : t('claims.tabPurchase')}</Tag>
       ),
     },
     {
