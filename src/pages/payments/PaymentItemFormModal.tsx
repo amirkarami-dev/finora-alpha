@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Alert, DatePicker, Form, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { App, Alert, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +15,7 @@ import {
 } from '@/services/queries';
 import { useDefaultFxRate } from '@/store/useSettingsStore';
 import type { PaymentItemInput, PaymentItemRow } from '@/services/api';
-import type { Currency, PaymentMethod } from '@/types';
+import type { ChequeType, Currency, FinancialAccountType, PaymentMethod } from '@/types';
 
 const { Text } = Typography;
 
@@ -34,6 +34,7 @@ const KNOWN_ERROR_CODES = [
   'bank-account-required',
   'bank-account-not-found',
   'bank-account-inactive',
+  'account-type-mismatch',
   'cheque-required',
   'cheque-not-found',
   'item-not-on-invoice',
@@ -42,6 +43,15 @@ const KNOWN_ERROR_CODES = [
   'over-allocated',
   'allocations-required',
   'allocation-mismatch',
+] as const;
+
+/** Raised by the inline cheque, so they translate from the `cheques.*` namespace instead. */
+const CHEQUE_ERROR_CODES = [
+  'number-required',
+  'bank-name-required',
+  'owner-required',
+  'due-date-required',
+  'duplicate-cheque-number',
 ] as const;
 
 interface ItemFormValues {
@@ -53,6 +63,13 @@ interface ItemFormValues {
   method: PaymentMethod;
   bankAccountId?: string;
   chequeId?: string;
+  /* Inline cheque — flat fields rather than a nested object, so AntD validation and the
+     `required` markers work per field the way they do everywhere else in this form. */
+  chequeNumber?: string;
+  chequeBankName?: string;
+  chequeOwnerName?: string;
+  chequeDueDate?: Dayjs;
+  chequeType?: ChequeType;
 }
 
 interface AllocRow {
@@ -102,8 +119,28 @@ export function PaymentItemFormModal({
   const { data: purchaseInvoices } = useChargeSourceInvoices('PURCHASE');
   const { data: saleInvoices } = useChargeSourceInvoices('SALE');
   const { data: banks } = useFinancialAccounts('BANK');
+  const { data: cashSafes } = useFinancialAccounts('CASH_SAFE');
   const { data: cheques } = useCheques();
   const { data: invoiceDetail } = useTradeInvoice(invoiceId ?? '');
+
+  // Mirrors ACCOUNT_TYPE_FOR_METHOD in api.ts. A drift here only mislabels a field — the server
+  // rejects a wrong-type account outright — but keeping the two in step is the point.
+  const accountType: FinancialAccountType | undefined =
+    method === 'TT' ? 'BANK' : method === 'Cash' ? 'CASH_SAFE' : undefined;
+
+  const accountOptions = useMemo(
+    () =>
+      (accountType === 'BANK' ? (banks ?? []) : accountType === 'CASH_SAFE' ? (cashSafes ?? []) : [])
+        .filter((a) => a.active)
+        .map((a) => ({ value: a.id, label: `${a.name} (${a.currency})` })),
+    [accountType, banks, cashSafes],
+  );
+
+  /** Only set when editing a line that already carries a cheque. */
+  const attachedCheque = useMemo(
+    () => (item?.chequeId ? (cheques ?? []).find((c) => c.id === item.chequeId) : undefined),
+    [item?.chequeId, cheques],
+  );
 
   const [rows, setRows] = useState<AllocRow[]>([]);
   const [touched, setTouched] = useState(false);
@@ -157,6 +194,7 @@ export function PaymentItemFormModal({
         fxRate: defaultFx(defaultCurrency),
         method: 'TT',
         amount: unallocated > 0 ? unallocated : undefined,
+        chequeType: 'NORMAL' as ChequeType,
       };
 
   const submit = async () => {
@@ -174,8 +212,23 @@ export function PaymentItemFormModal({
       currency: values.currency,
       fxRate: values.currency === 'USD' ? 1 : values.fxRate,
       method: values.method,
-      bankAccountId: values.method === 'TT' ? values.bankAccountId : undefined,
-      chequeId: values.method === 'Cheque' ? values.chequeId : undefined,
+      bankAccountId: accountType ? values.bankAccountId : undefined,
+      // Keep an already-attached cheque; otherwise send the details and let the server mint it
+      // as part of the same call, so a rejected line never leaves an orphan cheque behind.
+      chequeId: values.method === 'Cheque' ? item?.chequeId : undefined,
+      cheque:
+        values.method === 'Cheque' && !item?.chequeId
+          ? {
+              type: values.chequeType ?? 'NORMAL',
+              number: values.chequeNumber ?? '',
+              bankName: values.chequeBankName ?? '',
+              ownerName: values.chequeOwnerName ?? '',
+              dueDate: (values.chequeDueDate ?? values.date).toISOString(),
+              // The cheque IS this line's money — same amount, same currency, by construction.
+              amount: values.amount,
+              currency: values.currency,
+            }
+          : undefined,
       // Sending nothing lets the server auto-fill first-to-last; sending rows honours the split
       // the user adjusted.
       allocations: allocations.length ? allocations : undefined,
@@ -191,7 +244,8 @@ export function PaymentItemFormModal({
       onClose();
     } catch (e) {
       const code = e instanceof Error ? e.message : '';
-      if ((KNOWN_ERROR_CODES as readonly string[]).includes(code)) message.error(t(`payments.errors.${code}`));
+      if ((CHEQUE_ERROR_CODES as readonly string[]).includes(code)) message.error(t(`cheques.errors.${code}`));
+      else if ((KNOWN_ERROR_CODES as readonly string[]).includes(code)) message.error(t(`payments.errors.${code}`));
       else message.error(t('common.saveFailed'));
     }
   };
@@ -275,31 +329,76 @@ export function PaymentItemFormModal({
             <Select options={PAYMENT_METHODS.map((m) => ({ value: m, label: m }))} />
           </Form.Item>
 
-          {/* Method-dependent, and required server-side too — not just a UI nicety. */}
-          {method === 'TT' && (
-            <Form.Item name="bankAccountId" label={t('payments.bankAccount')} rules={[{ required: true, message: t('common.required') }]}>
+          {/* Method-dependent, and required server-side too — not just a UI nicety. TT and Cash
+              share the `bankAccountId` field but offer different account types; the server
+              rejects a mismatch, so the two lists can never be quietly interchanged. */}
+          {accountType && (
+            <Form.Item
+              name="bankAccountId"
+              label={accountType === 'BANK' ? t('payments.bankAccount') : t('payments.cashSafe')}
+              rules={[{ required: true, message: t('common.required') }]}
+            >
               <Select
                 showSearch
                 optionFilterProp="label"
-                placeholder={t('payments.pickBank')}
-                options={(banks ?? []).filter((b) => b.active).map((b) => ({ value: b.id, label: `${b.name} (${b.currency})` }))}
-              />
-            </Form.Item>
-          )}
-          {method === 'Cheque' && (
-            <Form.Item name="chequeId" label={t('payments.cheque')} rules={[{ required: true, message: t('common.required') }]}>
-              <Select
-                showSearch
-                optionFilterProp="label"
-                placeholder={t('payments.pickCheque')}
-                options={(cheques ?? []).map((c) => ({
-                  value: c.id,
-                  label: `${c.number} · ${c.bankName} · ${c.amount} ${c.currency}`,
-                }))}
+                placeholder={accountType === 'BANK' ? t('payments.pickBank') : t('payments.pickCashSafe')}
+                options={accountOptions}
+                notFoundContent={
+                  <Text type="secondary">
+                    {accountType === 'BANK' ? t('payments.noBanks') : t('payments.noCashSafes')}
+                  </Text>
+                }
               />
             </Form.Item>
           )}
         </div>
+
+        {method === 'Cheque' &&
+          (attachedCheque ? (
+            // Editing a line whose cheque already exists. The cheque is not re-created or
+            // re-picked — it is edited in the cheque register, where its status rules live.
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={t('payments.chequeAttached', {
+                number: attachedCheque.number,
+                bank: attachedCheque.bankName,
+              })}
+              description={t('payments.chequeAttachedHint')}
+            />
+          ) : (
+            <>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                {t('payments.newChequeTitle')}
+              </Text>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                {t('payments.newChequeHint')}
+              </Text>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                <Form.Item name="chequeNumber" label={t('cheques.number')} rules={[{ required: true, message: t('common.required') }]}>
+                  <Input dir="ltr" />
+                </Form.Item>
+                <Form.Item name="chequeBankName" label={t('cheques.bankName')} rules={[{ required: true, message: t('common.required') }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="chequeOwnerName" label={t('cheques.ownerName')} rules={[{ required: true, message: t('common.required') }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="chequeDueDate" label={t('cheques.dueDate')} rules={[{ required: true, message: t('common.required') }]}>
+                  <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                </Form.Item>
+                <Form.Item name="chequeType" label={t('cheques.type')} rules={[{ required: true, message: t('common.required') }]}>
+                  <Select
+                    options={(['NORMAL', 'SECURITY'] as ChequeType[]).map((v) => ({
+                      value: v,
+                      label: t(`cheques.types.${v}`),
+                    }))}
+                  />
+                </Form.Item>
+              </div>
+            </>
+          ))}
       </Form>
 
       {invoiceId ? (

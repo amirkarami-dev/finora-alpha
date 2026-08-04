@@ -3728,6 +3728,19 @@ function seedTransferChildCounters(): void {
  * revaluation allocations are all computed from ONE list. Without that, "what is in this
  * account" and "what produced the gain" would be two separate walks free to disagree.
  */
+/**
+ * Which kind of account each payment method moves money through. A method absent from this map
+ * (Offset, Credit note, Cheque) touches no account directly — a cheque reaches one only once it
+ * is PAID, and that account is named on the cheque, not on the line.
+ *
+ * Declared here, above its first use in `accountFeeds`, so the guard in `buildPaymentItem` and
+ * the balance walk can never disagree about which methods name an account.
+ */
+const ACCOUNT_TYPE_FOR_METHOD: Partial<Record<PaymentMethod, FinancialAccountType>> = {
+  TT: 'BANK',
+  Cash: 'CASH_SAFE',
+};
+
 export interface AccountFeed {
   /** Signed, in the account's own currency. Positive is money in. */
   amount: number;
@@ -3783,7 +3796,10 @@ export function accountFeeds(accountId: string): { feeds: AccountFeed[]; skipped
     if (!isSettled(p)) continue;
     for (const it of paymentItems(p)) {
       let target: string | undefined;
-      if (it.method === 'TT') target = it.bankAccountId;
+      // TT and Cash both name their account directly — the account's own `type` is what makes
+      // one a bank and the other a safe (see ACCOUNT_TYPE_FOR_METHOD), so the same field serves
+      // both and neither may be special-cased away here.
+      if (ACCOUNT_TYPE_FOR_METHOD[it.method]) target = it.bankAccountId;
       else if (it.method === 'Cheque' && it.chequeId) {
         const cheque = db.cheques.find((c) => c.id === it.chequeId);
         if (cheque?.status === 'PAID') target = cheque.bankAccountId;
@@ -4317,10 +4333,16 @@ function assertChequeNumberFree(number: string, bankName: string, excludeId?: st
   if (clash) throw new Error('duplicate-cheque-number');
 }
 
-/** Guards IN ORDER: `number-required` → `bank-name-required` → `owner-required` →
- *  `due-date-required` → `invalid-amount` → `duplicate-cheque-number`. */
-export async function createCheque(input: ChequeInput): Promise<Cheque> {
-  await delay(180);
+/**
+ * Guards IN ORDER: `number-required` → `bank-name-required` → `owner-required` →
+ * `due-date-required` → `invalid-amount` → `duplicate-cheque-number`.
+ *
+ * Pure: validates and normalises, touching nothing. Split out so the payment line's inline
+ * cheque can be checked BEFORE the rest of the line is validated, and only minted once the
+ * whole line is known to be good — otherwise a rejected line would leave an orphan cheque
+ * sitting in the register.
+ */
+function validateChequeInput(input: ChequeInput, excludeId?: string) {
   const number = input.number.trim();
   if (!number) throw new Error('number-required');
   const bankName = input.bankName.trim();
@@ -4329,21 +4351,31 @@ export async function createCheque(input: ChequeInput): Promise<Cheque> {
   if (!ownerName) throw new Error('owner-required');
   if (!input.dueDate) throw new Error('due-date-required');
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
-  assertChequeNumberFree(number, bankName);
+  assertChequeNumberFree(number, bankName, excludeId);
+  return { number, bankName, ownerName };
+}
 
+/** Mints a PENDING cheque from already-validated parts. Callers persist. */
+function mintCheque(input: ChequeInput, parts: ReturnType<typeof validateChequeInput>): Cheque {
   const cheque: Cheque = {
     id: nextChequeId(),
     type: input.type,
-    number,
-    bankName,
+    number: parts.number,
+    bankName: parts.bankName,
     dueDate: input.dueDate,
     amount: round(input.amount),
     currency: input.currency,
-    ownerName,
+    ownerName: parts.ownerName,
     status: 'PENDING',
     notes: input.notes?.trim() || undefined,
   };
   db.cheques.push(cheque);
+  return cheque;
+}
+
+export async function createCheque(input: ChequeInput): Promise<Cheque> {
+  await delay(180);
+  const cheque = mintCheque(input, validateChequeInput(input));
   persistDb();
   return cheque;
 }
@@ -4562,8 +4594,13 @@ export interface PaymentItemInput {
   currency: Currency;
   fxRate: number;
   method: PaymentMethod;
+  /** The bank account (TT) or cash safe (Cash) the money moved through. */
   bankAccountId?: string;
+  /** An EXISTING cheque, when editing a line that already has one. */
   chequeId?: string;
+  /** A NEW cheque to create with this line. Cheques are born here rather than picked, so every
+   *  cheque in the register exists because someone was paid with it. */
+  cheque?: ChequeInput;
   /** Per invoice-item split. Omitted → auto-filled from the first item down, each taking what
    *  it still owes until the line's amount runs out (the spec's "start from item 1 to end"). */
   allocations?: Array<{ invoiceItemId: string; amount: number }>;
@@ -4665,15 +4702,31 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
     fxRate = input.fxRate;
   }
 
-  if (input.method === 'TT') {
+  // TT moves money through a bank; Cash moves it through a safe. Both name an account in the
+  // SAME field — the account's own `type` says which it is — so the type must be checked here.
+  // Without it a cash line could name a bank, and the two would then be indistinguishable in
+  // every balance and report that reads `bankAccountId`.
+  const requiredAccountType = ACCOUNT_TYPE_FOR_METHOD[input.method];
+  if (requiredAccountType) {
     if (!input.bankAccountId) throw new Error('bank-account-required');
     const account = db.financialAccounts.find((a) => a.id === input.bankAccountId);
     if (!account) throw new Error('bank-account-not-found');
     if (!account.active) throw new Error('bank-account-inactive');
+    if (account.type !== requiredAccountType) throw new Error('account-type-mismatch');
   }
+
+  // A cheque line either points at an existing cheque (editing a saved line) or carries the
+  // details of a new one. Validated HERE, minted at the very bottom once the whole line has
+  // passed — see `validateChequeInput`.
+  let chequeParts: ReturnType<typeof validateChequeInput> | undefined;
   if (input.method === 'Cheque') {
-    if (!input.chequeId) throw new Error('cheque-required');
-    if (!db.cheques.some((c) => c.id === input.chequeId)) throw new Error('cheque-not-found');
+    if (input.chequeId) {
+      if (!db.cheques.some((c) => c.id === input.chequeId)) throw new Error('cheque-not-found');
+    } else if (input.cheque) {
+      chequeParts = validateChequeInput(input.cheque);
+    } else {
+      throw new Error('cheque-required');
+    }
   }
 
   const amount = round(input.amount);
@@ -4705,6 +4758,12 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
   const allocTotal = round(requested.reduce((s, a) => s + a.amount, 0));
   if (Math.abs(allocTotal - amount) > 0.005) throw new Error('allocation-mismatch');
 
+  // Everything above passed, so it is now safe to mint the inline cheque: nothing after this
+  // point can throw, and the caller persists.
+  const chequeId = chequeParts
+    ? mintCheque(input.cheque as ChequeInput, chequeParts).id
+    : input.chequeId;
+
   return {
     id: itemId,
     paymentId: payment.id,
@@ -4715,8 +4774,8 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
     fxRate,
     amountUSD,
     method: input.method,
-    bankAccountId: input.method === 'TT' ? input.bankAccountId : undefined,
-    chequeId: input.method === 'Cheque' ? input.chequeId : undefined,
+    bankAccountId: requiredAccountType ? input.bankAccountId : undefined,
+    chequeId: input.method === 'Cheque' ? chequeId : undefined,
     allocations: requested.map((a) => {
       const line = invoice.items.find((i) => i.id === a.invoiceItemId)!;
       return {
