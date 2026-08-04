@@ -1,14 +1,17 @@
-import { App, DatePicker, Form, Input, InputNumber, Modal, Typography } from 'antd';
+import { App, DatePicker, Form, Input, InputNumber, Modal, Segmented, Typography, theme } from 'antd';
+import { FallOutlined, RiseOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { useCreateExchangeGainLoss, useUpdateExchangeGainLoss } from '@/services/queries';
-import type { ExchangeGainLoss } from '@/types';
+import type { ExchangeGainLoss, ExchangeGainLossType } from '@/types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
 
 interface FormValues {
   date: Dayjs;
+  type: ExchangeGainLossType;
+  /** Always entered POSITIVE. The toggle carries the direction. */
   amount: number;
   notes?: string;
 }
@@ -20,21 +23,26 @@ interface GainLossFormModalProps {
 }
 
 /**
- * Three fields. No account, no rate, no preview.
+ * Four fields: gain-or-loss, date, amount, notes.
  *
- * Whether this is a gain or a loss is derived from the sign of the amount rather than picked
- * from a dropdown — a record labelled "gain" holding −500 would otherwise be possible, and the
- * label would then contradict the number.
+ * The user picks the direction on a toggle and types a plain positive amount — asking someone to
+ * express "a loss" by remembering to type a minus sign is a trap, and a mistyped sign would be
+ * indistinguishable from a real entry.
+ *
+ * The STORED shape is unchanged: one signed `amount`, with `type` derived from its sign
+ * server-side. Converting here rather than teaching the API about a separate `type` field keeps
+ * the two impossible to contradict — there is still only one place the direction lives.
  */
 export function GainLossFormModal({ open, onClose, record }: GainLossFormModalProps) {
   const { t } = useTranslation();
+  const { token } = theme.useToken();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const createMut = useCreateExchangeGainLoss();
   const updateMut = useUpdateExchangeGainLoss();
   const isEdit = !!record;
 
-  const amount = Form.useWatch('amount', form);
+  const type = Form.useWatch('type', form) ?? record?.type ?? 'GAIN';
 
   const submit = async () => {
     let values: FormValues;
@@ -45,7 +53,9 @@ export function GainLossFormModal({ open, onClose, record }: GainLossFormModalPr
     }
     const input = {
       date: values.date.toISOString(),
-      amount: values.amount,
+      // `Math.abs` first: if a minus ever reaches this field, LOSS must still mean a loss rather
+      // than negating into a gain.
+      amount: values.type === 'LOSS' ? -Math.abs(values.amount) : Math.abs(values.amount),
       notes: values.notes,
     };
     try {
@@ -87,10 +97,29 @@ export function GainLossFormModal({ open, onClose, record }: GainLossFormModalPr
         preserve={false}
         initialValues={
           record
-            ? { date: dayjs(record.date), amount: record.amount, notes: record.notes }
-            : { date: dayjs() }
+            ? {
+                date: dayjs(record.date),
+                type: record.type,
+                // Stored signed, shown positive — the toggle above says which way it goes.
+                amount: Math.abs(record.amount),
+                notes: record.notes,
+              }
+            : { date: dayjs(), type: 'GAIN' as ExchangeGainLossType }
         }
       >
+        <Form.Item
+          name="type"
+          label={t('exchange.typeLabel')}
+          rules={[{ required: true, message: t('common.required') }]}
+        >
+          <Segmented
+            block
+            options={[
+              { value: 'GAIN', label: t('exchange.gain'), icon: <RiseOutlined /> },
+              { value: 'LOSS', label: t('exchange.loss'), icon: <FallOutlined /> },
+            ]}
+          />
+        </Form.Item>
         <Form.Item name="date" label={t('exchange.date')} rules={[{ required: true, message: t('common.required') }]}>
           <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
         </Form.Item>
@@ -99,16 +128,14 @@ export function GainLossFormModal({ open, onClose, record }: GainLossFormModalPr
           label={t('exchange.amountLabel')}
           rules={[{ required: true, message: t('common.required') }]}
           extra={
-            <Text type="secondary">
-              {amount === undefined || amount === null || amount === 0
-                ? t('exchange.amountHint')
-                : amount > 0
-                  ? t('exchange.willBeGain')
-                  : t('exchange.willBeLoss')}
+            <Text type="secondary" style={{ color: type === 'LOSS' ? token.colorError : token.colorSuccess }}>
+              {type === 'LOSS' ? t('exchange.willBeLoss') : t('exchange.willBeGain')}
             </Text>
           }
         >
-          <InputNumber style={{ width: '100%' }} step={100} />
+          {/* min={0.01} — the sign lives on the toggle, so a negative here would be a second,
+              conflicting way to say the same thing. */}
+          <InputNumber style={{ width: '100%' }} min={0.01} step={100} />
         </Form.Item>
         <Form.Item name="notes" label={t('exchange.notes')}>
           <TextArea rows={3} maxLength={300} showCount />

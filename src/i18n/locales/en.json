@@ -1286,9 +1286,8 @@
     "editRecord": "Edit record",
     "date": "Date",
     "amountLabel": "Amount (USD)",
-    "amountHint": "Enter a positive number for a gain, or a negative one for a loss.",
-    "willBeGain": "This will be saved as a gain.",
-    "willBeLoss": "This will be saved as a loss.",
+    "willBeGain": "Saved as a gain — it raises your net.",
+    "willBeLoss": "Saved as a loss — it lowers your net.",
     "gain": "Gain",
     "loss": "Loss",
     "net": "Net",
@@ -1305,7 +1304,8 @@
       "date-required": "Date is required",
       "invalid-amount": "Enter an amount other than zero",
       "gain-loss-not-found": "That record no longer exists"
-    }
+    },
+    "typeLabel": "Gain or loss"
   },
   "develop": {
     "title": "Develop",
