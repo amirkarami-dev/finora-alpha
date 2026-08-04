@@ -194,6 +194,19 @@ export function RevaluationFormModal({ open, onClose }: RevaluationFormModalProp
                 rate" is what the balance is CARRIED at, not the rate of the transfer that
                 created it — that is what stops repeated revaluations double-counting. */}
             <Alert type="info" showIcon message={t('exchange.bookRateHint')} style={{ marginBottom: 12 }} />
+            {/* A payment line in another currency is skipped rather than converted at a rate
+                nobody chose. Say so here: this is the one screen where the balance is the whole
+                result, so a silently smaller number would be worse than no number. */}
+            {preview.unmatchedCurrencyCount > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                // `n`, not `count`: `count` triggers i18next plural resolution, and Arabic has six
+                // plural forms to keep in sync for a message that reads fine as one sentence.
+                message={t('exchange.skippedCurrencyLines', { n: preview.unmatchedCurrencyCount })}
+                style={{ marginBottom: 12 }}
+              />
+            )}
           </>
         )}
 

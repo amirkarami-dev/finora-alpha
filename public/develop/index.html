@@ -27,19 +27,20 @@
     was checked by running the code or by opening the page in a browser — not by reading it.
   </p>
 
+  <!-- The four numbers, the bar and the sentence below are all counted from the cards on this
+       page when it loads. Typed by hand they drifted out of step with the list, which is the one
+       mistake a status page must not make. -->
   <section class="grid k4" style="margin-bottom:8px">
-    <div class="card stat"><div class="l">Work items</div><div class="n">31</div></div>
-    <div class="card stat"><div class="l">Done</div><div class="n" style="color:var(--ok)">27</div></div>
-    <div class="card stat"><div class="l">Partly done</div><div class="n" style="color:var(--warn)">2</div></div>
-    <div class="card stat"><div class="l">Open</div><div class="n" style="color:var(--text-dim)">2</div></div>
+    <div class="card stat"><div class="l">Work items</div><div class="n" id="n-all">—</div></div>
+    <div class="card stat"><div class="l">Done</div><div class="n" style="color:var(--ok)" id="n-done">—</div></div>
+    <div class="card stat"><div class="l">Partly done</div><div class="n" style="color:var(--warn)" id="n-partial">—</div></div>
+    <div class="card stat"><div class="l">Open</div><div class="n" style="color:var(--text-dim)" id="n-open">—</div></div>
   </section>
 
   <div class="card" style="margin-bottom:26px">
     <strong>Overall progress</strong>
-    <div class="bar"><i style="width:87%"></i></div>
-    <p style="margin:8px 0 0;color:var(--text-dim);font-size:13px">
-      27 of 31 finished. The 4 remaining items are small and none of them block daily use.
-    </p>
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+    <p style="margin:8px 0 0;color:var(--text-dim);font-size:13px" id="progress-note"></p>
   </div>
 
   <div class="filters" id="filters">
@@ -119,16 +120,18 @@
       <span class="badge b-done">Done</span>
     </div>
 
-    <div class="task" data-s="partial">
+    <div class="task" data-s="done">
       <div>
-        <h4>Account balances count transfers only</h4>
-        <p>A bank or cash safe balance is built from confirmed transfers. Payments also name a
-        bank account, but they are not counted in the balance yet. Adding them needs a rule for
-        which direction the money moves. This is written down rather than hidden, so no number
-        looks right for the wrong reason.</p>
-        <div class="meta"><span class="chip">Finance</span><span class="chip">Needs a decision</span></div>
+        <h4>Account balances count transfers and payments</h4>
+        <p>A bank or cash safe balance is built from confirmed transfers <em>and</em> from
+        confirmed payment lines that name that account. The direction comes from the invoice on
+        the line: money from a sale comes in, money for a purchase goes out. A bank transfer
+        counts at once; a cheque counts only after you mark it paid. A line in another currency is
+        skipped, never converted at a rate nobody chose, and the revaluation screen warns you how
+        many were left out.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Checked by running it</span></div>
       </div>
-      <span class="badge b-partial">Partly done</span>
+      <span class="badge b-done">Done</span>
     </div>
 
     <div class="task" data-s="done">
@@ -481,6 +484,19 @@
 </main>
 
 <script>
+  // Count the cards, then write the summary. Never the other way round.
+  var tasks = document.querySelectorAll('.task');
+  var tally = { all: tasks.length, done: 0, partial: 0, open: 0 };
+  Array.prototype.forEach.call(tasks, function (t) { tally[t.dataset.s] += 1; });
+  Object.keys(tally).forEach(function (k) { document.getElementById('n-' + k).textContent = tally[k]; });
+  var pct = tally.all ? Math.round((tally.done / tally.all) * 100) : 0;
+  document.getElementById('bar').style.width = pct + '%';
+  var left = tally.all - tally.done;
+  document.getElementById('progress-note').textContent =
+    tally.done + ' of ' + tally.all + ' finished. The ' + left +
+    ' remaining ' + (left === 1 ? 'item is' : 'items are') +
+    ' small and none of them block daily use.';
+
   // Simple filter. No framework: this page is served as a plain file.
   var wrap = document.getElementById('filters');
   wrap.addEventListener('click', function (e) {

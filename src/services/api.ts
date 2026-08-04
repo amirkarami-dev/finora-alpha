@@ -3725,18 +3725,103 @@ function seedTransferChildCounters(): void {
 }
 
 /**
+ * One movement of money into or out of a company account.
+ *
+ * Transfers and settled payments both produce these, so the balance, the book rate and the
+ * revaluation allocations are all computed from ONE list. Without that, "what is in this
+ * account" and "what produced the gain" would be two separate walks free to disagree.
+ */
+export interface AccountFeed {
+  /** Signed, in the account's own currency. Positive is money in. */
+  amount: number;
+  /** Signed, in USD, at the rate the movement actually used. */
+  baseUSD: number;
+  source: 'TRANSFER' | 'PAYMENT';
+  moneyTransferId?: string;
+  /** Payment feeds carry these, which is what lets a gain trace back to a person (spec §13). */
+  paymentId?: string;
+  invoiceId?: string;
+  invoiceItemId?: string;
+}
+
+/**
+ * Every confirmed movement touching one account.
+ *
+ * TRANSFERS move money the moment they are confirmed.
+ *
+ * PAYMENTS move money per settlement line, and only when the line actually reached an account:
+ *   • TT      — the line names the bank directly.
+ *   • Cheque  — the account comes from the cheque, and ONLY once it is PAID. A pending cheque
+ *               is a promise, not money in the bank.
+ *   • Cash / Offset / Credit note — no account is named, so they touch no balance.
+ *
+ * DIRECTION is taken from the line's own invoice, not the payment header: a SALE invoice is
+ * money coming in, a PURCHASE invoice is money going out. Per line, because one payment may
+ * settle documents on either side.
+ *
+ * A line whose currency differs from the account's is SKIPPED rather than converted. Putting
+ * dollars into a dirham account is a currency exchange, and this module keeps exchange as its
+ * own concept — silently converting here at a rate nobody chose would produce a balance that
+ * looks authoritative and is not. `unmatchedCurrencyCount` on the balance surfaces it.
+ */
+export function accountFeeds(accountId: string): { feeds: AccountFeed[]; skippedCurrency: number } {
+  const account = db.financialAccounts.find((a) => a.id === accountId);
+  const currency: Currency = account?.currency ?? 'USD';
+  const feeds: AccountFeed[] = [];
+  let skippedCurrency = 0;
+
+  for (const tr of db.moneyTransfers) {
+    if (tr.status !== 'CONFIRMED') continue;
+    if (tr.fromAccountId === accountId) {
+      feeds.push({ amount: -tr.fromAmount, baseUSD: -tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
+    }
+    if (tr.toAccountId === accountId) {
+      // The receiving side is worth exactly what the sending side gave up — that is what makes
+      // the implied book rate come out as the transfer's own rate.
+      feeds.push({ amount: tr.toAmount, baseUSD: tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
+    }
+  }
+
+  for (const p of db.payments) {
+    if (!isSettled(p)) continue;
+    for (const it of paymentItems(p)) {
+      let target: string | undefined;
+      if (it.method === 'TT') target = it.bankAccountId;
+      else if (it.method === 'Cheque' && it.chequeId) {
+        const cheque = db.cheques.find((c) => c.id === it.chequeId);
+        if (cheque?.status === 'PAID') target = cheque.bankAccountId;
+      }
+      if (target !== accountId) continue;
+      if (it.currency !== currency) {
+        skippedCurrency += 1;
+        continue;
+      }
+      const invoice = findInvoice(it.invoiceId);
+      const sign = invoice && invoiceSide(invoice.invoiceType) === 'PURCHASE' ? -1 : 1;
+      feeds.push({
+        amount: sign * it.amount,
+        baseUSD: sign * it.amountUSD,
+        source: 'PAYMENT',
+        paymentId: p.id,
+        invoiceId: it.invoiceId,
+        // Carried through when the line settles exactly one item, so the chain to a contract
+        // and a person survives. Never guessed when several items share the line.
+        invoiceItemId: it.allocations.length === 1 ? it.allocations[0].invoiceItemId : undefined,
+      });
+    }
+  }
+
+  return { feeds, skippedCurrency };
+}
+
+/**
  * An account's balance IN ITS OWN CURRENCY, and its carrying value in USD.
  *
- * Both come from CONFIRMED transfers only — a draft or cancelled transfer has not moved money.
- * `baseUSD` additionally absorbs every confirmed revaluation's gain/loss, and that is the
- * mechanism that satisfies spec §16: after a revaluation books +3.33, the carrying value is
- * 103.33, so the NEXT revaluation measures from 103.33 rather than from the original 100 and
- * cannot count the same 3.33 twice.
- *
- * NOTE: payments are deliberately NOT included. A TT or cleared cheque names a bank account,
- * but the spec models account balances as transfer-driven, and folding settlements in would
- * need a direction convention this module has no stake in. Stated here rather than left for
- * someone to discover from a number that looks wrong.
+ * Built from confirmed transfers and settled payment lines (see `accountFeeds`). `baseUSD`
+ * additionally absorbs every confirmed revaluation's gain/loss, and that is the mechanism that
+ * satisfies spec §16: after a revaluation books +3.33, the carrying value is 103.33, so the NEXT
+ * revaluation measures from 103.33 rather than from the original 100 and cannot count the same
+ * 3.33 twice.
  */
 export interface AccountBalance {
   accountId: string;
@@ -3748,26 +3833,19 @@ export interface AccountBalance {
   /** balance / baseUSD — the rate the balance is currently on the books at. `undefined` when
    *  either side is zero, since no meaningful rate exists yet. */
   bookRate?: number;
+  /** Settlement lines that named this account but were recorded in another currency, so they
+   *  were left out. Surfaced rather than hidden — a silent omission looks like a wrong balance. */
+  unmatchedCurrencyCount: number;
 }
 
 export function computeAccountBalance(accountId: string): AccountBalance {
   const account = db.financialAccounts.find((a) => a.id === accountId);
   const currency: Currency = account?.currency ?? 'USD';
-  let balance = 0;
-  let baseUSD = 0;
-  for (const tr of db.moneyTransfers) {
-    if (tr.status !== 'CONFIRMED') continue;
-    if (tr.fromAccountId === accountId) {
-      balance -= tr.fromAmount;
-      baseUSD -= tr.baseAmount;
-    }
-    if (tr.toAccountId === accountId) {
-      balance += tr.toAmount;
-      // The receiving side is worth exactly what the sending side gave up — that is what makes
-      // the implied book rate come out as the transfer's own rate.
-      baseUSD += tr.baseAmount;
-    }
-  }
+  const { feeds, skippedCurrency } = accountFeeds(accountId);
+
+  let balance = feeds.reduce((s, f) => s + f.amount, 0);
+  let baseUSD = feeds.reduce((s, f) => s + f.baseUSD, 0);
+
   for (const rv of db.exchangeRevaluations) {
     if (rv.status !== 'CONFIRMED' || rv.accountId !== accountId) continue;
     baseUSD += rv.gainLossAmount;
@@ -3775,7 +3853,7 @@ export function computeAccountBalance(accountId: string): AccountBalance {
   balance = round(balance);
   baseUSD = round(baseUSD);
   const bookRate = balance !== 0 && baseUSD !== 0 ? round4(balance / baseUSD) : undefined;
-  return { accountId, currency, balance, baseUSD, bookRate };
+  return { accountId, currency, balance, baseUSD, bookRate, unmatchedCurrencyCount: skippedCurrency };
 }
 
 /** 4dp, for rates. Money stays on `round`, quantities on `round3`. */
@@ -3937,6 +4015,13 @@ export async function getMoneyTransfers(status?: TransferStatus): Promise<MoneyT
 
 /* ----------------------------- Revaluation ----------------------------- */
 
+/** A transfer's invoice, but only when it points at exactly one — with several, no single
+ *  invoice can honestly be named as the source. */
+function transferSingleInvoice(transferId: string): string | undefined {
+  const tr = db.moneyTransfers.find((t) => t.id === transferId);
+  return tr && tr.allocations.length === 1 ? tr.allocations[0].invoiceId : undefined;
+}
+
 function nextRevaluationId(): string {
   let max = 0;
   for (const rv of db.exchangeRevaluations) {
@@ -3959,6 +4044,10 @@ export interface RevaluationPreview {
   type: ExchangeGainLossType;
   /** Transfers that fed this account, so the confirm screen can show what is being revalued. */
   sourceTransferIds: string[];
+  /** Payments that fed it. A balance may be built from either, or both. */
+  sourcePaymentIds: string[];
+  /** Settlement lines naming this account in another currency, left out of the balance. */
+  unmatchedCurrencyCount: number;
 }
 
 /**
@@ -3975,9 +4064,10 @@ export async function previewRevaluation(accountId: string, newRate: number): Pr
   if (account.currency === 'USD') throw new Error('base-currency-account');
   if (!Number.isFinite(newRate) || newRate <= 0) throw new Error('invalid-rate');
 
-  const { balance, baseUSD, bookRate } = computeAccountBalance(accountId);
+  const { balance, baseUSD, bookRate, unmatchedCurrencyCount } = computeAccountBalance(accountId);
   if (balance <= 0) throw new Error('no-balance');
 
+  const inflows = accountFeeds(accountId).feeds.filter((f) => f.baseUSD > 0);
   const newBaseAmount = round(balance / newRate);
   const gainLossAmount = round(newBaseAmount - baseUSD);
   return {
@@ -3991,9 +4081,9 @@ export async function previewRevaluation(accountId: string, newRate: number): Pr
     newBaseAmount,
     gainLossAmount,
     type: gainLossAmount >= 0 ? 'GAIN' : 'LOSS',
-    sourceTransferIds: db.moneyTransfers
-      .filter((t) => t.status === 'CONFIRMED' && t.toAccountId === accountId)
-      .map((t) => t.id),
+    sourceTransferIds: [...new Set(inflows.map((f) => f.moneyTransferId).filter(Boolean) as string[])],
+    sourcePaymentIds: [...new Set(inflows.map((f) => f.paymentId).filter(Boolean) as string[])],
+    unmatchedCurrencyCount,
   };
 }
 
@@ -4008,11 +4098,11 @@ export interface RevaluationInput {
 /**
  * Creates a DRAFT revaluation from the same figures `previewRevaluation` showed.
  *
- * Allocations are derived, not asked for: the gain is split across the confirmed transfers that
- * fed this account, in proportion to what each contributed. That is spec §11's "allocated
- * proportionally", and it means traceability exists without forcing the user to enter it. An
- * account funded by nothing traceable simply gets no allocations, which spec §9 requires to
- * stay valid.
+ * Allocations are derived, not asked for: the gain is split across the money that fed this
+ * account — confirmed transfers and settled payment lines alike — in proportion to what each
+ * contributed. That is spec §11's "allocated proportionally", and it means traceability exists
+ * without forcing the user to enter it. An account funded by nothing traceable simply gets no
+ * allocations, which spec §9 requires to stay valid.
  */
 export async function createRevaluation(input: RevaluationInput): Promise<ExchangeRevaluation> {
   await delay(220);
@@ -4021,26 +4111,29 @@ export async function createRevaluation(input: RevaluationInput): Promise<Exchan
 
   seedTransferChildCounters();
   const id = nextRevaluationId();
-  const feeding = db.moneyTransfers.filter(
-    (t) => t.status === 'CONFIRMED' && t.toAccountId === input.accountId,
-  );
-  const feedTotal = round(feeding.reduce((s, t) => s + t.baseAmount, 0));
+  // Inflows only. What is held came from money that arrived; an outflow reduced the balance and
+  // has no share of the gain sitting on what remains.
+  const inflows = accountFeeds(input.accountId).feeds.filter((f) => f.baseUSD > 0);
+  const feedTotal = round(inflows.reduce((s, f) => s + f.baseUSD, 0));
 
   const allocations = feedTotal > 0
-    ? feeding.map((t) => {
+    ? inflows.map((f) => {
         revalAllocSeq += 1;
-        const share = t.baseAmount / feedTotal;
+        const share = f.baseUSD / feedTotal;
         const original = round(preview.oldBaseAmount * share);
         const revalued = round(preview.newBaseAmount * share);
         return {
           id: `revalloc-${revalAllocSeq}`,
           revaluationId: id,
-          moneyTransferId: t.id,
-          // Carried through from the transfer's own allocation when it has exactly one, so the
-          // chain back to an invoice survives. Never copied wholesale — spec §14 forbids
-          // duplicating source data into the gain/loss record.
-          invoiceId: t.allocations.length === 1 ? t.allocations[0].invoiceId : undefined,
-          invoiceItemId: t.allocations.length === 1 ? t.allocations[0].invoiceItemId : undefined,
+          moneyTransferId: f.moneyTransferId,
+          paymentId: f.paymentId,
+          // References, never copies — spec §14 forbids duplicating source data into the
+          // gain/loss record. A payment feed carries its invoice, which is what completes the
+          // chain to a contract and a person (spec §13).
+          invoiceId:
+            f.invoiceId ??
+            (f.moneyTransferId ? transferSingleInvoice(f.moneyTransferId) : undefined),
+          invoiceItemId: f.invoiceItemId,
           originalBaseAmount: original,
           revaluedBaseAmount: revalued,
           gainLossAmount: round(revalued - original),

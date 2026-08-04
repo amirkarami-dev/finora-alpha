@@ -335,22 +335,32 @@ Exchange gain           +$3.33</code></pre>
     <ul>
       <li><strong>Revaluations</strong> — open drafts. The full calculation is shown before you
       confirm.</li>
-      <li><strong>History</strong> — confirmed and cancelled records, with their source transfers
-      on an expandable row.</li>
+      <li><strong>History</strong> — confirmed and cancelled records. Open a row to see what funded
+      the balance: each line names the transfer or the payment it came from.</li>
       <li><strong>Reports</strong> — gain and loss grouped by person, contract, invoice, currency
       or account.</li>
     </ul>
 
     <h3>Tracing a gain back</h3>
-    <p>Where a link exists, the app follows the chain from the gain back to the transfer, the
-    invoice, the contract and the person. Where no link exists — a plain cash safe, for example —
-    the person and contract reports simply stay empty. That is correct: such a gain genuinely has
-    no person behind it, and inventing an "unknown" row would be misleading.</p>
+    <p>Where a link exists, the app follows the chain from the gain back to the money that funded
+    the account — a transfer or a payment — and on to the invoice, the contract and the person.
+    Where no link exists — a plain cash safe, for example — the person and contract reports simply
+    stay empty. That is correct: such a gain genuinely has no person behind it, and inventing an
+    "unknown" row would be misleading.</p>
 
     <div class="callout">
       <strong>What counts towards an account balance</strong>
-      <p>Confirmed transfers, plus gains already booked. Payments name a bank account too, but are
-      not yet included. This is a known limit, written down on purpose.</p>
+      <p>Three things: confirmed transfers, confirmed payment lines that name the account, and
+      gains already booked.</p>
+      <p>A payment line is money <strong>in</strong> when its invoice is a sale and money
+      <strong>out</strong> when its invoice is a purchase. The direction is read per line, not per
+      payment, so one payment may settle both sides. A bank transfer line counts as soon as the
+      payment is confirmed; a cheque line counts only once the cheque is marked paid, because
+      before that the money is not in the bank. Cash, offset and credit-note lines name no account,
+      so they change no balance.</p>
+      <p>A line in a currency other than the account's own is <strong>skipped, not converted</strong>
+      — converting at a rate nobody chose would look right and be wrong. The revaluation screen
+      warns you how many lines were left out, so nothing goes missing quietly.</p>
     </div>
 
     <h3>Realized and unrealized</h3>

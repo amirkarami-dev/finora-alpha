@@ -311,7 +311,9 @@ export interface ExchangeRevaluation {
 export interface ExchangeRevaluationAllocation {
   id: string;              // 'revalloc-<n>'
   revaluationId: string;
+  /** The money that fed the account: a transfer OR a payment, never both. */
   moneyTransferId?: string;
+  paymentId?: string;
   invoiceId?: string;
   invoiceItemId?: string;
   originalBaseAmount: number;

@@ -236,7 +236,24 @@ export default function ExchangeGainLossPage() {
                   pagination={false}
                   dataSource={r.allocations}
                   columns={[
-                    { title: t('exchange.sourceTransfer'), dataIndex: 'moneyTransferId', render: (v?: string) => v ?? '—' },
+                    {
+                      // One column, not two: a balance is fed by a transfer OR a payment, so a
+                      // separate "From transfer" column would read "—" on every payment-funded
+                      // gain and look like missing data rather than a different source.
+                      title: t('exchange.fundedBy'),
+                      key: 'source',
+                      render: (_, a) =>
+                        a.moneyTransferId || a.paymentId ? (
+                          <Space size={4}>
+                            <Tag>
+                              {a.moneyTransferId ? t('exchange.sourceTransfer') : t('exchange.sourcePayment')}
+                            </Tag>
+                            <span dir="ltr">{a.moneyTransferId ?? a.paymentId}</span>
+                          </Space>
+                        ) : (
+                          '—'
+                        ),
+                    },
                     { title: t('exchange.sourceInvoice'), dataIndex: 'invoiceId', render: (v?: string) => v ?? '—' },
                     {
                       title: t('exchange.previousBase'),
