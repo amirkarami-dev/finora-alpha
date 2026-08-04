@@ -318,7 +318,9 @@
     "goodInUseBody": "{{product}} on this container is referenced by invoice(s) {{invoices}}. Unlink it from those invoices first.",
     "grossWeight": "Gross weight (kg)",
     "netWeight": "Net weight (kg)",
-    "totalQty": "Total (MT)"
+    "totalQty": "Total (MT)",
+    "pickGood": "Choose goods from a contract",
+    "noShippableGoods": "No goods left to ship. Every active contract line is fully shipped."
   },
   "invoices": {
     "amount": "Amount",

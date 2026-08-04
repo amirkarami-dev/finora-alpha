@@ -80,6 +80,43 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
     };
   }, [open, contracts]);
 
+  /**
+   * Goods lines this container ALREADY carries. Always offered, even when nothing is left on
+   * them — the shipment that used them up is this one. Without this, opening a saved container
+   * for edit would find no matching option and show a raw id where the product name belongs.
+   */
+  const alreadyOnContainer = useMemo(
+    () => new Set((container?.goods ?? []).map((g) => g.contractItemId)),
+    [container],
+  );
+
+  /**
+   * What the goods picker offers, grouped by contract.
+   *
+   * The grouping is not decoration: a container carries one contract's goods LINE, and two
+   * contracts can both sell "Copper Cathode", so the contract is what tells them apart.
+   *
+   * The filtering is the point. Unfiltered, this listed every contract ever created — closed
+   * ones included — and every goods line, including the ones with nothing left to ship. On the
+   * sample dataset that is 49 contracts and 120 lines of which 65 are unusable, which is why it
+   * read as a list of contracts rather than a list of goods.
+   */
+  const goodsGroups = useMemo(
+    () =>
+      (contracts ?? [])
+        .map((c) => ({
+          contract: c,
+          items: c.items.filter((i) => {
+            if (alreadyOnContainer.has(i.id)) return true;
+            // A closed or on-hold contract is not something you ship against today.
+            if (c.status !== 'ACTIVE') return false;
+            return (remainingByItem.get(i.id) ?? i.remainingMt) > 0;
+          }),
+        }))
+        .filter((g) => g.items.length > 0),
+    [contracts, remainingByItem, alreadyOnContainer],
+  );
+
   const initialValues: Partial<ContainerFormValues> = container
     ? {
         reference: container.reference,
@@ -262,11 +299,21 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
                         showSearch
                         optionFilterProp="label"
                         optionLabelProp="label"
-                        placeholder={t('containers.goods')}
+                        placeholder={t('containers.pickGood')}
+                        notFoundContent={
+                          <Text type="secondary">{t('containers.noShippableGoods')}</Text>
+                        }
                       >
-                        {(contracts ?? []).map((c) => (
-                          <Select.OptGroup key={c.id} label={`${c.id} · ${c.customerName}`}>
-                            {c.items.map((i) => (
+                        {goodsGroups.map(({ contract: c, items }) => (
+                          <Select.OptGroup
+                            key={c.id}
+                            label={`${
+                              c.contractType === 'PURCHASE'
+                                ? t('contracts.typePurchase')
+                                : t('contracts.typeSell')
+                            } · ${c.id} · ${c.customerName}`}
+                          >
+                            {items.map((i) => (
                               <Select.Option key={i.id} value={i.id} label={i.product}>
                                 <div>
                                   <div>{i.product}</div>
