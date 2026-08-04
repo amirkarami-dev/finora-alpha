@@ -4044,6 +4044,10 @@ function paymentLineSign(payment: Payment, item: PaymentItem): 1 | -1 {
 }
 
 export interface AccountFeed {
+  /** When the money actually moved — the transfer's date, or the settlement line's. */
+  date: string;
+  /** A label for the movement: the transfer number or the invoice number. */
+  reference: string;
   /** Signed, in the account's own currency. Positive is money in. */
   amount: number;
   /** Signed, in USD, at the rate the movement actually used. */
@@ -4085,12 +4089,12 @@ export function accountFeeds(accountId: string): { feeds: AccountFeed[]; skipped
   for (const tr of db.moneyTransfers) {
     if (tr.status !== 'CONFIRMED') continue;
     if (tr.fromAccountId === accountId) {
-      feeds.push({ amount: -tr.fromAmount, baseUSD: -tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
+      feeds.push({ date: tr.date, reference: tr.number, amount: -tr.fromAmount, baseUSD: -tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
     }
     if (tr.toAccountId === accountId) {
       // The receiving side is worth exactly what the sending side gave up — that is what makes
       // the implied book rate come out as the transfer's own rate.
-      feeds.push({ amount: tr.toAmount, baseUSD: tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
+      feeds.push({ date: tr.date, reference: tr.number, amount: tr.toAmount, baseUSD: tr.baseAmount, source: 'TRANSFER', moneyTransferId: tr.id });
     }
   }
 
@@ -4112,7 +4116,10 @@ export function accountFeeds(accountId: string): { feeds: AccountFeed[]; skipped
         continue;
       }
       const sign = paymentLineSign(p, it);
+      const feedInvoice = it.invoiceId ? findInvoice(it.invoiceId) : undefined;
       feeds.push({
+        date: it.date,
+        reference: feedInvoice?.invoiceNumber ?? p.reference ?? p.id,
         amount: sign * it.amount,
         baseUSD: sign * it.amountUSD,
         source: 'PAYMENT',
@@ -4317,6 +4324,272 @@ export async function getMoneyTransfers(status?: TransferStatus): Promise<MoneyT
 }
 
 
+
+/* --------------------------------- Reports -------------------------------- *
+ * Four movement reports. Each takes a date window and returns opening → movements → closing,
+ * so a figure can always be explained by the rows under it rather than merely asserted.
+ *
+ * The window is applied to the MOVEMENTS; the opening balance is everything before it. That is
+ * what makes the three numbers add up: opening + Σ movements === closing, always.
+ * -------------------------------------------------------------------------- */
+
+export interface DateRange {
+  /** ISO date; inclusive. Omit for "since the beginning". */
+  from?: string;
+  /** ISO date; inclusive to the END of that day. Omit for "up to now". */
+  to?: string;
+}
+
+/** Inclusive on both ends — a user picking 1–31 March means the whole of March. */
+function inRange(date: string, range: DateRange): boolean {
+  const d = dayjs(date);
+  if (range.from && d.isBefore(dayjs(range.from), 'day')) return false;
+  if (range.to && d.isAfter(dayjs(range.to), 'day')) return false;
+  return true;
+}
+
+function isBeforeRange(date: string, range: DateRange): boolean {
+  return !!range.from && dayjs(date).isBefore(dayjs(range.from), 'day');
+}
+
+export interface AccountMovementRow {
+  /** Stable per account. Nothing on a movement is unique by itself — one transfer can touch the
+   *  same account twice on the same day with the same reference — so position completes it.
+   *  Minted here rather than in the UI so a table can key on a field instead of a row index. */
+  id: string;
+  date: string;
+  reference: string;
+  source: 'TRANSFER' | 'PAYMENT';
+  amount: number;
+  baseUSD: number;
+  running: number;
+}
+
+export interface AccountMovementBlock {
+  accountId: string;
+  accountName: string;
+  accountType: FinancialAccountType;
+  currency: Currency;
+  opening: number;
+  closing: number;
+  totalIn: number;
+  totalOut: number;
+  rows: AccountMovementRow[];
+  /** Lines that named this account in another currency and were left out. */
+  skippedCurrency: number;
+}
+
+/** Report (a): balance and movement of banks and cash safes. */
+export async function getAccountMovementReport(range: DateRange = {}): Promise<AccountMovementBlock[]> {
+  await delay(220);
+  return db.financialAccounts.map((account) => {
+    const { feeds, skippedCurrency } = accountFeeds(account.id);
+    const sorted = [...feeds].sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf());
+
+    let opening = 0;
+    const rows: AccountMovementRow[] = [];
+    let totalIn = 0;
+    let totalOut = 0;
+    for (const f of sorted) {
+      if (isBeforeRange(f.date, range)) {
+        opening = round(opening + f.amount);
+        continue;
+      }
+      if (!inRange(f.date, range)) continue;
+      if (f.amount >= 0) totalIn = round(totalIn + f.amount);
+      else totalOut = round(totalOut + Math.abs(f.amount));
+      rows.push({
+        id: `${account.id}-mv-${rows.length}`,
+        date: f.date,
+        reference: f.reference,
+        source: f.source,
+        amount: f.amount,
+        baseUSD: f.baseUSD,
+        running: 0,
+      });
+    }
+    let running = opening;
+    for (const r of rows) {
+      running = round(running + r.amount);
+      r.running = running;
+    }
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      accountType: account.type,
+      currency: account.currency,
+      opening,
+      closing: running,
+      totalIn,
+      totalOut,
+      rows,
+      skippedCurrency,
+    };
+  });
+}
+
+export interface ExpenseLineRow {
+  docId: string;
+  docTitle: string;
+  lineId: string;
+  date: string;
+  direction: ChargeDirection;
+  categoryName: string;
+  costCentreName?: string;
+  personName?: string;
+  invoiceNumber?: string;
+  description?: string;
+  amount: number;
+  currency: Currency;
+  amountUSD: number;
+}
+
+export interface ExpenseReport {
+  rows: ExpenseLineRow[];
+  totalUSD: number;
+  byCategory: Array<{ key: string; label: string; totalUSD: number }>;
+  byCostCentre: Array<{ key: string; label: string; totalUSD: number }>;
+}
+
+/**
+ * Report (c): expense movement and totals.
+ *
+ * One row per charge LINE, not per document: a document is a container, and its lines are what
+ * carry a category, a cost centre and a person. Cancelled documents are excluded — they are not
+ * spend.
+ */
+export async function getExpenseReport(
+  range: DateRange = {},
+  direction: ChargeDirection = 'EXPENSE',
+): Promise<ExpenseReport> {
+  await delay(220);
+  const categoryName = (id: string) => db.chargeCategories.find((c) => c.id === id)?.name ?? id;
+  const centreName = (id?: string) =>
+    id ? (db.costCentres.find((c) => c.id === id)?.name ?? id) : undefined;
+
+  const rows: ExpenseLineRow[] = [];
+  for (const doc of db.chargeDocs) {
+    if (doc.direction !== direction || doc.status === 'CANCELLED') continue;
+    const invoice = doc.invoiceId ? findInvoice(doc.invoiceId) : undefined;
+    for (const line of doc.lines) {
+      if (!inRange(line.date, range)) continue;
+      rows.push({
+        docId: doc.id,
+        docTitle: doc.title,
+        lineId: line.id,
+        date: line.date,
+        direction: doc.direction,
+        categoryName: categoryName(line.categoryId),
+        costCentreName: centreName(line.costCentreId),
+        personName: line.personId ? customerById.get(line.personId)?.name : undefined,
+        invoiceNumber: invoice?.invoiceNumber,
+        description: line.description,
+        amount: line.amount,
+        currency: line.currency,
+        amountUSD: line.amountUSD,
+      });
+    }
+  }
+  rows.sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf());
+
+  const group = (pick: (r: ExpenseLineRow) => string | undefined, fallback: string) => {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const key = pick(r) ?? fallback;
+      map.set(key, round((map.get(key) ?? 0) + r.amountUSD));
+    }
+    return [...map.entries()]
+      .map(([key, totalUSD]) => ({ key, label: key, totalUSD }))
+      .sort((a, b) => b.totalUSD - a.totalUSD);
+  };
+
+  return {
+    rows,
+    totalUSD: round(rows.reduce((s, r) => s + r.amountUSD, 0)),
+    // The fallback keys are '—' rather than an invented bucket name: a line genuinely without a
+    // cost centre should look unassigned, not like it belongs somewhere.
+    byCategory: group((r) => r.categoryName, '—'),
+    byCostCentre: group((r) => r.costCentreName, '—'),
+  };
+}
+
+export interface TradeDetailRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  side: InvoiceSide;
+  date: string;
+  personName: string;
+  itemId: string;
+  product: string;
+  quantityMt: number;
+  /** DERIVED `amount / quantityMt`. `InvoiceItem` stores the pricing inputs (LME, percent,
+   *  premium, discount) and the line total, not a unit price — deriving it from the two ends
+   *  keeps it consistent with whatever the line actually came to. */
+  unitPrice: number;
+  amount: number;
+  currency: Currency;
+  amountUSD: number;
+  containerReference?: string;
+}
+
+export interface TradeDetailReport {
+  rows: TradeDetailRow[];
+  saleUSD: number;
+  purchaseUSD: number;
+  saleMt: number;
+  purchaseMt: number;
+}
+
+/**
+ * Report (d): purchases and sales in full detail — one row per invoice ITEM.
+ *
+ * Uses the same deepest-CONFIRMED-per-chain universe as the person ledger, so a provisional and
+ * the final it became are never both counted.
+ */
+export async function getTradeDetailReport(range: DateRange = {}): Promise<TradeDetailReport> {
+  await delay(240);
+  const containerRef = (id?: string) =>
+    id ? db.containers.find((c) => c.id === id)?.reference : undefined;
+
+  const rows: TradeDetailRow[] = [];
+  for (const side of ['SALE', 'PURCHASE'] as InvoiceSide[]) {
+    for (const inv of deepestConfirmedDocs(side)) {
+      if (!inRange(inv.invoiceDate, range)) continue;
+      const rate = Number.isFinite(inv.exchangeRate) && inv.exchangeRate > 0 ? inv.exchangeRate : 1;
+      for (const item of inv.items) {
+        rows.push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          invoiceType: inv.invoiceType,
+          side,
+          date: inv.invoiceDate,
+          personName: customerById.get(inv.customerId)?.name ?? '—',
+          itemId: item.id,
+          product: item.product,
+          quantityMt: item.quantityMt,
+          unitPrice: item.quantityMt > 0 ? round(item.amount / item.quantityMt) : 0,
+          amount: item.amount,
+          currency: inv.currency,
+          amountUSD: inv.currency === 'USD' ? round(item.amount) : round(item.amount / rate),
+          containerReference: containerRef(item.containerId),
+        });
+      }
+    }
+  }
+  rows.sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+
+  const sum = (s: InvoiceSide, pick: (r: TradeDetailRow) => number) =>
+    rows.filter((r) => r.side === s).reduce((acc, r) => acc + pick(r), 0);
+
+  return {
+    rows,
+    saleUSD: round(sum('SALE', (r) => r.amountUSD)),
+    purchaseUSD: round(sum('PURCHASE', (r) => r.amountUSD)),
+    saleMt: round3(sum('SALE', (r) => r.quantityMt)),
+    purchaseMt: round3(sum('PURCHASE', (r) => r.quantityMt)),
+  };
+}
 
 /* --------------------------- Exchange gain / loss -------------------------- *
  * A plain record of a gain or a loss: date, amount, notes. Nothing else.

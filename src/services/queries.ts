@@ -70,6 +70,14 @@ export const qk = {
   moneyTransfers: (status?: TransferStatus) => ['moneyTransfers', status ?? 'all'] as const,
   exchangeGainLosses: ['exchangeGainLosses'] as const,
   gainLossTotals: ['gainLossTotals'] as const,
+  // The range is part of the key, so changing the window refetches instead of showing the
+  // previous window's rows under new dates.
+  accountMovementReport: (range: api.DateRange) =>
+    ['accountMovementReport', range.from ?? '', range.to ?? ''] as const,
+  expenseReport: (range: api.DateRange, direction: string) =>
+    ['expenseReport', direction, range.from ?? '', range.to ?? ''] as const,
+  tradeDetailReport: (range: api.DateRange) =>
+    ['tradeDetailReport', range.from ?? '', range.to ?? ''] as const,
   // ---- Cost centres (spec §5) ----
   costCentres: ['costCentres'] as const,
   // ---- Charge categories (design spec §4-§5) ----
@@ -669,6 +677,23 @@ export const useSetGoodActive = () => {
 
 export const useMoneyTransfers = (status?: TransferStatus) =>
   useQuery({ queryKey: qk.moneyTransfers(status), queryFn: () => api.getMoneyTransfers(status) });
+
+/* --------------------------------- Reports -------------------------------- */
+
+export const useAccountMovementReport = (range: api.DateRange) =>
+  useQuery({
+    queryKey: qk.accountMovementReport(range),
+    queryFn: () => api.getAccountMovementReport(range),
+  });
+
+export const useExpenseReport = (range: api.DateRange, direction: ChargeDirection) =>
+  useQuery({
+    queryKey: qk.expenseReport(range, direction),
+    queryFn: () => api.getExpenseReport(range, direction),
+  });
+
+export const useTradeDetailReport = (range: api.DateRange) =>
+  useQuery({ queryKey: qk.tradeDetailReport(range), queryFn: () => api.getTradeDetailReport(range) });
 
 export const useExchangeGainLosses = () =>
   useQuery({ queryKey: qk.exchangeGainLosses, queryFn: api.getExchangeGainLosses });
