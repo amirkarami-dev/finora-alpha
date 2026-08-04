@@ -4285,15 +4285,17 @@ function nextChequeId(): string {
   return `chq-${String(max + 1).padStart(4, '0')}`;
 }
 
-/** Which statuses a cheque may move to. PAID / EXPIRED are terminal; a RETURNED cheque is
- *  finished as a document but its NUMBER becomes reusable (see `assertChequeNumberFree`). */
-const CHEQUE_TRANSITIONS: Record<ChequeStatus, ChequeStatus[]> = {
-  PENDING: ['PAID', 'RETURNED', 'EXPIRED', 'CHANGED'],
-  RETURNED: ['CHANGED', 'PENDING'],
-  EXPIRED: ['PAID', 'RETURNED', 'CHANGED'],
-  CHANGED: [],
-  PAID: [],
-};
+/**
+ * Every status is reachable from every other. This replaces a transition map in which PAID and
+ * CHANGED were dead ends — which made a mistyped cheque unfixable forever, and left no way to
+ * un-clear a cheque that was marked paid by accident.
+ *
+ * The rules that actually protect the money are enforced in `setChequeStatus`/`updateCheque`
+ * instead, where they belong: entering PAID demands a live account, leaving PAID drops it, and
+ * the record's data is editable only while PENDING. A cheque's status is a statement about the
+ * real world, and the real world can be corrected.
+ */
+export const CHEQUE_STATUSES: ChequeStatus[] = ['PENDING', 'PAID', 'RETURNED', 'EXPIRED', 'CHANGED'];
 
 /**
  * Cheque numbers are unique PER ISSUING BANK, not globally — two banks may legitimately issue
@@ -4346,13 +4348,20 @@ export async function createCheque(input: ChequeInput): Promise<Cheque> {
   return cheque;
 }
 
+/**
+ * Editable ONLY while PENDING — `cheque-not-pending` otherwise.
+ *
+ * A cheque that has been cleared, bounced, expired or replaced is a historical fact, and its
+ * amount is what the payment lines pointing at it are worth. To correct one, move it back to
+ * PENDING first (which un-banks it, see `setChequeStatus`), edit, then mark it paid again. That
+ * two-step is deliberate: it makes "I am changing a settled record" an explicit act rather than
+ * a side effect of opening a form.
+ */
 export async function updateCheque(id: string, input: ChequeInput): Promise<Cheque> {
   await delay(160);
   const cheque = db.cheques.find((c) => c.id === id);
   if (!cheque) throw new Error('cheque-not-found');
-  // A cleared cheque is a historical fact — editing its amount would silently change what the
-  // payment lines pointing at it are worth.
-  if (cheque.status === 'PAID') throw new Error('cheque-paid');
+  if (cheque.status !== 'PENDING') throw new Error('cheque-not-pending');
   const number = input.number.trim();
   if (!number) throw new Error('number-required');
   const bankName = input.bankName.trim();
@@ -4378,13 +4387,19 @@ export async function updateCheque(id: string, input: ChequeInput): Promise<Cheq
 }
 
 /**
- * Moves a cheque through its lifecycle.
+ * Moves a cheque through its lifecycle. Any status may follow any other (see
+ * `CHEQUE_STATUSES`); what is guarded is the money, not the graph.
  *
- * Guards IN ORDER: `cheque-not-found` → `invalid-transition` (per `CHEQUE_TRANSITIONS`) →
- * PAID only: `bank-account-required` → `bank-account-not-found` → `bank-account-inactive`.
+ * Guards IN ORDER: `cheque-not-found` → PAID only: `bank-account-required` →
+ * `bank-account-not-found` → `bank-account-inactive`.
  *
- * The spec requires naming the receiving bank when a cheque is marked paid — that is the whole
- * point of the payments-menu cheque tab, so it is enforced here rather than left to the UI.
+ * Naming the receiving account when a cheque is marked paid is enforced here rather than left
+ * to the UI, because PAID is the moment the money lands: it is the status that makes the cheque
+ * count towards an account balance (`accountFeeds`) and towards a person's ledger.
+ *
+ * Leaving PAID CLEARS `bankAccountId`. Without that, an un-cleared cheque keeps reporting a
+ * bank through `ChequeRow.bankAccountName`, and re-paying it into a different account would
+ * silently keep the old one if the caller omitted the argument.
  */
 export async function setChequeStatus(
   id: string,
@@ -4395,7 +4410,6 @@ export async function setChequeStatus(
   const cheque = db.cheques.find((c) => c.id === id);
   if (!cheque) throw new Error('cheque-not-found');
   if (cheque.status === status) return cheque;
-  if (!CHEQUE_TRANSITIONS[cheque.status].includes(status)) throw new Error('invalid-transition');
 
   if (status === 'PAID') {
     if (!bankAccountId) throw new Error('bank-account-required');
@@ -4403,6 +4417,8 @@ export async function setChequeStatus(
     if (!account) throw new Error('bank-account-not-found');
     if (!account.active) throw new Error('bank-account-inactive');
     cheque.bankAccountId = bankAccountId;
+  } else if (cheque.status === 'PAID') {
+    cheque.bankAccountId = undefined;
   }
   cheque.status = status;
   persistDb();

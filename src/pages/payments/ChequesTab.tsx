@@ -1,14 +1,22 @@
-import { useState } from 'react';
-import { App, Alert, Button, Empty, Modal, Segmented, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { useMemo, useState } from 'react';
+import {
+  App, Alert, Button, Checkbox, DatePicker, Empty, Input, InputNumber, Modal, Segmented, Select,
+  Space, Table, Tag, Tooltip, Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { EditOutlined } from '@ant-design/icons';
+import type { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
+import { EditOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
 import { useCheques, useFinancialAccounts, useSetChequeStatus } from '@/services/queries';
 import { formatDate } from '@/utils/format';
-import type { ChequeRow } from '@/services/api';
-import type { ChequeStatus } from '@/types';
+import { CURRENCIES } from '@/config/constants';
+import { CHEQUE_STATUSES, type ChequeRow } from '@/services/api';
+import type { ChequeStatus, ChequeType, Currency } from '@/types';
 import { ChequeFormModal } from './ChequeFormModal';
+
+const { RangePicker } = DatePicker;
 
 const { Text } = Typography;
 
@@ -20,28 +28,71 @@ const STATUS_COLOR: Record<ChequeStatus, string> = {
   CHANGED: 'default',
 };
 
-/** Mirrors CHEQUE_TRANSITIONS in api.ts. Kept here only to decide which buttons to show — the
- *  API rejects an illegal move regardless, so a drift here cannot corrupt anything. */
-const NEXT_STATUSES: Record<ChequeStatus, ChequeStatus[]> = {
-  PENDING: ['PAID', 'RETURNED', 'EXPIRED', 'CHANGED'],
-  RETURNED: ['CHANGED', 'PENDING'],
-  EXPIRED: ['PAID', 'RETURNED', 'CHANGED'],
-  CHANGED: [],
-  PAID: [],
+/** Every status except the one it already has. Derived from the API's own list rather than
+ *  hand-copied, so the buttons cannot drift away from what the server accepts. */
+const nextStatuses = (current: ChequeStatus): ChequeStatus[] =>
+  CHEQUE_STATUSES.filter((s) => s !== current);
+
+interface Filters {
+  text: string;
+  status: ChequeStatus | 'all';
+  type: ChequeType | 'all';
+  currency: Currency | 'all';
+  due: [Dayjs | null, Dayjs | null] | null;
+  minAmount?: number;
+  maxAmount?: number;
+  dueOnly: boolean;
+}
+
+const EMPTY_FILTERS: Filters = {
+  text: '',
+  status: 'all',
+  type: 'all',
+  currency: 'all',
+  due: null,
+  minAmount: undefined,
+  maxAmount: undefined,
+  dueOnly: false,
 };
 
+/**
+ * The cheque register. Cheques are BORN on a payment line — this tab lists, filters, edits and
+ * moves them, but never creates one. That keeps a single origin story for every cheque: it
+ * exists because someone was paid with it.
+ */
 export function ChequesTab() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const [statusFilter, setStatusFilter] = useState<ChequeStatus | 'all'>('all');
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const { data, isLoading } = useCheques();
   const { data: banks } = useFinancialAccounts('BANK');
   const setStatus = useSetChequeStatus();
   const [formState, setFormState] = useState<{ open: boolean; cheque?: ChequeRow }>({ open: false });
   const [payState, setPayState] = useState<{ open: boolean; cheque?: ChequeRow; bankId?: string }>({ open: false });
 
-  const rows = (data ?? []).filter((c) => (statusFilter === 'all' ? true : c.status === statusFilter));
+  const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+
+  const rows = useMemo(() => {
+    const q = filters.text.trim().toLowerCase();
+    const [from, to] = filters.due ?? [null, null];
+    return (data ?? []).filter((c) => {
+      if (q && !`${c.number} ${c.ownerName} ${c.bankName}`.toLowerCase().includes(q)) return false;
+      if (filters.status !== 'all' && c.status !== filters.status) return false;
+      if (filters.type !== 'all' && c.type !== filters.type) return false;
+      if (filters.currency !== 'all' && c.currency !== filters.currency) return false;
+      if (filters.dueOnly && !c.dueForAction) return false;
+      if (filters.minAmount !== undefined && c.amount < filters.minAmount) return false;
+      if (filters.maxAmount !== undefined && c.amount > filters.maxAmount) return false;
+      // Inclusive on both ends — a user picking 1–31 March means the whole of March.
+      if (from && dayjs(c.dueDate).isBefore(from, 'day')) return false;
+      if (to && dayjs(c.dueDate).isAfter(to, 'day')) return false;
+      return true;
+    });
+  }, [data, filters]);
+
   const dueCount = (data ?? []).filter((c) => c.dueForAction).length;
+  const filtersActive = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
 
   const move = async (cheque: ChequeRow, next: ChequeStatus) => {
     // PAID is the one transition that needs more information — which company account received
@@ -123,12 +174,21 @@ export function ChequesTab() {
       align: 'right',
       render: (_, r) => (
         <Space wrap>
-          {r.status !== 'PAID' && (
-            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => setFormState({ open: true, cheque: r })}>
+          {/* Editable only while PENDING, matching the server. Shown disabled rather than
+              hidden on other statuses, with the two-step route spelled out — a missing button
+              reads as "not supported", which is the wrong lesson. */}
+          <Tooltip title={r.status === 'PENDING' ? undefined : t('cheques.errors.cheque-not-pending')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              disabled={r.status !== 'PENDING'}
+              onClick={() => setFormState({ open: true, cheque: r })}
+            >
               {t('common.edit')}
             </Button>
-          )}
-          {NEXT_STATUSES[r.status].map((next) => (
+          </Tooltip>
+          {nextStatuses(r.status).map((next) => (
             <Button
               key={next}
               type="link"
@@ -154,21 +214,71 @@ export function ChequesTab() {
           message={t('cheques.dueBanner', { count: dueCount })}
         />
       )}
-      <Space style={{ marginBottom: 16 }} wrap>
+      <Space style={{ marginBottom: 12 }} wrap>
         <Segmented
-          value={statusFilter}
-          onChange={(v) => setStatusFilter(v as ChequeStatus | 'all')}
+          value={filters.status}
+          onChange={(v) => set('status', v as ChequeStatus | 'all')}
           options={[
             { label: t('common.all'), value: 'all' },
-            ...(['PENDING', 'PAID', 'RETURNED', 'EXPIRED', 'CHANGED'] as ChequeStatus[]).map((s) => ({
-              label: t(`cheques.status.${s}`),
-              value: s,
-            })),
+            ...CHEQUE_STATUSES.map((s) => ({ label: t(`cheques.status.${s}`), value: s })),
           ]}
         />
-        <Button type="primary" onClick={() => setFormState({ open: true, cheque: undefined })}>
-          {t('cheques.newCheque')}
-        </Button>
+      </Space>
+      <Space style={{ marginBottom: 16 }} wrap size={8}>
+        <Input
+          allowClear
+          prefix={<SearchOutlined />}
+          placeholder={t('cheques.searchPlaceholder')}
+          style={{ width: 260 }}
+          value={filters.text}
+          onChange={(e) => set('text', e.target.value)}
+        />
+        <Select
+          allowClear
+          style={{ width: 150 }}
+          placeholder={t('cheques.type')}
+          value={filters.type === 'all' ? undefined : filters.type}
+          onChange={(v) => set('type', (v as ChequeType) ?? 'all')}
+          options={(['NORMAL', 'SECURITY'] as ChequeType[]).map((v) => ({
+            value: v,
+            label: t(`cheques.types.${v}`),
+          }))}
+        />
+        <Select
+          allowClear
+          style={{ width: 120 }}
+          placeholder={t('cheques.currency')}
+          value={filters.currency === 'all' ? undefined : filters.currency}
+          onChange={(v) => set('currency', (v as Currency) ?? 'all')}
+          options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+        />
+        <RangePicker
+          value={filters.due ?? undefined}
+          onChange={(v) => set('due', v as [Dayjs | null, Dayjs | null] | null)}
+          placeholder={[t('cheques.dueFrom'), t('cheques.dueTo')]}
+        />
+        <InputNumber
+          style={{ width: 130 }}
+          min={0}
+          placeholder={t('cheques.minAmount')}
+          value={filters.minAmount}
+          onChange={(v) => set('minAmount', v ?? undefined)}
+        />
+        <InputNumber
+          style={{ width: 130 }}
+          min={0}
+          placeholder={t('cheques.maxAmount')}
+          value={filters.maxAmount}
+          onChange={(v) => set('maxAmount', v ?? undefined)}
+        />
+        <Checkbox checked={filters.dueOnly} onChange={(e) => set('dueOnly', e.target.checked)}>
+          {t('cheques.dueOnly')}
+        </Checkbox>
+        {filtersActive && (
+          <Button type="link" size="small" onClick={() => setFilters(EMPTY_FILTERS)}>
+            {t('common.clearFilters')}
+          </Button>
+        )}
       </Space>
 
       <Table<ChequeRow>
@@ -189,11 +299,7 @@ export function ChequesTab() {
                     <Text type="secondary">{t('cheques.emptyHint')}</Text>
                   </Space>
                 }
-              >
-                <Button type="primary" onClick={() => setFormState({ open: true, cheque: undefined })}>
-                  {t('cheques.newCheque')}
-                </Button>
-              </Empty>
+              />
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Text type="secondary">{t('common.noFilterResults')}</Text>} />
             ),

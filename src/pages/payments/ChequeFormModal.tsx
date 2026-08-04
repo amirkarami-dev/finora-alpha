@@ -90,8 +90,8 @@ export function ChequeFormModal({ open, onClose, cheque }: ChequeFormModalProps)
         form.setFields([{ name: field, errors: [t(`cheques.errors.${code}`)] }]);
         return;
       }
-      if (code === 'cheque-paid') {
-        message.error(t('cheques.errors.cheque-paid'));
+      if (code === 'cheque-not-pending') {
+        message.error(t('cheques.errors.cheque-not-pending'));
         return;
       }
       message.error(t('common.saveFailed'));

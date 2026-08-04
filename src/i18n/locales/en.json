@@ -60,7 +60,8 @@
     "activateConfirm": "Activate this record?",
     "mtUnit": "MT",
     "noSearchResults": "No results match your search",
-    "noFilterResults": "No records match these filters"
+    "noFilterResults": "No records match these filters",
+    "clearFilters": "Clear filters"
   },
   "nav": {
     "executive": "Executive",
@@ -1096,7 +1097,13 @@
     "created": "Cheque created",
     "updated": "Cheque updated",
     "emptyTitle": "No cheques yet",
-    "emptyHint": "Cheques are created here or while adding a payment line.",
+    "emptyHint": "A cheque is created while adding a payment line. It then appears here.",
+    "searchPlaceholder": "Search number, owner or bank",
+    "dueFrom": "Due from",
+    "dueTo": "Due to",
+    "minAmount": "Min amount",
+    "maxAmount": "Max amount",
+    "dueOnly": "Needs action only",
     "types": {
       "NORMAL": "Normal",
       "SECURITY": "Security"
@@ -1122,8 +1129,7 @@
       "due-date-required": "Due date is required",
       "invalid-amount": "Enter an amount greater than zero",
       "duplicate-cheque-number": "This bank already has a cheque with that number",
-      "cheque-paid": "A cleared cheque cannot be edited",
-      "invalid-transition": "That status change is not allowed",
+      "cheque-not-pending": "Only a pending cheque can be edited. Move it back to pending first.",
       "bank-account-required": "Choose the account that received it"
     }
   },
