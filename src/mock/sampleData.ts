@@ -1583,8 +1583,11 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * allocation always fits inside what the item still owes.
    */
   ([
-    { cheque: cheques[0], target: 185000, note: 'Paid by cheque, cleared' },
-    { cheque: cheques[1], target: 96500, note: 'Paid by cheque, not yet cleared' },
+    { cheque: cheques[0], target: 185000, paidOn: day(26), note: 'Paid by cheque, cleared' },
+    // Written a fortnight ago against a cheque that falls due later — the payment happened when
+    // the cheque was handed over, NOT on its due date. Dating it by the due date would push the
+    // whole row into the future, where every report's window quietly excludes it.
+    { cheque: cheques[1], target: 96500, paidOn: day(14), note: 'Paid by cheque, not yet cleared' },
   ] as const).forEach((spec, i) => {
     const invoice = payableInvoices[i];
     const line = invoice?.items[0];
@@ -1593,7 +1596,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     spec.cheque.amount = round(Math.min(spec.target, line.amount), 2);
     pushLinePayment({
       customerId: invoice.customerId,
-      date: spec.cheque.dueDate,
+      date: spec.paidOn,
       currency: 'USD',
       fxRate: 1,
       amount: spec.cheque.amount,
