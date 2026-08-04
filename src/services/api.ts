@@ -107,19 +107,39 @@ interface SaleReceivable {
   overdue: number;
 }
 
-/** Σ IN-direction payments across an invoice's full chain (spec §7) — the SAME math used by
- *  `getReceivableInvoices`' per-row `paidUSD`, shared here so `saleReceivables()`'s per-document
- *  overdue netting agrees exactly with the per-row OVERDUE badges. */
+/**
+ * Σ sale-side money settled against an invoice's full chain (spec §7) — the SAME math used by
+ * `getReceivableInvoices`' per-row `paidUSD`, shared here so `saleReceivables()`'s per-document
+ * overdue netting agrees exactly with the per-row OVERDUE badges.
+ *
+ * Read at LINE level, not header level. A payment created through the header/items flow has no
+ * `invoiceId` of its own — its lines carry the documents — so matching on the header alone
+ * scored every such payment as zero, leaving properly-paid sale invoices showing OVERDUE for
+ * ever. One payment may also settle both sides, which only the lines can express.
+ *
+ * Deliberately NOT cheque-gated. That rule belongs to `personLedgers`' two-sided balance; adding
+ * it here would silently change ageing, DSO and the portal, which is exactly what keeping these
+ * two figures separate is meant to avoid.
+ */
 function receivablePaidUSD(inv: Invoice): number {
   const chainIds = new Set(invoiceChain(inv).map((c) => c.id));
-  return round(
-    db.payments
-      .filter(
-        (p) =>
-          isSettled(p) && p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN',
-      )
-      .reduce((s, p) => s + p.amountUSD, 0),
-  );
+  let total = 0;
+  for (const p of db.payments) {
+    if (!isSettled(p)) continue;
+    if (p.items === undefined) {
+      // Legacy header-only row: the header IS the settlement.
+      if (p.invoiceId && chainIds.has(p.invoiceId) && (p.direction ?? 'IN') === 'IN') {
+        total += p.amountUSD;
+      }
+      continue;
+    }
+    for (const it of paymentItems(p)) {
+      if (it.invoiceId && chainIds.has(it.invoiceId) && paymentLineSign(p, it) === 1) {
+        total += it.amountUSD;
+      }
+    }
+  }
+  return round(total);
 }
 
 /**
@@ -144,12 +164,22 @@ function saleReceivables(): Map<string, SaleReceivable> {
       entry.overdue += docOutstanding;
     }
   }
-  // Receivables only: purchase-side (OUT) payments must never inflate totalPaid (spec §7).
+  // Receivables only: purchase-side (OUT) money must never inflate totalPaid (spec §7).
+  //
+  // Enforced per LINE. The header's `direction` is derived from a header-level `invoiceId`, which
+  // the header/items flow never sets — so every payment made through that flow defaulted to IN,
+  // and money paid OUT to a supplier was reducing what that same person owed us on the sale side.
   for (const p of db.payments) {
     if (!isSettled(p)) continue;
-    if ((p.direction ?? 'IN') !== 'IN') continue;
     const entry = map.get(p.customerId);
-    if (entry) entry.paid += p.amountUSD;
+    if (!entry) continue;
+    if (p.items === undefined) {
+      if ((p.direction ?? 'IN') === 'IN') entry.paid += p.amountUSD;
+      continue;
+    }
+    for (const it of paymentItems(p)) {
+      if (paymentLineSign(p, it) === 1) entry.paid += it.amountUSD;
+    }
   }
   for (const [, entry] of map) {
     entry.outstanding = round(Math.max(entry.invoiced - entry.paid, 0));
@@ -162,6 +192,7 @@ function saleReceivables(): Map<string, SaleReceivable> {
 
 export function computeAccounts(): CustomerAccount[] {
   const receivables = saleReceivables();
+  const ledgers = personLedgers();
   return db.customers.map((customer) => {
     const contractCount = db.contracts.filter((c) => c.customerId === customer.id).length;
     const r = receivables.get(customer.id) ?? { invoiced: 0, paid: 0, outstanding: 0, overdue: 0 };
@@ -171,9 +202,269 @@ export function computeAccounts(): CustomerAccount[] {
       totalPaid: r.paid,
       totalOutstanding: r.outstanding,
       overdue: r.overdue,
+      netBalance: ledgers.get(customer.id)?.netBalance ?? 0,
       contractCount,
     };
   });
+}
+
+/* ------------------------------ Person ledger ----------------------------- *
+ * The two-sided balance the desk actually works from:
+ *
+ *   net = +sale invoices −sale payments −sale claims
+ *         −purchase invoices +purchase claims +purchase payments
+ *
+ * Positive means the person owes us; negative means we owe them. It is NOT floored at zero —
+ * that is the whole point, and it is why this lives alongside `totalOutstanding` rather than
+ * replacing it. `totalOutstanding` is the sale-only receivable that ageing, DSO, credit limits
+ * and the portal are built on; flooring is load-bearing for all of those, and ageing a purchase
+ * invoice is meaningless.
+ * -------------------------------------------------------------------------- */
+
+export type LedgerKind =
+  | 'SALE_INVOICE'
+  | 'SALE_CLAIM'
+  | 'SALE_PAYMENT'
+  | 'PURCHASE_INVOICE'
+  | 'PURCHASE_CLAIM'
+  | 'PURCHASE_PAYMENT'
+  | 'TRANSFER';
+
+/** Tie-break order within one date, so the running column is reproducible. */
+const LEDGER_KIND_ORDER: Record<LedgerKind, number> = {
+  SALE_INVOICE: 0,
+  SALE_CLAIM: 1,
+  SALE_PAYMENT: 2,
+  PURCHASE_INVOICE: 3,
+  PURCHASE_CLAIM: 4,
+  PURCHASE_PAYMENT: 5,
+  TRANSFER: 6,
+};
+
+export interface PersonLedgerEntry {
+  id: string;
+  date: string;
+  kind: LedgerKind;
+  side: 'SALE' | 'PURCHASE' | 'NONE';
+  /** Invoice number, claim title, payment id or transfer number. */
+  reference: string;
+  /** Target for row navigation, when there is somewhere to go. */
+  refId?: string;
+  currency: Currency;
+  /** As entered, in `currency`. */
+  amount: number;
+  /** Signed USD applied to the running balance. Zero for informational rows. */
+  effect: number;
+  /** Balance after this entry. */
+  running: number;
+  /** Transfers: shown for traceability, excluded from every total. */
+  informational?: boolean;
+  /** Set when the money exists but is not counted yet — currently only an unpaid cheque. */
+  pending?: 'cheque-not-paid';
+}
+
+export interface PersonLedger {
+  personId: string;
+  entries: PersonLedgerEntry[];
+  /** Net of the three sale-side terms. */
+  saleTotal: number;
+  /** Net of the three purchase-side terms. */
+  purchaseTotal: number;
+  netBalance: number;
+  /** How many lines are waiting on a cheque to clear. */
+  pendingCount: number;
+}
+
+/** `Invoice.totalAmount` is in the INVOICE's currency, unlike every payment figure. Everything
+ *  in this ledger is USD, so it is converted once here rather than compared across currencies. */
+function invoiceTotalUSD(inv: Invoice): number {
+  if (inv.currency === 'USD') return round(inv.totalAmount);
+  const rate = Number.isFinite(inv.exchangeRate) && inv.exchangeRate > 0 ? inv.exchangeRate : 1;
+  return round(inv.totalAmount / rate);
+}
+
+/**
+ * One priced, CONFIRMED document per chain: the DEEPEST confirmed member, not the leaf.
+ *
+ * `chainLeafDocs` treats a DRAFT successor as a successor, so converting a confirmed invoice to
+ * a draft drops its value out of the total while its payments stay behind. The sale-only
+ * `outstanding` hides that behind `Math.max(…, 0)`; this balance has no floor, so it would
+ * surface as a person's position going negative for no reason. Same fix the quantity side
+ * already uses in `confirmedClaimsByItem`.
+ */
+function deepestConfirmedDocs(side: InvoiceSide): Invoice[] {
+  const out: Invoice[] = [];
+  const visitedRoots = new Set<string>();
+  for (const inv of db.invoices) {
+    if (!isSide(inv.invoiceType, side) || inv.status === 'CANCELLED') continue;
+    const chain = invoiceChain(inv);
+    const rootId = chain[0].id;
+    if (visitedRoots.has(rootId)) continue;
+    visitedRoots.add(rootId);
+    let deepest: Invoice | undefined;
+    for (const c of chain) {
+      if (c.status === 'CONFIRMED' && isPricedType(c.invoiceType)) deepest = c;
+    }
+    if (deepest) out.push(deepest);
+  }
+  return out;
+}
+
+/**
+ * Builds every person's ledger in ONE pass.
+ *
+ * `netBalance` is the last entry's `running` value, so the headline number and the drill-down
+ * that explains it cannot drift apart — the number IS the list.
+ */
+export function personLedgers(): Map<string, PersonLedger> {
+  const byPerson = new Map<string, PersonLedgerEntry[]>();
+  const push = (personId: string, entry: Omit<PersonLedgerEntry, 'running'>) => {
+    if (!byPerson.has(personId)) byPerson.set(personId, []);
+    byPerson.get(personId)!.push({ ...entry, running: 0 });
+  };
+
+  for (const side of ['SALE', 'PURCHASE'] as InvoiceSide[]) {
+    for (const inv of deepestConfirmedDocs(side)) {
+      const usd = invoiceTotalUSD(inv);
+      push(inv.customerId, {
+        id: `inv:${inv.id}`,
+        date: inv.invoiceDate,
+        kind: side === 'SALE' ? 'SALE_INVOICE' : 'PURCHASE_INVOICE',
+        side,
+        reference: inv.invoiceNumber,
+        refId: inv.id,
+        currency: inv.currency,
+        amount: inv.totalAmount,
+        // A sale increases what they owe us; a purchase increases what we owe them.
+        effect: side === 'SALE' ? usd : -usd,
+      });
+    }
+  }
+
+  for (const claim of db.claims) {
+    if (claim.status !== 'ACTIVE') continue;
+    push(claim.partyId, {
+      id: `clm:${claim.id}`,
+      date: claim.date,
+      kind: claim.side === 'SALE' ? 'SALE_CLAIM' : 'PURCHASE_CLAIM',
+      side: claim.side,
+      reference: claim.title,
+      refId: claim.invoiceId,
+      currency: claim.currency,
+      amount: claim.amount,
+      // A credit we grant on our sale reduces what they owe; a credit they grant us on a
+      // purchase reduces what we owe, which raises the net.
+      effect: claim.side === 'SALE' ? -claim.amountUSD : claim.amountUSD,
+    });
+  }
+
+  for (const p of db.payments) {
+    if (!isSettled(p)) continue;
+    const items = paymentItems(p);
+    if (p.items === undefined) {
+      // Legacy header-only row: no lines to walk, and no cheque record to check either.
+      const invoice = p.invoiceId ? findInvoice(p.invoiceId) : undefined;
+      const side: InvoiceSide =
+        invoice ? invoiceSide(invoice.invoiceType) : (p.direction ?? 'IN') === 'OUT' ? 'PURCHASE' : 'SALE';
+      push(p.customerId, {
+        id: `pay:${p.id}`,
+        date: p.date,
+        kind: side === 'SALE' ? 'SALE_PAYMENT' : 'PURCHASE_PAYMENT',
+        side,
+        reference: p.reference || p.id,
+        refId: p.id,
+        currency: p.currency,
+        amount: p.amount,
+        effect: side === 'SALE' ? -p.amountUSD : p.amountUSD,
+      });
+      continue;
+    }
+    for (const it of items) {
+      // `paymentLineSign` is +1 for money IN. A payment received REDUCES what the person owes,
+      // so the ledger effect is its negation.
+      const side: InvoiceSide = paymentLineSign(p, it) === 1 ? 'SALE' : 'PURCHASE';
+      // A cheque is a promise until it clears. Shown, but worth zero until then — hiding it
+      // would look like the money was never recorded.
+      const cheque = it.chequeId ? db.cheques.find((c) => c.id === it.chequeId) : undefined;
+      const unpaidCheque = it.method === 'Cheque' && cheque?.status !== 'PAID';
+      const invoice = it.invoiceId ? findInvoice(it.invoiceId) : undefined;
+      push(p.customerId, {
+        id: `payitem:${it.id}`,
+        date: it.date,
+        kind: side === 'SALE' ? 'SALE_PAYMENT' : 'PURCHASE_PAYMENT',
+        side,
+        reference: invoice?.invoiceNumber ?? p.reference ?? p.id,
+        refId: p.id,
+        currency: it.currency,
+        amount: it.amount,
+        effect: unpaidCheque ? 0 : side === 'SALE' ? -it.amountUSD : it.amountUSD,
+        pending: unpaidCheque ? 'cheque-not-paid' : undefined,
+      });
+    }
+  }
+
+  // Transfers move money between OUR OWN accounts, so they change nobody's balance. They appear
+  // only where a transfer was explicitly tied to one of this person's invoices, purely so the
+  // trail is visible — `effect: 0`, excluded from every total.
+  for (const tr of db.moneyTransfers) {
+    if (tr.status !== 'CONFIRMED') continue;
+    const seen = new Set<string>();
+    for (const alloc of tr.allocations) {
+      const invoice = alloc.invoiceId ? findInvoice(alloc.invoiceId) : undefined;
+      if (!invoice || seen.has(invoice.customerId)) continue;
+      seen.add(invoice.customerId);
+      push(invoice.customerId, {
+        id: `tr:${tr.id}`,
+        date: tr.date,
+        kind: 'TRANSFER',
+        side: 'NONE',
+        reference: tr.number,
+        refId: tr.id,
+        currency: tr.fromCurrency,
+        amount: tr.fromAmount,
+        effect: 0,
+        informational: true,
+      });
+    }
+  }
+
+  const out = new Map<string, PersonLedger>();
+  for (const [personId, entries] of byPerson) {
+    entries.sort(
+      (a, b) =>
+        dayjs(a.date).valueOf() - dayjs(b.date).valueOf() ||
+        LEDGER_KIND_ORDER[a.kind] - LEDGER_KIND_ORDER[b.kind] ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+    let running = 0;
+    let saleTotal = 0;
+    let purchaseTotal = 0;
+    let pendingCount = 0;
+    for (const e of entries) {
+      running = round(running + e.effect);
+      e.running = running;
+      if (e.side === 'SALE') saleTotal = round(saleTotal + e.effect);
+      else if (e.side === 'PURCHASE') purchaseTotal = round(purchaseTotal + e.effect);
+      if (e.pending) pendingCount += 1;
+    }
+    out.set(personId, { personId, entries, saleTotal, purchaseTotal, netBalance: running, pendingCount });
+  }
+  return out;
+}
+
+/** One person's ledger. Always resolves — a person with no activity gets an empty one. */
+export async function getPersonLedger(personId: string): Promise<PersonLedger> {
+  await delay(180);
+  return (
+    personLedgers().get(personId) ?? {
+      personId,
+      entries: [],
+      saleTotal: 0,
+      purchaseTotal: 0,
+      netBalance: 0,
+      pendingCount: 0,
+    }
+  );
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;

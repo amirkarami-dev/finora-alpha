@@ -445,10 +445,15 @@ export interface InventoryDocumentItem {
 
 /** Aggregated, dashboard-ready customer balance. */
 export interface CustomerAccount extends Customer {
+  /** Sale-only receivable, floored at zero. Ageing, DSO, credit limits and the portal are all
+   *  built on this — do not confuse it with `netBalance`. */
   totalOutstanding: number;
   overdue: number;
   totalPaid: number;
   totalInvoiced: number;
+  /** Two-sided position: positive = they owe us, negative = we owe them. Not floored.
+   *  See `personLedgers` in api.ts for the exact terms. */
+  netBalance: number;
   contractCount: number;
 }
 

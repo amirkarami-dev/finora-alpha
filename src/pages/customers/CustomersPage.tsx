@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { App, Avatar, Button, Card, Input, Popconfirm, Segmented, Space, Table, Tag, Typography, theme } from 'antd';
+import { App, Avatar, Button, Card, Input, Popconfirm, Segmented, Space, Table, Tag, Tooltip, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { initials } from '@/utils/format';
 import { CURRENCIES, ROUTES } from '@/config/constants';
 import type { CustomerAccount, CustomerType } from '@/types';
 import { CustomerFormModal } from './CustomerFormModal';
+import { PersonLedgerModal } from './PersonLedgerModal';
 
 const { Text } = Typography;
 
@@ -35,6 +36,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [formState, setFormState] = useState<{ open: boolean; customer?: CustomerAccount }>({ open: false });
+  const [ledgerFor, setLedgerFor] = useState<{ id: string; name: string } | null>(null);
   const setActive = useSetCustomerActive();
 
   const filtered = useMemo(() => {
@@ -105,13 +107,29 @@ export default function CustomersPage() {
       render: (v) => t('customers.termsDays', { count: v }),
     },
     {
-      title: t('customers.outstanding'),
-      dataIndex: 'totalOutstanding',
-      width: 150,
+      // The two-sided position, not the sale-only receivable. Click it for the movements behind
+      // it — that is the whole point of the figure, so it is a button, not static text.
+      title: t('customers.balance'),
+      dataIndex: 'netBalance',
+      width: 170,
       align: 'right',
-      sorter: (a, b) => a.totalOutstanding - b.totalOutstanding,
+      sorter: (a, b) => a.netBalance - b.netBalance,
       defaultSortOrder: 'descend',
-      render: (v) => <Money value={v} strong muteZero />,
+      render: (v: number, r) => (
+        <Tooltip title={t('customers.balanceHint')}>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, height: 'auto' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setLedgerFor({ id: r.id, name: r.name });
+            }}
+          >
+            <Money value={v} strong muteZero signed />
+          </Button>
+        </Tooltip>
+      ),
     },
     {
       title: t('customers.overdue'),
@@ -232,6 +250,14 @@ export default function CustomersPage() {
         onClose={() => setFormState((s) => ({ ...s, open: false }))}
         customer={formState.customer}
       />
+      {ledgerFor && (
+        <PersonLedgerModal
+          open
+          onClose={() => setLedgerFor(null)}
+          personId={ledgerFor.id}
+          personName={ledgerFor.name}
+        />
+      )}
     </div>
   );
 }

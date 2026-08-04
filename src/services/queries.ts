@@ -17,6 +17,9 @@ import * as api from './api';
 export const qk = {
   accounts: ['accounts'] as const,
   account: (id: string) => ['account', id] as const,
+  /** Nested under `account` so every existing bare-prefix invalidator already covers it —
+   *  the ledger changes whenever an invoice, claim, payment or cheque does. */
+  personLedger: (id: string) => ['account', 'ledger', id] as const,
   customers: ['customers'] as const,
   productNames: ['productNames'] as const,
   contracts: ['contracts'] as const,
@@ -90,6 +93,12 @@ export const qk = {
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
 export const useAccount = (id: string) =>
   useQuery({ queryKey: qk.account(id), queryFn: () => api.getAccount(id), enabled: !!id });
+export const usePersonLedger = (id: string, opts?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.personLedger(id),
+    queryFn: () => api.getPersonLedger(id),
+    enabled: (opts?.enabled ?? true) && !!id,
+  });
 
 export const useContracts = () => useQuery({ queryKey: qk.contracts, queryFn: api.getContracts });
 export const useContract = (id: string) =>

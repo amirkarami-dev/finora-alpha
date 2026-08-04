@@ -194,6 +194,8 @@
     "terms": "Terms",
     "termsDays": "{{count}} days",
     "outstanding": "Outstanding",
+    "balance": "Balance",
+    "balanceHint": "Sales and purchases together. Positive means they owe you; a number in brackets means you owe them. Click to see every movement behind it.",
     "overdue": "Overdue",
     "paid": "Paid",
     "invoiced": "Invoiced",
@@ -946,6 +948,35 @@
   "claimTypes": {
     "QUANTITY": "Quantity claim",
     "QUALITY": "Quality claim"
+  },
+  "ledger": {
+    "title": "Balance detail",
+    "date": "Date",
+    "kind": "Type",
+    "reference": "Reference",
+    "amount": "Amount",
+    "effect": "Change",
+    "running": "Balance after",
+    "saleSide": "Sale side",
+    "purchaseSide": "Purchase side",
+    "net": "Net balance",
+    "owesUs": "This person owes you.",
+    "weOwe": "You owe this person.",
+    "pending": "Not counted yet",
+    "pendingHint": "This is a cheque that has not been marked paid. It is listed so nothing looks missing, but it does not move the balance until it clears.",
+    "pendingBanner": "{{n}} line(s) are waiting on a cheque to clear, so they do not count yet.",
+    "informational": "For information",
+    "informationalHint": "A transfer between your own accounts. It is shown because it was linked to this person's invoice, but it never changes what they owe.",
+    "empty": "Nothing has moved on this person's account yet",
+    "kinds": {
+      "SALE_INVOICE": "Sale invoice",
+      "SALE_CLAIM": "Sale claim",
+      "SALE_PAYMENT": "Payment on sale",
+      "PURCHASE_INVOICE": "Purchase invoice",
+      "PURCHASE_CLAIM": "Purchase claim",
+      "PURCHASE_PAYMENT": "Payment on purchase",
+      "TRANSFER": "Transfer"
+    }
   },
   "claims": {
     "title": "Claims",

@@ -28,6 +28,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { CustomerFormModal } from './CustomerFormModal';
+import { PersonLedgerModal } from './PersonLedgerModal';
 import { Money } from '@/components/common/Money';
 import { StatusTag, PaymentMethodTag } from '@/components/common/StatusTag';
 import {
@@ -50,6 +51,7 @@ export default function CustomerDetailPage() {
   const navigate = useNavigate();
   const { id = '' } = useParams();
   const [editOpen, setEditOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const { data: account, isLoading } = useAccount(id);
   const { data: contracts, isLoading: loadingContracts } = useContractsByCustomer(id);
   const { data: payments, isLoading: loadingPayments } = usePaymentsByCustomer(id);
@@ -175,9 +177,19 @@ export default function CustomerDetailPage() {
   ];
 
   const stats = [
-    { label: t('customers.outstanding'), value: account?.totalOutstanding, icon: <WalletOutlined />, color: BRAND.info },
-    { label: t('customers.overdue'), value: account?.overdue, icon: <FallOutlined />, color: BRAND.danger },
-    { label: t('customers.paid'), value: account?.totalPaid, icon: <DollarOutlined />, color: BRAND.success },
+    // The two-sided balance leads, and it is clickable: it is the figure the desk works from,
+    // and it can be negative, which the other three never are.
+    {
+      key: 'balance',
+      label: t('customers.balance'),
+      value: account?.netBalance,
+      icon: <WalletOutlined />,
+      color: BRAND.info,
+      signed: true,
+      onClick: () => setLedgerOpen(true),
+    },
+    { key: 'overdue', label: t('customers.overdue'), value: account?.overdue, icon: <FallOutlined />, color: BRAND.danger },
+    { key: 'paid', label: t('customers.paid'), value: account?.totalPaid, icon: <DollarOutlined />, color: BRAND.success },
   ];
 
   return (
@@ -223,17 +235,26 @@ export default function CustomerDetailPage() {
         <Col xs={24} lg={16}>
           <Row gutter={[16, 16]}>
             {stats.map((s) => (
-              <Col xs={24} sm={8} key={s.label}>
-                <Card variant="borderless" loading={isLoading} className="soft-card">
+              <Col xs={24} sm={8} key={s.key}>
+                <Card
+                  variant="borderless"
+                  loading={isLoading}
+                  className="soft-card"
+                  hoverable={!!s.onClick}
+                  onClick={s.onClick}
+                  style={s.onClick ? { cursor: 'pointer' } : undefined}
+                >
                   <Space align="center" size={12}>
                     <span style={{ width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center', fontSize: 20, color: s.color, background: `${s.color}1f` }}>
                       {s.icon}
                     </span>
+                    {/* `valueRender` rather than `value` + `prefix="$"`: the raw Statistic
+                        renders a negative as "$-390", and rounds the cents away. */}
                     <Statistic
                       title={s.label}
-                      value={s.value ?? 0}
-                      precision={0}
-                      prefix="$"
+                      valueRender={() => (
+                        <Money value={s.value ?? 0} fractionDigits={2} strong signed={s.signed} />
+                      )}
                       valueStyle={{ fontSize: 20, fontWeight: 700 }}
                     />
                   </Space>
@@ -244,7 +265,14 @@ export default function CustomerDetailPage() {
               <Card variant="borderless" style={{ height: '100%' }}>
                 <Space size={32} wrap>
                   <Statistic title={t('customers.contracts')} value={account?.contractCount ?? 0} prefix={<ContainerOutlined />} />
-                  <Statistic title={t('customers.invoiced')} value={account?.totalInvoiced ?? 0} prefix="$" precision={0} />
+                  <Statistic
+                    title={t('customers.invoiced')}
+                    valueRender={() => <Money value={account?.totalInvoiced ?? 0} fractionDigits={2} />}
+                  />
+                  <Statistic
+                    title={t('customers.outstanding')}
+                    valueRender={() => <Money value={account?.totalOutstanding ?? 0} fractionDigits={2} />}
+                  />
                 </Space>
               </Card>
             </Col>
@@ -324,6 +352,14 @@ export default function CustomerDetailPage() {
       </Card>
       {account && (
         <CustomerFormModal open={editOpen} onClose={() => setEditOpen(false)} customer={account} />
+      )}
+      {ledgerOpen && account && (
+        <PersonLedgerModal
+          open
+          onClose={() => setLedgerOpen(false)}
+          personId={account.id}
+          personName={account.name}
+        />
       )}
     </div>
   );
