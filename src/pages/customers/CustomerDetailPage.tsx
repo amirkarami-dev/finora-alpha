@@ -138,7 +138,9 @@ export default function CustomerDetailPage() {
       dataIndex: 'side',
       align: 'center',
       render: (v: ClaimRow['side']) => (
-        <Tag bordered={false}>{v === 'SALE' ? t('claims.tabSale') : t('claims.tabPurchase')}</Tag>
+        // The SINGULAR side, not the tab label — a per-row tag reading "Sale claims" describes
+        // a list, not the row it sits on.
+        <Tag bordered={false}>{v === 'SALE' ? t('claims.sideSale') : t('claims.sidePurchase')}</Tag>
       ),
     },
     {

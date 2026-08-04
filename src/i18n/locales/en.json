@@ -1078,7 +1078,9 @@
       "invoice-immutable": "The invoice on a claim can't be changed after creation",
       "side-immutable": "The side can't be changed after creation"
     },
-    "side": "Side"
+    "side": "Side",
+    "sideSale": "Sale",
+    "sidePurchase": "Purchase"
   },
   "executive": {
     "subtitle": "Company performance at a glance",

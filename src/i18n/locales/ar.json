@@ -1078,7 +1078,9 @@
       "invoice-immutable": "لا يمكن تغيير الفاتورة بعد إنشاء المطالبة",
       "side-immutable": "لا يمكن تغيير الجهة بعد الإنشاء"
     },
-    "side": "الجهة"
+    "side": "الجهة",
+    "sideSale": "بيع",
+    "sidePurchase": "شراء"
   },
   "executive": {
     "subtitle": "أداء الشركة في لمحة",

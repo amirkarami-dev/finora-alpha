@@ -1078,7 +1078,9 @@
       "invoice-immutable": "فاکتور پس از ایجاد مطالبه قابل تغییر نیست",
       "side-immutable": "سمت پس از ایجاد قابل تغییر نیست"
     },
-    "side": "طرف"
+    "side": "طرف",
+    "sideSale": "فروش",
+    "sidePurchase": "خرید"
   },
   "executive": {
     "subtitle": "عملکرد شرکت در یک نگاه",
