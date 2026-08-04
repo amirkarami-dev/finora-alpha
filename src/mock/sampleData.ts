@@ -19,6 +19,7 @@ import type {
   Currency,
   Customer,
   CustomerType,
+  ExchangeGainLoss,
   FinancialAccount,
   Good,
   GoodForm as GoodFormType,
@@ -1614,6 +1615,39 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     });
   });
 
+  /**
+   * Exchange gains and losses.
+   *
+   * These are notes somebody writes when the rate moves — nothing in the app derives them, so
+   * they are written out plainly here. Two of each so the page's three totals all carry a real
+   * figure rather than a zero, and the notes name the position that moved so the numbers read as
+   * something a person decided rather than something generated.
+   *
+   * `type` mirrors the sign, exactly as `createExchangeGainLoss` derives it, so a record can
+   * never be labelled a gain while holding a negative amount. Every date is in the past — a
+   * future-dated row would sit outside every report window and vanish from the screen while
+   * still being in the data.
+   */
+  const exchangeGainLosses: ExchangeGainLoss[] = (
+    [
+      [-4120.5, 61, 'Dinar weakened against the dollar over the quarter — Basra balance restated'],
+      [2860, 44, 'Dirham position worth more after the month-end rate move'],
+      [-1975.25, 23, 'Loss on converting the dinar float back to dollars'],
+      [6340.75, 9, 'Supplier cheque settled at a better rate than the day it was written'],
+    ] as const
+  ).map(([amount, daysAgo, notes], i) => {
+    const id = `egl-${String(i + 1).padStart(4, '0')}`;
+    return {
+      id,
+      number: `EGL-${id.slice(4)}`,
+      date: day(daysAgo),
+      type: amount >= 0 ? ('GAIN' as const) : ('LOSS' as const),
+      amount,
+      notes,
+      createdAt: day(daysAgo),
+    };
+  });
+
   return {
     customers,
     contracts,
@@ -1631,9 +1665,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     financialAccounts,
     cheques,
     moneyTransfers,
-    // Gains and losses are notes somebody writes when the rate moves; there is nothing to
-    // derive one from, so the demo leaves this for the user to fill in.
-    exchangeGainLosses: [],
+    exchangeGainLosses,
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }
