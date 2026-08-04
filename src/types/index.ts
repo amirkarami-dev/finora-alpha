@@ -202,8 +202,10 @@ export interface Payment {
 export interface PaymentItem {
   id: string;              // 'payitem-<n>', monotonic counter
   paymentId: string;
-  /** The trade document this line settles. */
-  invoiceId: string;
+  /** The trade document this line settles. ABSENT on a GENERAL payment's lines, which are money
+   *  on account and settle no particular document — their side comes from the header's
+   *  `direction` instead. */
+  invoiceId?: string;
   date: string;
   amount: number;          // SERVER-DERIVED round(Σ allocations[].amount)
   currency: Currency;

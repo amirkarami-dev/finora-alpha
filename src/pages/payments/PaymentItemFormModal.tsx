@@ -15,7 +15,7 @@ import {
 } from '@/services/queries';
 import { useDefaultFxRate } from '@/store/useSettingsStore';
 import type { PaymentItemInput, PaymentItemRow } from '@/services/api';
-import type { ChequeType, Currency, FinancialAccountType, PaymentMethod } from '@/types';
+import type { ChequeType, Currency, FinancialAccountType, PaymentMethod, PaymentType } from '@/types';
 
 const { Text } = Typography;
 
@@ -28,6 +28,8 @@ const KNOWN_ERROR_CODES = [
   'payment-item-not-found',
   'invoice-required',
   'invoice-not-found',
+  'invoice-not-allowed',
+  'allocations-not-allowed',
   'date-required',
   'invalid-amount',
   'invalid-fx',
@@ -84,6 +86,9 @@ interface PaymentItemFormModalProps {
   open: boolean;
   onClose: () => void;
   paymentId: string;
+  /** GENERAL hides the invoice picker and the allocation grid — money on account settles no
+   *  particular document, and the server refuses an invoice on such a line. */
+  paymentType: PaymentType;
   /** Header currency + what the header still has unallocated, used to seed a new line. */
   defaultCurrency: Currency;
   unallocated: number;
@@ -99,10 +104,12 @@ export function PaymentItemFormModal({
   open,
   onClose,
   paymentId,
+  paymentType,
   defaultCurrency,
   unallocated,
   item,
 }: PaymentItemFormModalProps) {
+  const isGeneral = paymentType === 'GENERAL';
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm<ItemFormValues>();
@@ -206,7 +213,7 @@ export function PaymentItemFormModal({
     }
     const allocations = rows.filter((r) => r.amount > 0).map((r) => ({ invoiceItemId: r.invoiceItemId, amount: r.amount }));
     const input: PaymentItemInput = {
-      invoiceId: values.invoiceId,
+      invoiceId: isGeneral ? undefined : values.invoiceId,
       date: values.date.toISOString(),
       amount: values.amount,
       currency: values.currency,
@@ -230,8 +237,8 @@ export function PaymentItemFormModal({
             }
           : undefined,
       // Sending nothing lets the server auto-fill first-to-last; sending rows honours the split
-      // the user adjusted.
-      allocations: allocations.length ? allocations : undefined,
+      // the user adjusted. A general line has nothing to allocate against.
+      allocations: isGeneral || !allocations.length ? undefined : allocations,
     };
     try {
       if (isEdit && item) {
@@ -296,20 +303,22 @@ export function PaymentItemFormModal({
     >
       <Form key={item?.id ?? 'new'} form={form} layout="vertical" preserve={false} initialValues={initialValues}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Form.Item name="invoiceId" label={t('payments.invoiceColumn')} rules={[{ required: true, message: t('common.required') }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={invoiceOptions}
-              placeholder={t('payments.pickInvoice')}
-              // Changing invoice must drop the old grid, else amounts from the previous
-              // document would be submitted against items that are not on this one.
-              onChange={() => {
-                setTouched(false);
-                setRows([]);
-              }}
-            />
-          </Form.Item>
+          {!isGeneral && (
+            <Form.Item name="invoiceId" label={t('payments.invoiceColumn')} rules={[{ required: true, message: t('common.required') }]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={invoiceOptions}
+                placeholder={t('payments.pickInvoice')}
+                // Changing invoice must drop the old grid, else amounts from the previous
+                // document would be submitted against items that are not on this one.
+                onChange={() => {
+                  setTouched(false);
+                  setRows([]);
+                }}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="date" label={t('payments.date')} rules={[{ required: true, message: t('common.required') }]}>
             <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
           </Form.Item>
@@ -401,7 +410,9 @@ export function PaymentItemFormModal({
           ))}
       </Form>
 
-      {invoiceId ? (
+      {isGeneral ? (
+        <Alert type="info" showIcon message={t('payments.generalLineHint')} />
+      ) : invoiceId ? (
         <>
           <Space style={{ marginBottom: 8 }} wrap>
             <Text type="secondary">{t('payments.allocationHint')}</Text>

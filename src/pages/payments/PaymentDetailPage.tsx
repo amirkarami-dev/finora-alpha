@@ -52,16 +52,21 @@ export default function PaymentDetailPage() {
       title: t('payments.invoiceColumn'),
       dataIndex: 'invoiceNumber',
       width: 150,
-      render: (v: string | undefined, r) => (
-        <Button
-          type="link"
-          size="small"
-          style={{ padding: 0, height: 'auto', fontFamily: 'monospace' }}
-          onClick={() => navigate(`/app/invoices/${encodeURIComponent(r.invoiceId)}`)}
-        >
-          {v ?? r.invoiceId}
-        </Button>
-      ),
+      // A GENERAL line settles no document, so there is nothing to link to — show a dash
+      // rather than a button that would navigate nowhere.
+      render: (v: string | undefined, r) =>
+        r.invoiceId ? (
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, height: 'auto', fontFamily: 'monospace' }}
+            onClick={() => navigate(`/app/invoices/${encodeURIComponent(r.invoiceId as string)}`)}
+          >
+            {v ?? r.invoiceId}
+          </Button>
+        ) : (
+          <Text type="secondary">—</Text>
+        ),
     },
     { title: t('payments.date'), dataIndex: 'date', width: 120, render: (v) => formatDate(v) },
     {
@@ -162,7 +167,8 @@ export default function PaymentDetailPage() {
                 {t('payments.editPayment')}
               </Button>
             )}
-            {isDraft && type === 'INVOICE' && (
+            {/* GENERAL payments carry lines too — they just do not name a document. */}
+            {isDraft && (
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setActiveModal('addItem')}>
                 {t('payments.addItem')}
               </Button>
@@ -224,7 +230,7 @@ export default function PaymentDetailPage() {
         />
       </Card>
 
-      {type === 'INVOICE' ? (
+      {(
         <Card variant="borderless" title={`${t('payments.items')} · ${items.length}`} styles={{ body: { padding: 12 } }}>
           <Table<PaymentItemRow>
             rowKey="id"
@@ -270,10 +276,6 @@ export default function PaymentDetailPage() {
             }}
           />
         </Card>
-      ) : (
-        <Card variant="borderless">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('payments.generalNoItems')} />
-        </Card>
       )}
 
       {activeModal === 'editHeader' && (
@@ -287,6 +289,7 @@ export default function PaymentDetailPage() {
             setEditingItem(undefined);
           }}
           paymentId={payment.id}
+          paymentType={type}
           defaultCurrency={payment.currency}
           unallocated={unallocated}
           item={activeModal === 'editItem' ? editingItem : undefined}

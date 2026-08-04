@@ -3678,6 +3678,9 @@ export interface PaymentInput {
   /** Set by the header/items flow. Omitted by the legacy single-shot path, which stays
    *  CONFIRMED — see the note in `createPayment`. */
   type?: PaymentType;
+  /** GENERAL payments only: did this money come IN or go OUT? Ignored when an invoice is
+   *  linked, which decides the direction on its own. */
+  direction?: 'IN' | 'OUT';
 }
 
 /* ------------------- Money transfers + exchange revaluation ---------------- *
@@ -3740,6 +3743,23 @@ const ACCOUNT_TYPE_FOR_METHOD: Partial<Record<PaymentMethod, FinancialAccountTyp
   TT: 'BANK',
   Cash: 'CASH_SAFE',
 };
+
+/**
+ * Which way one settlement line moves money: `+1` in, `-1` out.
+ *
+ * Read from the line's OWN invoice, not the header, because one payment may settle both a sale
+ * and a purchase. A GENERAL line has no invoice, so it falls back to the header's `direction` —
+ * previously this case short-circuited to `+1`, which made every payment made OUT on account
+ * *increase* the balance it was drawn from.
+ *
+ * A legacy row with neither an invoice nor a direction reads as IN, matching every other reader
+ * of `direction` in this file.
+ */
+function paymentLineSign(payment: Payment, item: PaymentItem): 1 | -1 {
+  const invoice = item.invoiceId ? findInvoice(item.invoiceId) : undefined;
+  if (invoice) return invoiceSide(invoice.invoiceType) === 'PURCHASE' ? -1 : 1;
+  return (payment.direction ?? 'IN') === 'OUT' ? -1 : 1;
+}
 
 export interface AccountFeed {
   /** Signed, in the account's own currency. Positive is money in. */
@@ -3809,8 +3829,7 @@ export function accountFeeds(accountId: string): { feeds: AccountFeed[]; skipped
         skippedCurrency += 1;
         continue;
       }
-      const invoice = findInvoice(it.invoiceId);
-      const sign = invoice && invoiceSide(invoice.invoiceType) === 'PURCHASE' ? -1 : 1;
+      const sign = paymentLineSign(p, it);
       feeds.push({
         amount: sign * it.amount,
         baseUSD: sign * it.amountUSD,
@@ -4588,7 +4607,8 @@ function invoiceItemRemainingUSD(invoiceItemId: string, excludePaymentId?: strin
 }
 
 export interface PaymentItemInput {
-  invoiceId: string;
+  /** Required on an INVOICE payment, refused on a GENERAL one. */
+  invoiceId?: string;
   date: string;
   amount: number;
   currency: Currency;
@@ -4690,9 +4710,19 @@ export async function removePaymentItem(paymentId: string, itemId: string): Prom
  * remaining-owed maths and editing a line does not fight itself.
  */
 function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: PaymentItem): PaymentItem {
-  if (!input.invoiceId) throw new Error('invoice-required');
-  const invoice = findInvoice(input.invoiceId);
-  if (!invoice) throw new Error('invoice-not-found');
+  // A GENERAL payment is money on account: it settles no particular document, so its lines take
+  // no invoice and no allocations. Refusing an invoice here rather than ignoring one means a
+  // caller that sends the wrong shape is told, instead of silently having half its input dropped.
+  const isGeneral = paymentType(payment) === 'GENERAL';
+  let invoice: Invoice | undefined;
+  if (isGeneral) {
+    if (input.invoiceId) throw new Error('invoice-not-allowed');
+    if (input.allocations?.length) throw new Error('allocations-not-allowed');
+  } else {
+    if (!input.invoiceId) throw new Error('invoice-required');
+    invoice = findInvoice(input.invoiceId);
+    if (!invoice) throw new Error('invoice-not-found');
+  }
   if (!input.date) throw new Error('date-required');
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
 
@@ -4735,28 +4765,31 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
 
   // Auto-fill when the caller sent nothing, else honour their split. `payment.id` is excluded
   // from the remaining-owed maths so this payment's own existing lines do not count against it.
-  const requested =
-    input.allocations ??
-    autoFillAllocations(invoice, amountUSD, payment.id).map((a) => ({
-      invoiceItemId: a.invoiceItemId,
-      amount: round(a.amountUSD * fxRate),
-    }));
+  const requested = invoice
+    ? (input.allocations ??
+      autoFillAllocations(invoice, amountUSD, payment.id).map((a) => ({
+        invoiceItemId: a.invoiceItemId,
+        amount: round(a.amountUSD * fxRate),
+      })))
+    : [];
 
-  const invoiceItemIds = new Set(invoice.items.map((i) => i.id));
-  const seen = new Set<string>();
-  for (const a of requested) {
-    if (!invoiceItemIds.has(a.invoiceItemId)) throw new Error('item-not-on-invoice');
-    if (seen.has(a.invoiceItemId)) throw new Error('duplicate-allocation');
-    seen.add(a.invoiceItemId);
-    if (!Number.isFinite(a.amount) || a.amount <= 0) throw new Error('invalid-allocation-amount');
-    // The spec's validation: a line may never pay an item more than it still owes. `existing`
-    // is excluded via `payment.id` above so re-saving an unchanged line is not self-blocking.
-    const owedUSD = invoiceItemRemainingUSD(a.invoiceItemId, payment.id);
-    if (round(a.amount / fxRate) > owedUSD + 0.005) throw new Error('over-allocated');
+  if (invoice) {
+    const invoiceItemIds = new Set(invoice.items.map((i) => i.id));
+    const seen = new Set<string>();
+    for (const a of requested) {
+      if (!invoiceItemIds.has(a.invoiceItemId)) throw new Error('item-not-on-invoice');
+      if (seen.has(a.invoiceItemId)) throw new Error('duplicate-allocation');
+      seen.add(a.invoiceItemId);
+      if (!Number.isFinite(a.amount) || a.amount <= 0) throw new Error('invalid-allocation-amount');
+      // The spec's validation: a line may never pay an item more than it still owes. `existing`
+      // is excluded via `payment.id` above so re-saving an unchanged line is not self-blocking.
+      const owedUSD = invoiceItemRemainingUSD(a.invoiceItemId, payment.id);
+      if (round(a.amount / fxRate) > owedUSD + 0.005) throw new Error('over-allocated');
+    }
+    if (requested.length === 0) throw new Error('allocations-required');
+    const allocTotal = round(requested.reduce((s, a) => s + a.amount, 0));
+    if (Math.abs(allocTotal - amount) > 0.005) throw new Error('allocation-mismatch');
   }
-  if (requested.length === 0) throw new Error('allocations-required');
-  const allocTotal = round(requested.reduce((s, a) => s + a.amount, 0));
-  if (Math.abs(allocTotal - amount) > 0.005) throw new Error('allocation-mismatch');
 
   // Everything above passed, so it is now safe to mint the inline cheque: nothing after this
   // point can throw, and the caller persists.
@@ -4767,7 +4800,7 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
   return {
     id: itemId,
     paymentId: payment.id,
-    invoiceId: invoice.id,
+    invoiceId: invoice?.id,
     date: input.date,
     amount,
     currency: input.currency,
@@ -4777,7 +4810,7 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
     bankAccountId: requiredAccountType ? input.bankAccountId : undefined,
     chequeId: input.method === 'Cheque' ? chequeId : undefined,
     allocations: requested.map((a) => {
-      const line = invoice.items.find((i) => i.id === a.invoiceItemId)!;
+      const line = invoice!.items.find((i) => i.id === a.invoiceItemId)!;
       return {
         id: nextPaymentAllocId(),
         paymentItemId: itemId,
@@ -4797,9 +4830,10 @@ export async function setPaymentStatus(id: string, status: PaymentStatus): Promi
   await delay(160);
   const payment = db.payments.find((p) => p.id === id);
   if (!payment) throw new Error('payment-not-found');
-  // Confirming an INVOICE payment with nothing allocated would move a balance by zero and read
-  // as a real settlement in every report.
-  if (status === 'CONFIRMED' && paymentType(payment) === 'INVOICE' && paymentItems(payment).length === 0) {
+  // Confirming a payment with nothing on it would move every balance by zero and still read as
+  // a real settlement in every report. True of GENERAL payments as much as INVOICE ones — they
+  // carry lines too, they just do not name a document.
+  if (status === 'CONFIRMED' && paymentItems(payment).length === 0 && payment.items !== undefined) {
     throw new Error('no-payment-items');
   }
   payment.status = status;
@@ -4820,8 +4854,14 @@ export async function createPayment(input: PaymentInput): Promise<Payment> {
     throw new Error('invalid-fx');
   }
   const linkedInvoice = input.invoiceId ? findInvoice(input.invoiceId) : undefined;
-  const direction: 'IN' | 'OUT' =
-    linkedInvoice && invoiceSide(linkedInvoice.invoiceType) === 'PURCHASE' ? 'OUT' : 'IN';
+  // A linked invoice decides the direction by itself. Money on account does not — somebody has
+  // to say whether it came in or went out, so a GENERAL payment carries the caller's choice.
+  // Defaulting it would put every supplier prepayment on the wrong side of the person's balance.
+  const direction: 'IN' | 'OUT' = linkedInvoice
+    ? invoiceSide(linkedInvoice.invoiceType) === 'PURCHASE'
+      ? 'OUT'
+      : 'IN'
+    : (input.direction ?? 'IN');
   const amountUSD = input.currency === 'USD' ? input.amount : round(input.amount / input.fxRate);
   const payment: Payment = {
     id: nextPaymentId(),
@@ -4906,7 +4946,7 @@ export async function getPayment(id: string): Promise<PaymentDetail | null> {
     const cheque = it.chequeId ? db.cheques.find((c) => c.id === it.chequeId) : undefined;
     return {
       ...it,
-      invoiceNumber: findInvoice(it.invoiceId)?.invoiceNumber,
+      invoiceNumber: it.invoiceId ? findInvoice(it.invoiceId)?.invoiceNumber : undefined,
       bankAccountName: it.bankAccountId
         ? db.financialAccounts.find((a) => a.id === it.bankAccountId)?.name
         : undefined,

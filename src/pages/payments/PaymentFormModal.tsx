@@ -14,6 +14,8 @@ interface HeaderFormValues {
   amount: number;
   currency: Currency;
   notes?: string;
+  /** GENERAL only — an invoice payment takes its side from the document. */
+  direction?: 'IN' | 'OUT';
 }
 
 interface PaymentFormModalProps {
@@ -50,7 +52,7 @@ export function PaymentFormModal({ open, onClose, type, payment }: PaymentFormMo
         currency: payment.currency,
         notes: payment.notes,
       }
-    : { currency: 'USD', date: dayjs() };
+    : { currency: 'USD', date: dayjs(), direction: 'IN' as const };
 
   const submit = async () => {
     let values: HeaderFormValues;
@@ -85,6 +87,8 @@ export function PaymentFormModal({ open, onClose, type, payment }: PaymentFormMo
         method: 'TT',
         notes: values.notes,
         type,
+        // Only meaningful on a GENERAL payment; a linked invoice overrides it server-side.
+        direction: type === 'GENERAL' ? values.direction : undefined,
       });
       message.success(t('payments.created'));
       onClose();
@@ -121,6 +125,23 @@ export function PaymentFormModal({ open, onClose, type, payment }: PaymentFormMo
         >
           <Select showSearch optionFilterProp="label" options={personOptions} placeholder={t('payments.personPlaceholder')} />
         </Form.Item>
+        {/* Money on account has no document to take its side from, so somebody must say which
+            way it went. Shown only when creating: `direction` is fixed once lines exist. */}
+        {type === 'GENERAL' && !isEdit && (
+          <Form.Item
+            name="direction"
+            label={t('payments.direction')}
+            rules={[{ required: true, message: t('common.required') }]}
+            extra={t('payments.directionHint')}
+          >
+            <Select
+              options={[
+                { value: 'IN', label: t('payments.directionIn') },
+                { value: 'OUT', label: t('payments.directionOut') },
+              ]}
+            />
+          </Form.Item>
+        )}
         <Form.Item name="date" label={t('payments.date')} rules={[{ required: true, message: t('common.required') }]}>
           <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
         </Form.Item>
