@@ -1559,21 +1559,52 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * cannot disturb the "collected never exceeds invoiced" invariant the sale pass works to hold,
    * and an advance from a buyer is ordinary in this trade.
    */
-  const buyers = customers.filter((c) => c.customerType === 'BUYER' || c.customerType === 'BOTH');
-  if (buyers[0]) {
+  /**
+   * They go to the two buyers who still owe the MOST, chosen by headroom rather than by name.
+   *
+   * An advance bigger than what someone owes pushes their balance negative and floors their
+   * sale-only Outstanding at zero while their invoices stay overdue — every figure correct, and
+   * the pair still reading as a contradiction. Picking by headroom keeps that from happening,
+   * and keeps the reference account (`cust-am`, the workbook contract every figure in this app
+   * is checked against) out of it without special-casing it by id.
+   */
+  const owedByCustomer = new Map<string, number>();
+  for (const inv of invoices) {
+    // Finals only: counting provisionals too would double up on any that were converted.
+    if (inv.status !== 'CONFIRMED' || inv.invoiceType !== 'SALE_INVOICE') continue;
+    const usd = inv.currency === 'USD' ? inv.totalAmount : inv.totalAmount / DEFAULT_FX_AED_PER_USD;
+    owedByCustomer.set(inv.customerId, round((owedByCustomer.get(inv.customerId) ?? 0) + usd, 2));
+  }
+  for (const p of payments) {
+    if ((p.direction ?? 'IN') !== 'IN') continue;
+    owedByCustomer.set(p.customerId, round((owedByCustomer.get(p.customerId) ?? 0) - p.amountUSD, 2));
+  }
+
+  const recipients = customers
+    .filter((c) => c.customerType === 'BUYER' || c.customerType === 'BOTH')
+    .map((c) => ({ customer: c, owed: owedByCustomer.get(c.id) ?? 0 }))
+    .sort((a, b) => b.owed - a.owed || (a.customer.id < b.customer.id ? -1 : 1));
+
+  (
+    [
+      { amount: 750000, currency: 'USD' as Currency, account: 'fa-0002', daysAgo: 52 },
+      { amount: 220000, currency: 'AED' as Currency, account: 'fa-0001', daysAgo: 37 },
+    ] as const
+  ).forEach((spec, i) => {
+    const pick = recipients[i];
+    if (!pick) return;
     pushLinePayment({
-      customerId: buyers[0].id, date: day(52), currency: 'USD', fxRate: 1, amount: 750000,
-      method: 'TT', direction: 'IN', bankAccountId: 'fa-0002',
+      customerId: pick.customer.id,
+      date: day(spec.daysAgo),
+      currency: spec.currency,
+      fxRate: spec.currency === 'USD' ? 1 : DEFAULT_FX_AED_PER_USD,
+      amount: spec.amount,
+      method: 'TT',
+      direction: 'IN',
+      bankAccountId: spec.account,
       notes: 'Advance received on account',
     });
-  }
-  if (buyers[1]) {
-    pushLinePayment({
-      customerId: buyers[1].id, date: day(37), currency: 'AED', fxRate: DEFAULT_FX_AED_PER_USD,
-      amount: 220000, method: 'TT', direction: 'IN', bankAccountId: 'fa-0001',
-      notes: 'Advance received on account',
-    });
-  }
+  });
 
   /**
    * Two supplier payments settled by cheque — one cleared, one still pending — so the register's
