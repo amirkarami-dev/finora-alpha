@@ -79,11 +79,49 @@
 
     <div class="task" data-s="done">
       <div>
+        <h4>Each payment method asks for what it needs</h4>
+        <p>A bank transfer names a bank account; a cash payment names a cash safe. Pointing one at
+        the other is refused — otherwise the two would be impossible to tell apart in any balance.
+        This also fixed a real gap: a confirmed cash payment used to move no cash safe at all.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Checked by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Cheques are written on the payment line</h4>
+        <p>Choosing Cheque opens the cheque fields there and then, instead of picking from a list.
+        Every cheque in the register then has one origin story: somebody was paid with it. The
+        cheque is only created once the whole line passes, so a rejected line leaves nothing behind
+        and does not burn the cheque number.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Nothing orphaned on failure</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
         <h4>Cheque register</h4>
-        <p>Cheques are their own records, because one cheque can settle several invoices. A cheque
-        moves through Pending, Paid, Returned, Expired or Changed. Marking one as paid asks which
-        of your accounts received the money. Cheques past their due date are flagged.</p>
+        <p>Cheques are their own records, because one cheque can settle several invoices. Every
+        status can follow every other — Paid and Changed used to be dead ends, so a mistyped cheque
+        was unfixable. To correct a paid cheque, move it back to pending, edit, then pay it again;
+        moving out of paid also clears the bank it went into. Marking one paid asks which account
+        received the money. Filters cover number, owner, bank, status, type, currency, due date and
+        amount.</p>
         <div class="meta"><span class="chip">Payments</span><span class="chip">Numbers unique per bank</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>General payments carry lines too</h4>
+        <p>Money on account settles no particular invoice, so its lines name no document and there
+        is nothing to split them across. You say which way it went — in or out — because there is no
+        invoice to work it out from. Before this, the Add line button was hidden on general
+        payments, so there was no way to record anything at all.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Checked by running it</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -101,21 +139,35 @@
 
     <div class="task" data-s="done">
       <div>
-        <h4>Exchange gain and loss</h4>
-        <p>Revalue a foreign-currency balance at a new rate. The full calculation is shown before
-        you confirm. Reports group the result by person, contract, invoice, currency or account.</p>
-        <div class="meta"><span class="chip">Finance</span><span class="chip">36 checks passed</span></div>
+        <h4>A person's balance counts both sides</h4>
+        <p>One figure per person: sale invoices, less what they paid, less sale claims, less
+        purchase invoices, plus purchase claims, plus what you paid them. Positive means they owe
+        you; a number in brackets means you owe them. Somebody who both buys and sells gets one net
+        figure instead of two half-answers.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Worked example reproduced exactly</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
 
     <div class="task" data-s="done">
       <div>
-        <h4>No double counting when you revalue again</h4>
-        <p>Each revaluation measures from what the balance is <em>currently</em> carried at, not
-        from the original transfer. Revalue twice at the same rate and the second one books zero.
-        Return to the old rate and it books the exact opposite. A whole history nets to zero.</p>
-        <div class="meta"><span class="chip">Finance</span><span class="chip">Proved by running it</span></div>
+        <h4>Click a balance to see why it is what it is</h4>
+        <p>Every movement behind the figure, oldest first, with a running balance down the side and
+        the two sides totalled separately. The headline number <em>is</em> the last running value,
+        so the number and its explanation cannot drift apart.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Four ways of computing it agree</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Exchange gain and loss is now a plain record</h4>
+        <p>Pick gain or loss on a toggle, type a positive amount, add a date and notes. That is all.
+        It replaced a revaluation engine with book rates, previews, proportional allocation back to
+        transfers and five report groupings — a lot of machinery answering a question nobody asked.
+        The old records were cleared, which was the agreed decision.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Old database checked</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -125,11 +177,33 @@
         <h4>Account balances count transfers and payments</h4>
         <p>A bank or cash safe balance is built from confirmed transfers <em>and</em> from
         confirmed payment lines that name that account. The direction comes from the invoice on
-        the line: money from a sale comes in, money for a purchase goes out. A bank transfer
+        the line: money from a sale comes in, money for a purchase goes out. A bank or cash line
         counts at once; a cheque counts only after you mark it paid. A line in another currency is
-        skipped, never converted at a rate nobody chose, and the revaluation screen warns you how
-        many were left out.</p>
+        skipped, never converted at a rate nobody chose.</p>
         <div class="meta"><span class="chip">Finance</span><span class="chip">Checked by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Money paid out was raising the balance it came from</h4>
+        <p>A payment line with no invoice behind it was always treated as money coming in. So
+        paying a supplier on account <em>increased</em> the safe you paid from. Direction now comes
+        from the line's own invoice, or from the in/out choice on a general payment.</p>
+        <div class="meta"><span class="chip">Fix</span><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Paid sale invoices were showing as overdue for ever</h4>
+        <p>Payments made through the header-and-lines flow put the invoice on the <em>lines</em>,
+        but the receivable check was reading the <em>header</em>, where there is none. Every such
+        payment scored zero. Two related sums now read the lines, which also stops money paid to a
+        supplier from reducing what that same person owes you.</p>
+        <div class="meta"><span class="chip">Fix</span><span class="chip">Finance</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -164,8 +238,8 @@
     <div class="task" data-s="done">
       <div>
         <h4>Bank accounts and cash safes</h4>
-        <p>Both are stored as one kind of record with a type, so transfers and revaluations can
-        point at either by one id. Banks require an account number and IBAN; cash safes do not.
+        <p>Both are stored as one kind of record with a type, so payments and transfers can point
+        at either by one id. Banks require an account number and IBAN; cash safes do not.
         Currency cannot change after you create the account.</p>
         <div class="meta"><span class="chip">Base Info</span></div>
       </div>
@@ -285,6 +359,31 @@
         <p>Pick one invoice, then enter an amount and reason per good. The header total is the
         sum and cannot be typed. Claims are typed as quantity or quality.</p>
         <div class="meta"><span class="chip">Claims</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Claims are named after the document they sit on</h4>
+        <p>A <em>sale claim</em> is filed on a sale invoice, a <em>purchase claim</em> on a purchase
+        invoice. The old names pointed at the opposite document, so a plain rename would have
+        re-pointed every saved claim at the wrong kind — and since the two sides now count in
+        opposite directions on a person's balance, that would have silently flipped each claim's
+        sign. Instead the app ignores the old label and reads each claim's own invoice.</p>
+        <div class="meta"><span class="chip">Claims</span><span class="chip">Old database checked</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Four movement reports</h4>
+        <p>Banks and cash safes, persons, expenses, and purchases and sales — each with a date range
+        showing opening balance, the movements, then the closing balance. The range applies to the
+        movements and the opening is everything before it, so the three figures always add up. The
+        old charts moved to an Overview tab.</p>
+        <div class="meta"><span class="chip">Reports</span><span class="chip">Checked against the sample data</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -439,9 +538,9 @@
     <div class="task" data-s="open">
       <div>
         <h4>Sample data does not include transfers or cheques</h4>
-        <p>"Load sample data" fills customers, contracts, invoices, goods and bank accounts, but
-        creates no cheques, transfers or revaluations. Seeding those would also fix a starting
-        value into every account, which the revaluation maths then measures from.</p>
+        <p>"Load sample data" fills persons, contracts, invoices, goods and bank accounts, but
+        creates no cheques or transfers. So the banks and cash safes report opens empty until you
+        enter some yourself, even though every other report is full.</p>
         <div class="meta"><span class="chip">Demo data</span></div>
       </div>
       <span class="badge b-open">Open</span>
@@ -468,10 +567,13 @@
         <tr><td>Goods</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
         <tr><td>Banks and cash safes</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
         <tr><td>Cheques</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
-        <tr><td>Transfers and revaluations</td><td>Missing lists fill in as empty</td><td>Yes</td></tr>
+        <tr><td>Transfers</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
         <tr><td>Payment status</td><td>Missing status counts as confirmed</td><td>Yes</td></tr>
         <tr><td>Payment type</td><td>Worked out from whether an invoice is linked</td><td>Yes</td></tr>
         <tr><td>Cost line person</td><td>Shows a dash, asked for on next edit</td><td>Yes</td></tr>
+        <tr><td>Claim sides renamed</td><td>Side re-read from each claim's own invoice, not the old label</td><td>Yes</td></tr>
+        <tr><td>Gain/loss replaced revaluations</td><td>Old revaluation records cleared, by agreement. Everything else untouched</td><td>Yes</td></tr>
+        <tr><td>Payment line without an invoice</td><td>Allowed now; existing lines all still have one</td><td>Yes</td></tr>
       </tbody>
     </table>
   </div>

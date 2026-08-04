@@ -60,8 +60,8 @@
 
     <h3>Draft and confirmed</h3>
     <p>Many documents start as a <strong>draft</strong>. A draft is visible but does not affect
-    any balance, total or report. It only counts once you <strong>confirm</strong> it. Payments,
-    transfers and revaluations all work this way.</p>
+    any balance, total or report. It only counts once you <strong>confirm</strong> it. Invoices,
+    payments and transfers all work this way.</p>
 
     <h3>Deactivate, not delete</h3>
     <p>Master records — persons, goods, categories, accounts — are never deleted. You deactivate
@@ -107,6 +107,40 @@
     <p>Employees and Others do not trade, so the form hides currency, payment terms, credit limit
     and portal access, and explains why. They never appear when you choose a party for a
     contract.</p>
+
+    <h3>Balance</h3>
+    <p>One number for each person, counting buying and selling together:</p>
+    <pre><code>  + sale invoices
+  - payments received on sales
+  - sale claims
+  - purchase invoices
+  + purchase claims
+  + payments made on purchases
+  ------------------------------
+  = balance</code></pre>
+    <p>Positive means <strong>they owe you</strong>. A number in brackets, like <code>(390)</code>,
+    means <strong>you owe them</strong>. A person who both buys and sells gets one net figure —
+    their two sides simply cancel out.</p>
+
+    <div class="callout">
+      <strong>Click the balance to see why it is what it is</strong>
+      <p>Every movement behind it, oldest first, each with the amount, what it did to the balance,
+      and the running balance after it. The headline figure <em>is</em> the last running value, so
+      the number and its explanation cannot drift apart.</p>
+      <p>For somebody who both buys and sells, the panel also totals the two sides separately, so
+      "they owe 1,000, we owe 1,390, net (390)" is visible at a glance.</p>
+      <p>A cheque that has not cleared is listed but counts zero, marked <em>not counted yet</em>.
+      Transfers linked to that person's invoices are listed <em>for information</em> and count zero
+      too — they move your money between your own accounts.</p>
+    </div>
+
+    <div class="callout">
+      <strong>Balance is not the same as Outstanding</strong>
+      <p><em>Balance</em> is the two-sided figure above, and it can go negative. <em>Outstanding</em>
+      is the older sale-only receivable, never below zero, and it is what ageing, days-to-collect
+      and credit limits are built on — ageing a purchase invoice would mean nothing. Both are shown;
+      they answer different questions.</p>
+    </div>
 
     <h3>The person page</h3>
     <p>Four tabs: <strong>Contracts</strong>, <strong>Invoices</strong>, <strong>Claims</strong>
@@ -223,20 +257,41 @@ line value = unit price × quantity in tonnes</code></pre>
     but ignores the payment you are editing, so re-saving a line does not block itself.</p>
 
     <h3>Methods</h3>
+    <p>Each method asks for what it actually needs, and nothing more.</p>
     <div class="scroll-x">
       <table>
         <thead><tr><th>Method</th><th>Also needs</th></tr></thead>
         <tbody>
-          <tr><td>TT (bank transfer)</td><td>Which bank account</td></tr>
-          <tr><td>Cheque</td><td>Which cheque</td></tr>
-          <tr><td>Cash, Offset, Credit note</td><td>Nothing extra</td></tr>
+          <tr><td>TT (bank transfer)</td><td>Which <strong>bank account</strong></td></tr>
+          <tr><td>Cash</td><td>Which <strong>cash safe</strong></td></tr>
+          <tr><td>Cheque</td><td>The <strong>cheque details</strong> — you write a new cheque here</td></tr>
+          <tr><td>Offset, Credit note</td><td>Nothing extra</td></tr>
         </tbody>
       </table>
     </div>
+    <p>A bank transfer must name a bank and a cash payment must name a safe. Pointing one at the
+    other is refused, because otherwise the two would be impossible to tell apart in any balance.</p>
+
+    <div class="callout">
+      <strong>Cheques are written here, not picked from a list</strong>
+      <p>Choosing Cheque opens the cheque fields on the line itself. That gives every cheque in
+      the register one origin story: it exists because somebody was paid with it.</p>
+      <p>The cheque is only created once the whole line passes its checks. If the line is refused,
+      no cheque is left behind and its number stays free. Editing a line that already has a cheque
+      shows it read-only and points you at the register, where its status rules live.</p>
+    </div>
 
     <h3>General payments</h3>
-    <p>Money moved with a person that no invoice sits behind. It has a person and an amount, no
-    lines, and rests on that person's account.</p>
+    <p>Money moved with a person that no invoice sits behind — money on account. It carries lines
+    exactly like an invoice payment, but the lines name no document, so there is nothing to split
+    them across.</p>
+    <div class="callout">
+      <strong>You say which way it went</strong>
+      <p>An invoice payment works out its own direction: money comes in on a sale and goes out on
+      a purchase. Money on account has no document to ask, so the header asks you — money in, or
+      money out. Guessing would put every supplier prepayment on the wrong side of that person's
+      balance.</p>
+    </div>
 
     <h3>Reopening</h3>
     <p>A confirmed payment can be reopened to a draft. The app warns you first, because reopening
@@ -248,9 +303,17 @@ line value = unit price × quantity in tonnes</code></pre>
   <div class="card">
     <p>A cheque is its own record, not a field on a payment, because one cheque can settle lines
     on several invoices.</p>
+    <p>Cheques are <strong>written on a payment line</strong> (see Payments above). This tab lists
+    them, filters them, edits them and moves them through their statuses — it does not create
+    them.</p>
 
     <h3>Fields</h3>
     <p>Type (normal or security), number, issuing bank, owner, due date, amount and currency.</p>
+
+    <h3>Finding one</h3>
+    <p>Filter by status, or search the number, owner and issuing bank at once. You can also narrow
+    by type, currency, due-date range and amount range, or show only the ones that need action —
+    past their due date and still not cleared.</p>
 
     <h3>Numbers</h3>
     <div class="callout">
@@ -263,20 +326,39 @@ line value = unit price × quantity in tonnes</code></pre>
     <h3>Status</h3>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Status</th><th>Meaning</th><th>Can move to</th></tr></thead>
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td>Pending</td><td>Waiting to clear</td><td>Paid, Returned, Expired, Changed</td></tr>
-          <tr><td>Paid</td><td>Cleared into your account</td><td>Nothing — final</td></tr>
-          <tr><td>Returned</td><td>Bounced</td><td>Changed, back to Pending</td></tr>
-          <tr><td>Expired</td><td>Past due, never cleared</td><td>Paid, Returned, Changed</td></tr>
-          <tr><td>Changed</td><td>Replaced by another cheque</td><td>Nothing — final</td></tr>
+          <tr><td>Pending</td><td>Waiting to clear</td></tr>
+          <tr><td>Paid</td><td>Cleared into one of your accounts</td></tr>
+          <tr><td>Returned</td><td>Bounced</td></tr>
+          <tr><td>Expired</td><td>Past due, never cleared</td></tr>
+          <tr><td>Changed</td><td>Replaced by another cheque</td></tr>
         </tbody>
       </table>
     </div>
+    <p><strong>Any status can follow any other.</strong> Paid and Changed used to be dead ends,
+    which made a mistyped cheque unfixable and left no way to undo a cheque marked paid by
+    mistake. What is guarded now is the money, not the list of allowed moves.</p>
+
+    <div class="callout">
+      <strong>To correct a cheque that is already paid</strong>
+      <p>Move it back to <em>pending</em>, edit it, then mark it paid again. Data can only be
+      changed while a cheque is pending — that two-step makes changing a settled record something
+      you decide to do, not something that happens because you opened a form.</p>
+      <p>Moving out of paid also clears the bank it was paid into. Otherwise an uncleared cheque
+      would keep reporting a bank, and re-paying it somewhere else could quietly keep the old one.</p>
+    </div>
+
     <p>Marking a cheque as <strong>paid requires naming which of your accounts received the
-    money</strong>. Cheques past their due date are flagged with a warning banner so they are easy
-    to find. A cleared cheque cannot be edited, because its amount is what the payment lines
-    pointing at it are worth.</p>
+    money</strong>, because paid is the moment the money lands. Cheques past their due date are
+    flagged with a warning banner so they are easy to find.</p>
+
+    <div class="callout">
+      <strong>A cheque counts only when it is paid</strong>
+      <p>Until then it is a promise. It shows on the account and on the person's balance detail,
+      marked as not counted yet, and moves neither figure. Mark it paid and both move; move it back
+      to pending and both move back.</p>
+    </div>
   </div>
 
   <!-- ============================= TRANSFERS ============================= -->
@@ -301,73 +383,69 @@ Rate:  3.1
 To:    CashSafe IQD    310 IQD</code></pre>
 
     <h3>Status</h3>
-    <p>Draft, confirmed or cancelled. Nothing moves until you confirm. A confirmed transfer cannot
-    be cancelled once its account has been revalued, because that would rewrite the balance the
-    gain was measured from.</p>
+    <p>Draft, confirmed or cancelled. Nothing moves until you confirm, and a confirmed transfer can
+    be cancelled again — which reverses both balances. It used to be locked once its account had
+    been revalued; gain and loss no longer read account balances at all, so there is nothing left
+    to protect.</p>
+
+    <h3>Where they show up</h3>
+    <p>In the <em>Banks &amp; cash safes</em> report as movements on both accounts. If you linked
+    part of a transfer to an invoice, it also appears in that person's balance detail, marked
+    <em>for information</em> — moving money between your own accounts never changes what anybody
+    owes you.</p>
   </div>
+
 
   <!-- ============================= EXCHANGE ============================= -->
   <h2 id="exchange">Exchange gain and loss</h2>
   <div class="card">
     <p>When you hold foreign currency and the rate moves, what you hold is worth a different
-    number of dollars. A <strong>revaluation</strong> records that change.</p>
+    number of dollars. This is where you write that down.</p>
 
-    <h3>The worked example</h3>
-    <pre><code>You hold        310 IQD
-Carried at      3.1  →  worth $100.00
-
-New rate        3.0  →  worth $103.33
-
-Exchange gain           +$3.33</code></pre>
-
-    <h3>The rule that matters most</h3>
-    <div class="callout warn">
-      <strong>Never count the same gain twice</strong>
-      <p>The "previous rate" is what the balance is <em>currently carried at</em> — not the rate
-      of the transfer that created it. After booking +$3.33 the balance is carried at $103.33, so
-      the next revaluation starts from there.</p>
-      <p style="margin-top:8px">Revalue again at the same rate and it books <strong>zero</strong>.
-      Return to the old rate and it books <strong>−$3.33</strong>. A full round trip nets to
-      nothing.</p>
+    <div class="callout">
+      <strong>It is a plain record, on purpose</strong>
+      <p>Date, gain or loss, amount, notes. Nothing else — no account, no rate, no balance.</p>
+      <p>This replaced a revaluation engine that carried book rates per account, showed a preview
+      before confirming, split each gain proportionally back across the transfers and payments that
+      had funded the account, and reported it five different ways. It was a great deal of machinery
+      answering a question nobody was asking. What the desk wanted was to record what the currency
+      cost or earned.</p>
     </div>
 
-    <h3>Three tabs</h3>
-    <ul>
-      <li><strong>Revaluations</strong> — open drafts. The full calculation is shown before you
-      confirm.</li>
-      <li><strong>History</strong> — confirmed and cancelled records. Open a row to see what funded
-      the balance: each line names the transfer or the payment it came from.</li>
-      <li><strong>Reports</strong> — gain and loss grouped by person, contract, invoice, currency
-      or account.</li>
-    </ul>
+    <h3>Adding one</h3>
+    <ol>
+      <li>Choose <strong>Gain</strong> or <strong>Loss</strong> on the toggle.</li>
+      <li>Enter the amount as a plain positive number. The toggle carries the direction, so the
+      field refuses a minus sign.</li>
+      <li>Set the date, add notes if useful, and save.</li>
+    </ol>
+    <p>A line under the amount confirms what will happen — "saved as a loss, it lowers your net".
+    Asking somebody to express a loss by remembering to type a minus sign is a trap, and a mistyped
+    sign would look exactly like a real entry.</p>
 
-    <h3>Tracing a gain back</h3>
-    <p>Where a link exists, the app follows the chain from the gain back to the money that funded
-    the account — a transfer or a payment — and on to the invoice, the contract and the person.
-    Where no link exists — a plain cash safe, for example — the person and contract reports simply
-    stay empty. That is correct: such a gain genuinely has no person behind it, and inventing an
-    "unknown" row would be misleading.</p>
+    <h3>The list</h3>
+    <p>Three totals across the top — gain, loss and net — then every record with its number, date,
+    type, amount and notes. Records can be edited or deleted. Editing the toggle flips the sign;
+    the totals follow.</p>
+    <p>Deleting really deletes. Everywhere else in Finora cancels instead, because other records
+    point at the thing being cancelled. Nothing points at a gain or loss entry, so leaving
+    struck-through rows behind would be clutter with no reason behind it.</p>
 
     <div class="callout">
       <strong>What counts towards an account balance</strong>
-      <p>Three things: confirmed transfers, confirmed payment lines that name the account, and
-      gains already booked.</p>
+      <p>Two things: confirmed transfers, and confirmed payment lines that name the account. Gains
+      and losses are <em>not</em> among them — they are notes about currency, not movements on any
+      particular account.</p>
       <p>A payment line is money <strong>in</strong> when its invoice is a sale and money
       <strong>out</strong> when its invoice is a purchase. The direction is read per line, not per
-      payment, so one payment may settle both sides. A bank transfer line counts as soon as the
-      payment is confirmed; a cheque line counts only once the cheque is marked paid, because
-      before that the money is not in the bank. Cash, offset and credit-note lines name no account,
-      so they change no balance.</p>
+      payment, so one payment may settle both sides. Money on account uses the direction you chose
+      on the header. A bank or cash line counts as soon as the payment is confirmed; a cheque line
+      counts only once the cheque is marked paid, because before that the money is not in the bank.
+      Offset and credit-note lines name no account, so they change no balance.</p>
       <p>A line in a currency other than the account's own is <strong>skipped, not converted</strong>
-      — converting at a rate nobody chose would look right and be wrong. The revaluation screen
-      warns you how many lines were left out, so nothing goes missing quietly.</p>
+      — converting at a rate nobody chose would look right and be wrong.</p>
     </div>
-
-    <h3>Realized and unrealized</h3>
-    <p>Unrealized means you still hold the currency and only its value moved. Realized means it
-    was actually converted or settled. Both are supported; revaluation records are unrealized.</p>
   </div>
-
   <!-- ============================= CHARGES ============================= -->
   <h2 id="charges">Expenses and Revenues</h2>
   <div class="card">
@@ -410,8 +488,8 @@ Exchange gain           +$3.33</code></pre>
   <div class="card">
     <p>A claim records damage or a shortfall against one invoice.</p>
     <ul>
-      <li>Two sides: an <strong>expense claim</strong> is raised on a purchase invoice, a
-      <strong>revenue claim</strong> on a sale invoice.</li>
+      <li>Two sides, each named after the document it is filed against: a <strong>sale claim</strong>
+      sits on a sale invoice, a <strong>purchase claim</strong> on a purchase invoice.</li>
       <li>Two types: <strong>quantity</strong> or <strong>quality</strong>.</li>
       <li>Pick one invoice, then enter an amount and a reason per good. Only goods with an amount
       are saved.</li>
@@ -419,6 +497,22 @@ Exchange gain           +$3.33</code></pre>
     </ul>
     <p>The person on a claim comes from the invoice, never from a dropdown, so a claim cannot be
     filed against the wrong party.</p>
+
+    <div class="callout">
+      <strong>The sides were renamed, and it was not just a label</strong>
+      <p>They used to be called <em>expense</em> and <em>revenue</em>, and they pointed at the
+      opposite document: an "expense claim" was filed against a <em>purchase</em> invoice. Simply
+      renaming would have re-pointed every saved claim at the wrong kind of document — and because
+      a person's balance now counts the two sides in opposite directions, that would have silently
+      flipped each claim's sign.</p>
+      <p>So the app does not go by the old label at all. On first load it reads each claim's own
+      invoice and sets the side from that. A claim whose stored side already disagreed with its
+      invoice is corrected rather than preserved.</p>
+    </div>
+
+    <h3>Effect on a person's balance</h3>
+    <p>A sale claim is credit you granted, so it lowers what that person owes you. A purchase claim
+    is credit they granted you, so it lowers what you owe them — which raises the net.</p>
   </div>
 
   <!-- ============================= BASE INFO ============================= -->
@@ -434,7 +528,7 @@ Exchange gain           +$3.33</code></pre>
           <tr><td>Revenue categories</td><td>Name, code, scope</td><td>Revenue lines</td></tr>
           <tr><td>Cost centres</td><td>Name, code</td><td>Expense and revenue lines</td></tr>
           <tr><td>Banks</td><td>Name, currency, account number, IBAN, SWIFT, address</td><td>Payments, cheques, transfers</td></tr>
-          <tr><td>Cash safes</td><td>Name, currency</td><td>Transfers, revaluation</td></tr>
+          <tr><td>Cash safes</td><td>Name, currency</td><td>Cash payments, transfers</td></tr>
         </tbody>
       </table>
     </div>
@@ -447,10 +541,33 @@ Exchange gain           +$3.33</code></pre>
   <!-- ============================= REPORTS ============================= -->
   <h2 id="reports">Reports</h2>
   <div class="card">
-    <p>A summary view of trading and receivables: what is invoiced, what is collected, what is
-    overdue, and how old the unpaid amounts are.</p>
-    <p>Exchange gain and loss has its own reports inside the Exchange screen, grouped five
-    different ways.</p>
+    <p>Five tabs. The first is the charts; the other four are movement reports.</p>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Tab</th><th>One row per</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td>Overview</td><td>—</td><td>The charts: money in against money out, product mix, contract status, ageing</td></tr>
+          <tr><td>Banks &amp; cash safes</td><td>Movement on an account</td><td>Opening, money in, money out, closing — per account, in its own currency and in dollars</td></tr>
+          <tr><td>Persons</td><td>Movement on a person</td><td>The same balance detail you get by clicking a person's balance</td></tr>
+          <tr><td>Expenses</td><td>Expense line</td><td>Totals by category and by cost centre, switchable to revenues</td></tr>
+          <tr><td>Purchases &amp; sales</td><td>Invoice item</td><td>Value and tonnage per side, down to product, quantity and unit price</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The date range</h3>
+    <p>One range across all four, so switching tabs keeps the window you are looking at. It starts
+    at the last twelve months. Overview has no picker, because its charts are fixed windows of their
+    own and a control that changed nothing would only mislead.</p>
+
+    <div class="callout">
+      <strong>Opening plus movements always equals closing</strong>
+      <p>The range applies to the <em>movements</em>; the opening balance is everything before it.
+      That is what makes the three figures agree by construction rather than by luck.</p>
+      <p>The Persons report takes its opening from the running balance of the last row before the
+      window, rather than re-adding the amounts itself. Two ways of computing the same number are
+      two chances to disagree.</p>
+    </div>
   </div>
 
   <!-- ============================= SETTINGS ============================= -->
