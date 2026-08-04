@@ -278,6 +278,24 @@ export interface MoneyTransferAllocation {
 
 export type ExchangeGainLossType = 'GAIN' | 'LOSS';
 
+/**
+ * A gain or loss on foreign currency, written down directly.
+ *
+ * Deliberately NOT tied to an account, a rate or a balance. It replaced a revaluation engine
+ * whose book rates, previews and proportional allocation answered a question the desk was not
+ * asking. `type` is derived from the sign of `amount`, never chosen.
+ */
+export interface ExchangeGainLoss {
+  id: string;              // 'egl-0001'
+  number: string;          // 'EGL-0001'
+  date: string;
+  type: ExchangeGainLossType;
+  /** Signed USD. Positive is a gain, negative a loss. */
+  amount: number;
+  notes?: string;
+  createdAt: string;
+}
+
 /** Unrealized = still holding the currency, only its value moved. Realized = actually
  *  converted or settled at a different rate (spec §15). */
 export type ExchangeRealization = 'UNREALIZED' | 'REALIZED';

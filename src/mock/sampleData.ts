@@ -1378,7 +1378,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     // Transfers and revaluations are created through the Finance screens; seeding them would
     // also bake a book value into every account, which the revaluation maths then measures from.
     moneyTransfers: [],
-    exchangeRevaluations: [],
+    exchangeGainLosses: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

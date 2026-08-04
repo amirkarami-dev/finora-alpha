@@ -26,9 +26,7 @@ import type {
   CustomerAccount,
   CustomerType,
   DashboardKpis,
-  ExchangeGainLossType,
-  ExchangeRealization,
-  ExchangeRevaluation,
+  ExchangeGainLoss,
   FinancialAccount,
   FinancialAccountType,
   Good,
@@ -3998,19 +3996,12 @@ function nextTransferId(): string {
 }
 
 let transferAllocSeq = 0;
-let revalAllocSeq = 0;
 function seedTransferChildCounters(): void {
-  if (transferAllocSeq || revalAllocSeq) return;
+  if (transferAllocSeq) return;
   for (const tr of db.moneyTransfers) {
     for (const a of tr.allocations) {
       const m = /^tralloc-(\d+)$/.exec(a.id);
       if (m) transferAllocSeq = Math.max(transferAllocSeq, Number(m[1]));
-    }
-  }
-  for (const rv of db.exchangeRevaluations) {
-    for (const a of rv.allocations) {
-      const m = /^revalloc-(\d+)$/.exec(a.id);
-      if (m) revalAllocSeq = Math.max(revalAllocSeq, Number(m[1]));
     }
   }
 }
@@ -4166,15 +4157,11 @@ export function computeAccountBalance(accountId: string): AccountBalance {
   const currency: Currency = account?.currency ?? 'USD';
   const { feeds, skippedCurrency } = accountFeeds(accountId);
 
-  let balance = feeds.reduce((s, f) => s + f.amount, 0);
-  let baseUSD = feeds.reduce((s, f) => s + f.baseUSD, 0);
-
-  for (const rv of db.exchangeRevaluations) {
-    if (rv.status !== 'CONFIRMED' || rv.accountId !== accountId) continue;
-    baseUSD += rv.gainLossAmount;
-  }
-  balance = round(balance);
-  baseUSD = round(baseUSD);
+  // Gains are no longer absorbed here: a gain/loss record is a standalone note about currency,
+  // not a restatement of one account's carrying value. `bookRate` is therefore the pure
+  // feed-implied rate — the weighted average of what actually went in.
+  const balance = round(feeds.reduce((s, f) => s + f.amount, 0));
+  const baseUSD = round(feeds.reduce((s, f) => s + f.baseUSD, 0));
   const bookRate = balance !== 0 && baseUSD !== 0 ? round4(balance / baseUSD) : undefined;
   return { accountId, currency, balance, baseUSD, bookRate, unmatchedCurrencyCount: skippedCurrency };
 }
@@ -4296,16 +4283,9 @@ export async function setTransferStatus(id: string, status: TransferStatus): Pro
   if (!transfer) throw new Error('transfer-not-found');
   if (transfer.status === status) return transfer;
   if (transfer.status === 'CANCELLED') throw new Error('transfer-cancelled');
-  // Cancelling a confirmed transfer that a revaluation has already measured would silently
-  // rewrite the balance those gains were computed from.
-  if (transfer.status === 'CONFIRMED' && status === 'CANCELLED') {
-    const measured = db.exchangeRevaluations.some(
-      (rv) =>
-        rv.status === 'CONFIRMED' &&
-        (rv.accountId === transfer.fromAccountId || rv.accountId === transfer.toAccountId),
-    );
-    if (measured) throw new Error('transfer-revalued');
-  }
+  // A confirmed transfer used to be locked once a revaluation had measured the balance it fed.
+  // Gains no longer read account balances at all, so there is nothing left to protect and the
+  // `transfer-revalued` guard is gone with the engine that needed it.
   transfer.status = status;
   persistDb();
   return transfer;
@@ -4336,254 +4316,114 @@ export async function getMoneyTransfers(status?: TransferStatus): Promise<MoneyT
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
-/* ----------------------------- Revaluation ----------------------------- */
 
-/** A transfer's invoice, but only when it points at exactly one — with several, no single
- *  invoice can honestly be named as the source. */
-function transferSingleInvoice(transferId: string): string | undefined {
-  const tr = db.moneyTransfers.find((t) => t.id === transferId);
-  return tr && tr.allocations.length === 1 ? tr.allocations[0].invoiceId : undefined;
-}
 
-function nextRevaluationId(): string {
-  let max = 0;
-  for (const rv of db.exchangeRevaluations) {
-    const m = /^rev-(\d+)$/.exec(rv.id);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `rev-${String(max + 1).padStart(4, '0')}`;
-}
-
-export interface RevaluationPreview {
-  accountId: string;
-  accountName: string;
-  currency: Currency;
-  balance: number;
-  oldExchangeRate?: number;
-  oldBaseAmount: number;
-  newExchangeRate: number;
-  newBaseAmount: number;
-  gainLossAmount: number;
-  type: ExchangeGainLossType;
-  /** Transfers that fed this account, so the confirm screen can show what is being revalued. */
-  sourceTransferIds: string[];
-  /** Payments that fed it. A balance may be built from either, or both. */
-  sourcePaymentIds: string[];
-  /** Settlement lines naming this account in another currency, left out of the balance. */
-  unmatchedCurrencyCount: number;
-}
-
-/**
- * What a revaluation WOULD book, without writing anything — spec §19 wants the calculation
- * shown before confirming.
+/* --------------------------- Exchange gain / loss -------------------------- *
+ * A plain record of a gain or a loss: date, amount, notes. Nothing else.
  *
- * `oldExchangeRate` comes from the account's current carrying value, NOT from the original
- * transfer, which is the whole of spec §16.
- */
-export async function previewRevaluation(accountId: string, newRate: number): Promise<RevaluationPreview> {
-  await delay(140);
-  const account = db.financialAccounts.find((a) => a.id === accountId);
-  if (!account) throw new Error('account-not-found');
-  if (account.currency === 'USD') throw new Error('base-currency-account');
-  if (!Number.isFinite(newRate) || newRate <= 0) throw new Error('invalid-rate');
+ * This replaces an account revaluation engine (book rates, previews, proportional allocation
+ * back to transfers and invoices, a status workflow, and five report groupings). That machinery
+ * answered a question nobody was asking; the desk simply wants to write down what the currency
+ * cost or earned. Its removal also takes with it the guards that existed only to protect it —
+ * a confirmed transfer is freely cancellable again, because nothing measures against it now.
+ *
+ * `type` is DERIVED from the sign rather than chosen, so a "gain" of −500 is unrepresentable.
+ * -------------------------------------------------------------------------- */
 
-  const { balance, baseUSD, bookRate, unmatchedCurrencyCount } = computeAccountBalance(accountId);
-  if (balance <= 0) throw new Error('no-balance');
-
-  const inflows = accountFeeds(accountId).feeds.filter((f) => f.baseUSD > 0);
-  const newBaseAmount = round(balance / newRate);
-  const gainLossAmount = round(newBaseAmount - baseUSD);
-  return {
-    accountId,
-    accountName: account.name,
-    currency: account.currency,
-    balance,
-    oldExchangeRate: bookRate,
-    oldBaseAmount: baseUSD,
-    newExchangeRate: newRate,
-    newBaseAmount,
-    gainLossAmount,
-    type: gainLossAmount >= 0 ? 'GAIN' : 'LOSS',
-    sourceTransferIds: [...new Set(inflows.map((f) => f.moneyTransferId).filter(Boolean) as string[])],
-    sourcePaymentIds: [...new Set(inflows.map((f) => f.paymentId).filter(Boolean) as string[])],
-    unmatchedCurrencyCount,
-  };
-}
-
-export interface RevaluationInput {
-  accountId: string;
+export interface ExchangeGainLossInput {
   date: string;
-  newExchangeRate: number;
-  realization?: ExchangeRealization;
+  /** Signed USD. Positive is a gain, negative a loss. */
+  amount: number;
   notes?: string;
 }
 
-/**
- * Creates a DRAFT revaluation from the same figures `previewRevaluation` showed.
- *
- * Allocations are derived, not asked for: the gain is split across the money that fed this
- * account — confirmed transfers and settled payment lines alike — in proportion to what each
- * contributed. That is spec §11's "allocated proportionally", and it means traceability exists
- * without forcing the user to enter it. An account funded by nothing traceable simply gets no
- * allocations, which spec §9 requires to stay valid.
- */
-export async function createRevaluation(input: RevaluationInput): Promise<ExchangeRevaluation> {
-  await delay(220);
-  const preview = await previewRevaluation(input.accountId, input.newExchangeRate);
-  if (!input.date) throw new Error('date-required');
-
-  seedTransferChildCounters();
-  const id = nextRevaluationId();
-  // Inflows only. What is held came from money that arrived; an outflow reduced the balance and
-  // has no share of the gain sitting on what remains.
-  const inflows = accountFeeds(input.accountId).feeds.filter((f) => f.baseUSD > 0);
-  const feedTotal = round(inflows.reduce((s, f) => s + f.baseUSD, 0));
-
-  const allocations = feedTotal > 0
-    ? inflows.map((f) => {
-        revalAllocSeq += 1;
-        const share = f.baseUSD / feedTotal;
-        const original = round(preview.oldBaseAmount * share);
-        const revalued = round(preview.newBaseAmount * share);
-        return {
-          id: `revalloc-${revalAllocSeq}`,
-          revaluationId: id,
-          moneyTransferId: f.moneyTransferId,
-          paymentId: f.paymentId,
-          // References, never copies — spec §14 forbids duplicating source data into the
-          // gain/loss record. A payment feed carries its invoice, which is what completes the
-          // chain to a contract and a person (spec §13).
-          invoiceId:
-            f.invoiceId ??
-            (f.moneyTransferId ? transferSingleInvoice(f.moneyTransferId) : undefined),
-          invoiceItemId: f.invoiceItemId,
-          originalBaseAmount: original,
-          revaluedBaseAmount: revalued,
-          gainLossAmount: round(revalued - original),
-        };
-      })
-    : [];
-
-  const revaluation: ExchangeRevaluation = {
-    id,
-    number: `REV-${id.slice(4)}`,
-    date: input.date,
-    accountId: input.accountId,
-    currency: preview.currency,
-    oldExchangeRate: preview.oldExchangeRate ?? preview.newExchangeRate,
-    newExchangeRate: preview.newExchangeRate,
-    balance: preview.balance,
-    oldBaseAmount: preview.oldBaseAmount,
-    newBaseAmount: preview.newBaseAmount,
-    gainLossAmount: preview.gainLossAmount,
-    type: preview.type,
-    realization: input.realization ?? 'UNREALIZED',
-    status: 'DRAFT',
-    notes: input.notes?.trim() || undefined,
-    allocations,
-  };
-  db.exchangeRevaluations.push(revaluation);
-  persistDb();
-  return revaluation;
-}
-
-export async function setRevaluationStatus(id: string, status: TransferStatus): Promise<ExchangeRevaluation> {
-  await delay(160);
-  const rv = db.exchangeRevaluations.find((r) => r.id === id);
-  if (!rv) throw new Error('revaluation-not-found');
-  if (rv.status === status) return rv;
-  if (rv.status === 'CANCELLED') throw new Error('revaluation-cancelled');
-  // A later revaluation measured from the carrying value THIS one produced. Undoing it now
-  // would leave that one measuring from a book value that never existed.
-  if (rv.status === 'CONFIRMED') {
-    const laterConfirmed = db.exchangeRevaluations.some(
-      (o) =>
-        o.id !== rv.id &&
-        o.accountId === rv.accountId &&
-        o.status === 'CONFIRMED' &&
-        dayjs(o.date).valueOf() >= dayjs(rv.date).valueOf(),
-    );
-    if (laterConfirmed) throw new Error('revaluation-superseded');
+function nextGainLossId(): string {
+  let max = 0;
+  for (const g of db.exchangeGainLosses) {
+    const m = /^egl-(\d+)$/.exec(g.id);
+    if (m) max = Math.max(max, Number(m[1]));
   }
-  rv.status = status;
-  persistDb();
-  return rv;
+  return `egl-${String(max + 1).padStart(4, '0')}`;
 }
 
-export interface RevaluationRow extends ExchangeRevaluation {
-  accountName: string;
+/** Guards IN ORDER: `date-required` → `invalid-amount` (must be a finite non-zero number). */
+function validateGainLoss(input: ExchangeGainLossInput): number {
+  if (!input.date) throw new Error('date-required');
+  // Zero is rejected as well as NaN: a gain of nothing is not a record, it is a blank row.
+  if (!Number.isFinite(input.amount) || input.amount === 0) throw new Error('invalid-amount');
+  return round(input.amount);
 }
 
-export async function getRevaluations(status?: TransferStatus): Promise<RevaluationRow[]> {
+export async function getExchangeGainLosses(): Promise<ExchangeGainLoss[]> {
   await delay(160);
-  return db.exchangeRevaluations
-    .filter((r) => (status ? r.status === status : true))
-    .map((r) => ({
-      ...r,
-      accountName: db.financialAccounts.find((a) => a.id === r.accountId)?.name ?? '—',
-    }))
-    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+  return [...db.exchangeGainLosses].sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
-/* ------------------------------ Reporting ------------------------------ */
+export async function createExchangeGainLoss(input: ExchangeGainLossInput): Promise<ExchangeGainLoss> {
+  await delay(180);
+  const amount = validateGainLoss(input);
+  const id = nextGainLossId();
+  const record: ExchangeGainLoss = {
+    id,
+    number: `EGL-${id.slice(4)}`,
+    date: input.date,
+    type: amount >= 0 ? 'GAIN' : 'LOSS',
+    amount,
+    notes: input.notes?.trim() || undefined,
+    createdAt: dayjs().toISOString(),
+  };
+  db.exchangeGainLosses.push(record);
+  persistDb();
+  return record;
+}
 
-export interface GainLossGroup {
-  key: string;
-  label: string;
+export async function updateExchangeGainLoss(
+  id: string,
+  input: ExchangeGainLossInput,
+): Promise<ExchangeGainLoss> {
+  await delay(180);
+  const record = db.exchangeGainLosses.find((g) => g.id === id);
+  if (!record) throw new Error('gain-loss-not-found');
+  const amount = validateGainLoss(input);
+  record.date = input.date;
+  record.amount = amount;
+  record.type = amount >= 0 ? 'GAIN' : 'LOSS';
+  record.notes = input.notes?.trim() || undefined;
+  persistDb();
+  return record;
+}
+
+/**
+ * A real delete, not a soft cancel.
+ *
+ * Everything else in this app cancels rather than deletes, because other records point at it.
+ * Nothing points at a gain/loss entry — it is a standalone note about money — so leaving
+ * struck-through rows behind would be clutter with no integrity argument behind it.
+ */
+export async function deleteExchangeGainLoss(id: string): Promise<void> {
+  await delay(160);
+  const idx = db.exchangeGainLosses.findIndex((g) => g.id === id);
+  if (idx < 0) throw new Error('gain-loss-not-found');
+  db.exchangeGainLosses.splice(idx, 1);
+  persistDb();
+}
+
+export interface GainLossTotals {
   gain: number;
   loss: number;
   net: number;
+  count: number;
 }
 
-export type GainLossGrouping = 'person' | 'contract' | 'invoice' | 'currency' | 'account';
-
-/**
- * Gain/loss totalled by one dimension (spec §21). Walks the traceability chain
- * revaluation → allocation → invoice → contract → person, and drops anything that cannot
- * reach the requested dimension rather than inventing an "unknown" bucket — a standalone
- * cash-safe gain genuinely has no person, and showing it under one would be a lie.
- */
-export async function getGainLossReport(grouping: GainLossGrouping): Promise<GainLossGroup[]> {
-  await delay(200);
-  const groups = new Map<string, GainLossGroup>();
-  const add = (key: string, label: string, amount: number) => {
-    const g = groups.get(key) ?? { key, label, gain: 0, loss: 0, net: 0 };
-    if (amount >= 0) g.gain += amount;
-    else g.loss += Math.abs(amount);
-    g.net += amount;
-    groups.set(key, g);
-  };
-
-  for (const rv of db.exchangeRevaluations) {
-    if (rv.status !== 'CONFIRMED') continue;
-
-    if (grouping === 'currency') {
-      add(rv.currency, rv.currency, rv.gainLossAmount);
-      continue;
-    }
-    if (grouping === 'account') {
-      const acc = db.financialAccounts.find((a) => a.id === rv.accountId);
-      add(rv.accountId, acc?.name ?? rv.accountId, rv.gainLossAmount);
-      continue;
-    }
-
-    for (const alloc of rv.allocations) {
-      const invoice = alloc.invoiceId ? findInvoice(alloc.invoiceId) : undefined;
-      if (!invoice) continue;
-      if (grouping === 'invoice') {
-        add(invoice.id, invoice.invoiceNumber, alloc.gainLossAmount);
-      } else if (grouping === 'contract') {
-        add(invoice.contractId, invoice.contractId, alloc.gainLossAmount);
-      } else {
-        const person = customerById.get(invoice.customerId);
-        add(invoice.customerId, person?.name ?? invoice.customerId, alloc.gainLossAmount);
-      }
-    }
+export async function getGainLossTotals(): Promise<GainLossTotals> {
+  await delay(140);
+  let gain = 0;
+  let loss = 0;
+  for (const g of db.exchangeGainLosses) {
+    if (g.amount >= 0) gain += g.amount;
+    else loss += Math.abs(g.amount);
   }
-
-  return [...groups.values()]
-    .map((g) => ({ ...g, gain: round(g.gain), loss: round(g.loss), net: round(g.net) }))
-    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  return { gain: round(gain), loss: round(loss), net: round(gain - loss), count: db.exchangeGainLosses.length };
 }
 
 /* -------------------------------- Cheques -------------------------------- *

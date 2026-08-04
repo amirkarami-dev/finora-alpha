@@ -1,163 +1,106 @@
 import { useState } from 'react';
-import { App, Button, Card, Empty, Popconfirm, Segmented, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Empty, Popconfirm, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
-import { useGainLossReport, useRevaluations, useSetRevaluationStatus } from '@/services/queries';
-import { useTabParam } from '@/hooks/useTabParam';
-import { formatDate, formatNumber } from '@/utils/format';
-import type { GainLossGroup, GainLossGrouping, RevaluationRow } from '@/services/api';
-import type { TransferStatus } from '@/types';
-import { RevaluationFormModal } from './RevaluationFormModal';
+import { useDeleteExchangeGainLoss, useExchangeGainLosses, useGainLossTotals } from '@/services/queries';
+import { formatDate } from '@/utils/format';
+import type { ExchangeGainLoss } from '@/types';
+import { GainLossFormModal } from './GainLossFormModal';
 
 const { Text } = Typography;
 
-const TAB_KEYS = ['revaluations', 'history', 'reports'] as const;
-type TabKey = (typeof TAB_KEYS)[number];
-
-const STATUS_COLOR: Record<TransferStatus, string> = {
-  DRAFT: 'default',
-  CONFIRMED: 'success',
-  CANCELLED: 'error',
-};
-
-const GROUPINGS: GainLossGrouping[] = ['person', 'contract', 'invoice', 'currency', 'account'];
-
+/**
+ * A list of gains and losses on foreign currency, entered by hand.
+ *
+ * This replaced an account-revaluation module (book rates, previews, proportional allocation
+ * back to transfers and invoices, a status workflow and five report groupings). The desk wanted
+ * to record what the currency cost or earned; everything else was machinery around a question
+ * nobody asked.
+ */
 export default function ExchangeGainLossPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const [tab, setTab] = useTabParam(TAB_KEYS, 'revaluations');
-  const [formOpen, setFormOpen] = useState(false);
-  const [grouping, setGrouping] = useState<GainLossGrouping>('account');
+  const { data, isLoading } = useExchangeGainLosses();
+  const { data: totals } = useGainLossTotals();
+  const deleteMut = useDeleteExchangeGainLoss();
+  const [formState, setFormState] = useState<{ open: boolean; record?: ExchangeGainLoss }>({ open: false });
 
-  const { data: revaluations, isLoading } = useRevaluations();
-  const { data: report, isLoading: reportLoading } = useGainLossReport(grouping);
-  const setStatus = useSetRevaluationStatus();
-
-  // Revaluations tab shows what is still open; History is the confirmed record.
-  const rows = (revaluations ?? []).filter((r) =>
-    tab === 'history' ? r.status !== 'DRAFT' : r.status === 'DRAFT',
-  );
-
-  const move = async (row: RevaluationRow, next: TransferStatus) => {
+  const remove = async (id: string) => {
     try {
-      await setStatus.mutateAsync({ id: row.id, status: next });
-      message.success(t('exchange.statusChanged'));
-    } catch (e) {
-      const code = e instanceof Error ? e.message : '';
-      // Undoing a revaluation a later one measured from would leave that one starting from a
-      // book value that never existed.
-      if (code === 'revaluation-superseded') message.error(t('exchange.errors.revaluation-superseded'));
-      else message.error(t('common.saveFailed'));
+      await deleteMut.mutateAsync(id);
+      message.success(t('exchange.deleted'));
+    } catch {
+      message.error(t('common.saveFailed'));
     }
   };
 
-  const revalColumns: ColumnsType<RevaluationRow> = [
+  const columns: ColumnsType<ExchangeGainLoss> = [
     {
       title: t('exchange.number'),
       dataIndex: 'number',
-      width: 120,
+      width: 130,
       render: (v: string) => (
-        <Text strong style={{ fontFamily: 'monospace' }}>
+        <span dir="ltr" style={{ fontFamily: 'monospace', fontWeight: 600 }}>
           {v}
-        </Text>
+        </span>
       ),
     },
-    { title: t('exchange.date'), dataIndex: 'date', width: 130, render: (v) => formatDate(v) },
-    { title: t('exchange.account'), dataIndex: 'accountName', width: 190 },
-    { title: t('exchange.currency'), dataIndex: 'currency', width: 90, align: 'center', render: (v) => <Tag>{v}</Tag> },
     {
-      title: t('exchange.balance'),
-      dataIndex: 'balance',
+      title: t('exchange.date'),
+      dataIndex: 'date',
       width: 140,
-      align: 'right',
-      render: (v: number, r) => `${formatNumber(v, 2)} ${r.currency}`,
-    },
-    {
-      title: t('exchange.previousRate'),
-      dataIndex: 'oldExchangeRate',
-      width: 120,
-      align: 'right',
-      render: (v: number) => formatNumber(v, 4),
-    },
-    { title: t('exchange.newRate'), dataIndex: 'newExchangeRate', width: 110, align: 'right', render: (v: number) => formatNumber(v, 4) },
-    { title: t('exchange.previousBase'), dataIndex: 'oldBaseAmount', width: 140, align: 'right', render: (v) => <Money value={v} fractionDigits={2} /> },
-    { title: t('exchange.newBase'), dataIndex: 'newBaseAmount', width: 140, align: 'right', render: (v) => <Money value={v} fractionDigits={2} /> },
-    {
-      title: t('exchange.gainLoss'),
-      dataIndex: 'gainLossAmount',
-      width: 150,
-      align: 'right',
-      render: (v: number) => (
-        <Tag color={v >= 0 ? 'success' : 'error'}>
-          <Money value={Math.abs(v)} fractionDigits={2} />
-        </Tag>
-      ),
-    },
-    {
-      title: t('exchange.realization'),
-      dataIndex: 'realization',
-      width: 120,
-      align: 'center',
-      render: (v: RevaluationRow['realization']) => <Tag bordered={false}>{t(`exchange.realizationTypes.${v}`)}</Tag>,
+      defaultSortOrder: 'descend',
+      sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      render: (v: string) => formatDate(v),
     },
     {
       title: t('exchange.statusLabel'),
-      dataIndex: 'status',
+      dataIndex: 'type',
       width: 120,
       align: 'center',
-      render: (v: TransferStatus) => <Tag color={STATUS_COLOR[v]}>{t(`exchange.status.${v}`)}</Tag>,
+      render: (v: ExchangeGainLoss['type']) => (
+        <Tag color={v === 'GAIN' ? 'success' : 'error'}>{t(`exchange.${v === 'GAIN' ? 'gain' : 'loss'}`)}</Tag>
+      ),
+    },
+    {
+      title: t('exchange.amountLabel'),
+      dataIndex: 'amount',
+      width: 170,
+      align: 'right',
+      sorter: (a, b) => a.amount - b.amount,
+      // `fractionDigits={2}`: Money rounds to whole units by default, and the cents ARE the
+      // result on a currency movement.
+      render: (v: number) => <Money value={v} fractionDigits={2} signed strong />,
+    },
+    {
+      title: t('exchange.notes'),
+      dataIndex: 'notes',
+      render: (v?: string) => v ?? <Text type="secondary">—</Text>,
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 200,
+      width: 190,
       align: 'right',
       render: (_, r) => (
-        <Space wrap>
-          {r.status === 'DRAFT' && (
-            <Popconfirm
-              title={t('exchange.confirmConfirm')}
-              okText={t('common.yes')}
-              cancelText={t('common.no')}
-              onConfirm={() => move(r, 'CONFIRMED')}
-            >
-              <Button type="link" size="small" icon={<CheckOutlined />}>
-                {t('exchange.confirm')}
-              </Button>
-            </Popconfirm>
-          )}
-          {r.status !== 'CANCELLED' && (
-            <Popconfirm
-              title={t('exchange.cancelConfirm')}
-              okText={t('common.yes')}
-              cancelText={t('common.no')}
-              onConfirm={() => move(r, 'CANCELLED')}
-            >
-              <Button type="link" size="small" danger>
-                {t('common.cancel')}
-              </Button>
-            </Popconfirm>
-          )}
+        <Space>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => setFormState({ open: true, record: r })}>
+            {t('common.edit')}
+          </Button>
+          <Popconfirm
+            title={t('exchange.deleteConfirm')}
+            okText={t('common.yes')}
+            cancelText={t('common.no')}
+            onConfirm={() => remove(r.id)}
+          >
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              {t('common.delete')}
+            </Button>
+          </Popconfirm>
         </Space>
-      ),
-    },
-  ];
-
-  const reportColumns: ColumnsType<GainLossGroup> = [
-    { title: t(`exchange.groupings.${grouping}`), dataIndex: 'label', render: (v) => <Text strong>{v}</Text> },
-    { title: t('exchange.gain'), dataIndex: 'gain', align: 'right', render: (v: number) => <Money value={v} fractionDigits={2} /> },
-    { title: t('exchange.loss'), dataIndex: 'loss', align: 'right', render: (v: number) => <Money value={v} fractionDigits={2} /> },
-    {
-      title: t('exchange.net'),
-      dataIndex: 'net',
-      align: 'right',
-      render: (v: number) => (
-        <Tag color={v >= 0 ? 'success' : 'error'}>
-          <Money value={Math.abs(v)} fractionDigits={2} />
-        </Tag>
       ),
     },
   ];
@@ -168,139 +111,67 @@ export default function ExchangeGainLossPage() {
         title={t('exchange.title')}
         subtitle={t('exchange.subtitle')}
         extra={
-          tab !== 'reports' && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-              {t('exchange.newRevaluation')}
-            </Button>
-          )
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormState({ open: true, record: undefined })}>
+            {t('exchange.newRecord')}
+          </Button>
         }
       />
 
-      <Card
-        variant="borderless"
-        styles={{ body: { padding: 16 } }}
-        tabList={[
-          { key: 'revaluations', label: t('exchange.tabRevaluations') },
-          { key: 'history', label: t('exchange.tabHistory') },
-          { key: 'reports', label: t('exchange.tabReports') },
-        ]}
-        activeTabKey={tab}
-        onTabChange={(key) => setTab(key as TabKey)}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 16,
+          marginBottom: 16,
+        }}
       >
-        {tab === 'reports' ? (
-          <>
-            <div style={{ marginBottom: 16 }}>
-              <Segmented
-                value={grouping}
-                onChange={(v) => setGrouping(v as GainLossGrouping)}
-                options={GROUPINGS.map((g) => ({ label: t(`exchange.groupings.${g}`), value: g }))}
-              />
-            </div>
-            <Table<GainLossGroup>
-              rowKey="key"
-              loading={reportLoading}
-              columns={reportColumns}
-              dataSource={report ?? []}
-              pagination={false}
-              locale={{
-                emptyText: (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={
-                      <Space direction="vertical" size={2}>
-                        <Text type="secondary">{t('exchange.noReportRows')}</Text>
-                        {/* Not a bug: a standalone cash-safe gain has no person or invoice, so
-                            those groupings legitimately come back empty. */}
-                        <Text type="secondary">{t('exchange.noReportHint')}</Text>
-                      </Space>
-                    }
-                  />
-                ),
-              }}
-            />
-          </>
-        ) : (
-          <Table<RevaluationRow>
-            rowKey="id"
-            loading={isLoading}
-            columns={revalColumns}
-            dataSource={rows}
-            scroll={{ x: 1800 }}
-            pagination={{ pageSize: 12, hideOnSinglePage: true, showSizeChanger: false }}
-            expandable={{
-              rowExpandable: (r) => r.allocations.length > 0,
-              expandedRowRender: (r) => (
-                <Table
-                  size="small"
-                  rowKey="id"
-                  pagination={false}
-                  dataSource={r.allocations}
-                  columns={[
-                    {
-                      // One column, not two: a balance is fed by a transfer OR a payment, so a
-                      // separate "From transfer" column would read "—" on every payment-funded
-                      // gain and look like missing data rather than a different source.
-                      title: t('exchange.fundedBy'),
-                      key: 'source',
-                      render: (_, a) =>
-                        a.moneyTransferId || a.paymentId ? (
-                          <Space size={4}>
-                            <Tag>
-                              {a.moneyTransferId ? t('exchange.sourceTransfer') : t('exchange.sourcePayment')}
-                            </Tag>
-                            <span dir="ltr">{a.moneyTransferId ?? a.paymentId}</span>
-                          </Space>
-                        ) : (
-                          '—'
-                        ),
-                    },
-                    { title: t('exchange.sourceInvoice'), dataIndex: 'invoiceId', render: (v?: string) => v ?? '—' },
-                    {
-                      title: t('exchange.previousBase'),
-                      dataIndex: 'originalBaseAmount',
-                      align: 'right',
-                      render: (v: number) => <Money value={v} fractionDigits={2} />,
-                    },
-                    {
-                      title: t('exchange.newBase'),
-                      dataIndex: 'revaluedBaseAmount',
-                      align: 'right',
-                      render: (v: number) => <Money value={v} fractionDigits={2} />,
-                    },
-                    {
-                      title: t('exchange.gainLoss'),
-                      dataIndex: 'gainLossAmount',
-                      align: 'right',
-                      render: (v: number) => <Money value={v} fractionDigits={2} />,
-                    },
-                  ]}
-                />
-              ),
-            }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={
-                    <Space direction="vertical" size={2}>
-                      <Text>{t(tab === 'history' ? 'exchange.emptyHistoryTitle' : 'exchange.emptyTitle')}</Text>
-                      <Text type="secondary">{t(tab === 'history' ? 'exchange.emptyHistoryHint' : 'exchange.emptyHint')}</Text>
-                    </Space>
-                  }
-                >
-                  {tab === 'revaluations' && (
-                    <Button type="primary" onClick={() => setFormOpen(true)}>
-                      {t('exchange.newRevaluation')}
-                    </Button>
-                  )}
-                </Empty>
-              ),
-            }}
+        <Card variant="borderless" className="soft-card">
+          <Statistic title={t('exchange.gain')} valueRender={() => <Money value={totals?.gain ?? 0} fractionDigits={2} />} />
+        </Card>
+        <Card variant="borderless" className="soft-card">
+          <Statistic title={t('exchange.loss')} valueRender={() => <Money value={totals?.loss ?? 0} fractionDigits={2} />} />
+        </Card>
+        <Card variant="borderless" className="soft-card">
+          <Statistic
+            title={t('exchange.net')}
+            valueRender={() => <Money value={totals?.net ?? 0} fractionDigits={2} signed strong />}
           />
-        )}
+        </Card>
+      </div>
+
+      <Card variant="borderless" styles={{ body: { padding: 12 } }}>
+        <Table<ExchangeGainLoss>
+          rowKey="id"
+          loading={isLoading}
+          columns={columns}
+          dataSource={data ?? []}
+          scroll={{ x: 900 }}
+          pagination={{ pageSize: 12, hideOnSinglePage: true, showSizeChanger: false }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <Space direction="vertical" size={2}>
+                    <Text>{t('exchange.emptyTitle')}</Text>
+                    <Text type="secondary">{t('exchange.emptyHint')}</Text>
+                  </Space>
+                }
+              >
+                <Button type="primary" onClick={() => setFormState({ open: true, record: undefined })}>
+                  {t('exchange.newRecord')}
+                </Button>
+              </Empty>
+            ),
+          }}
+        />
       </Card>
 
-      {formOpen && <RevaluationFormModal open onClose={() => setFormOpen(false)} />}
+      <GainLossFormModal
+        open={formState.open}
+        onClose={() => setFormState((s) => ({ ...s, open: false }))}
+        record={formState.record}
+      />
     </div>
   );
 }

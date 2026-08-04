@@ -7,7 +7,7 @@ import type {
   Contract,
   CostCentre,
   Customer,
-  ExchangeRevaluation,
+  ExchangeGainLoss,
   FinancialAccount,
   Good,
   MoneyTransfer,
@@ -85,7 +85,7 @@ const seed = {
   financialAccounts: [] as FinancialAccount[],
   cheques: [] as Cheque[],
   moneyTransfers: [] as MoneyTransfer[],
-  exchangeRevaluations: [] as ExchangeRevaluation[],
+  exchangeGainLosses: [] as ExchangeGainLoss[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -127,7 +127,10 @@ function isCompatible(d: unknown): d is typeof seed {
   if (o.cheques !== undefined && !Array.isArray(o.cheques)) return false;
   // Transfers + revaluations — additive again, SOFT probes and a `loadDb` backfill.
   if (o.moneyTransfers !== undefined && !Array.isArray(o.moneyTransfers)) return false;
-  if (o.exchangeRevaluations !== undefined && !Array.isArray(o.exchangeRevaluations)) return false;
+  // `exchangeGainLosses` replaced `exchangeRevaluations` on 2026-08-04. Same soft probe; the old
+  // key is dropped in `loadDb` rather than probed, because its records no longer have a shape
+  // this app can read.
+  if (o.exchangeGainLosses !== undefined && !Array.isArray(o.exchangeGainLosses)) return false;
   // Schema v3: Container is a pure logistics entity with a `goods` line array now — an old
   // (pre-v3) persisted blob's first container won't have it. Probe it explicitly since a
   // stale STORAGE_KEY read would otherwise crash every container-financial read at runtime.
@@ -256,13 +259,21 @@ function loadDb(): typeof seed {
           financialAccounts?: FinancialAccount[];
           cheques?: Cheque[];
           moneyTransfers?: MoneyTransfer[];
-          exchangeRevaluations?: ExchangeRevaluation[];
+          exchangeGainLosses?: ExchangeGainLoss[];
+          /** Pre-2026-08-04 revaluation records. Read only to be discarded. */
+          exchangeRevaluations?: unknown;
         };
         if (!Array.isArray(d.goods)) d.goods = [];
         if (!Array.isArray(d.financialAccounts)) d.financialAccounts = [];
         if (!Array.isArray(d.cheques)) d.cheques = [];
         if (!Array.isArray(d.moneyTransfers)) d.moneyTransfers = [];
-        if (!Array.isArray(d.exchangeRevaluations)) d.exchangeRevaluations = [];
+        if (!Array.isArray(d.exchangeGainLosses)) d.exchangeGainLosses = [];
+        // The revaluation engine is gone and its records cannot be read as gain/loss entries —
+        // they carried an account, a pair of rates and a proportional allocation set, none of
+        // which the new record has. Dropped on purpose, per the agreed decision to wipe them.
+        // `delete` rather than leaving them: `persistDb` serialises the whole db, so an
+        // untouched key would be written back for ever.
+        delete d.exchangeRevaluations;
         migrateClaimSides(d.claims, d.invoices);
         return d;
       }
