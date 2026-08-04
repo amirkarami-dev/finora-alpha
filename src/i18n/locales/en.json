@@ -85,7 +85,8 @@
     "finance": "Finance",
     "system": "System",
     "transfers": "Transfers",
-    "exchange": "Exchange gain/loss"
+    "exchange": "Exchange gain/loss",
+    "develop": "Develop"
   },
   "auth": {
     "loginTitle": "Welcome back",
@@ -1239,5 +1240,12 @@
       "account-not-found": "That account no longer exists",
       "revaluation-superseded": "A later revaluation was measured from this one, so it cannot be undone"
     }
+  },
+  "develop": {
+    "title": "Develop",
+    "subtitle": "Build status and documentation for this application",
+    "tabStatus": "Build status",
+    "tabDocs": "Documentation",
+    "openInTab": "Open in new tab"
   }
 }

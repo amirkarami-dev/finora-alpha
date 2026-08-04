@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finora — Build status</title>
+<!-- Declared explicitly: without it the browser requests /favicon.ico, which this app does not
+     ship (it uses favicon.svg), producing a 404 in the console for no reason. -->
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo"><span class="mark">F</span> Finora <span class="chip">Develop</span></div>
+  <nav class="tabs">
+    <a class="active" href="./index.html">Build status</a>
+    <a href="./docs.html">Documentation</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h1>Build status</h1>
+  <p class="lede">
+    What is built in Finora, what is only partly built, and what is still open. Every item below
+    was checked by running the code or by opening the page in a browser — not by reading it.
+  </p>
+
+  <section class="grid k4" style="margin-bottom:8px">
+    <div class="card stat"><div class="l">Work items</div><div class="n">31</div></div>
+    <div class="card stat"><div class="l">Done</div><div class="n" style="color:var(--ok)">27</div></div>
+    <div class="card stat"><div class="l">Partly done</div><div class="n" style="color:var(--warn)">2</div></div>
+    <div class="card stat"><div class="l">Open</div><div class="n" style="color:var(--text-dim)">2</div></div>
+  </section>
+
+  <div class="card" style="margin-bottom:26px">
+    <strong>Overall progress</strong>
+    <div class="bar"><i style="width:87%"></i></div>
+    <p style="margin:8px 0 0;color:var(--text-dim);font-size:13px">
+      27 of 31 finished. The 4 remaining items are small and none of them block daily use.
+    </p>
+  </div>
+
+  <div class="filters" id="filters">
+    <button aria-pressed="true" data-f="all">All</button>
+    <button aria-pressed="false" data-f="done">Done</button>
+    <button aria-pressed="false" data-f="partial">Partly done</button>
+    <button aria-pressed="false" data-f="open">Open</button>
+  </div>
+
+  <!-- ===================== Money ===================== -->
+  <h2 id="money">Money</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Payments with a header and lines</h4>
+        <p>A payment now has a header (person, amount, date, currency, notes) and settlement
+        lines. Each line settles one invoice and carries its own currency, rate and method.
+        A payment starts as a draft and only counts towards balances once you confirm it.
+        You can reopen a confirmed payment to change it.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">45 checks passed</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Automatic split across invoice items</h4>
+        <p>Leave the grid empty and the amount fills from the first item down, each item taking
+        only what it still owes. You can also type the split yourself. The system refuses to pay
+        an item more than it owes.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Rule checked</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Cheque register</h4>
+        <p>Cheques are their own records, because one cheque can settle several invoices. A cheque
+        moves through Pending, Paid, Returned, Expired or Changed. Marking one as paid asks which
+        of your accounts received the money. Cheques past their due date are flagged.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Numbers unique per bank</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Money transfers between your own accounts</h4>
+        <p>Move money between banks and cash safes, in the same currency or across currencies.
+        A transfer needs no invoice, no contract and no person. It can be linked to invoices
+        later, in full or in part.</p>
+        <div class="meta"><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Exchange gain and loss</h4>
+        <p>Revalue a foreign-currency balance at a new rate. The full calculation is shown before
+        you confirm. Reports group the result by person, contract, invoice, currency or account.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">36 checks passed</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>No double counting when you revalue again</h4>
+        <p>Each revaluation measures from what the balance is <em>currently</em> carried at, not
+        from the original transfer. Revalue twice at the same rate and the second one books zero.
+        Return to the old rate and it books the exact opposite. A whole history nets to zero.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Proved by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="partial">
+      <div>
+        <h4>Account balances count transfers only</h4>
+        <p>A bank or cash safe balance is built from confirmed transfers. Payments also name a
+        bank account, but they are not counted in the balance yet. Adding them needs a rule for
+        which direction the money moves. This is written down rather than hidden, so no number
+        looks right for the wrong reason.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Needs a decision</span></div>
+      </div>
+      <span class="badge b-partial">Partly done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Old payments keep working</h4>
+        <p>Payments saved before this change have no status field. They are treated as confirmed,
+        so no money vanished from any balance. Checked against a copy of the old database.</p>
+        <div class="meta"><span class="chip">Data safety</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== Master data ===================== -->
+  <h2 id="master">Master data</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Goods list</h4>
+        <p>The products you trade, with name, code, metal type, form, unit and customs code.
+        They are suggested when you add goods to a contract, so names stay spelled the same way
+        everywhere. Deactivating a good hides it from new contracts but keeps old ones intact.</p>
+        <div class="meta"><span class="chip">Base Info</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Bank accounts and cash safes</h4>
+        <p>Both are stored as one kind of record with a type, so transfers and revaluations can
+        point at either by one id. Banks require an account number and IBAN; cash safes do not.
+        Currency cannot change after you create the account.</p>
+        <div class="meta"><span class="chip">Base Info</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Expense and revenue categories, cost centres</h4>
+        <p>Categories are data you manage, not values fixed in the code. Each belongs to one
+        direction (expense or revenue) and one scope (invoice or general).</p>
+        <div class="meta"><span class="chip">Base Info</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Iraqi dinar added</h4>
+        <p>The app now handles USD, AED and IQD. Thirteen places in the code assumed AED was the
+        only foreign currency; all were corrected. Without that fix, every IQD record would have
+        been saved with a rate of 1 — a 1310 times error that no type check would catch.</p>
+        <div class="meta"><span class="chip">Foundation</span><span class="chip">Real bug found</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== People ===================== -->
+  <h2 id="people">People and access</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Customers renamed to Persons</h4>
+        <p>The list holds more than customers now, so the name was widened. Only the words the
+        user reads were changed. Renaming it in the code would have touched 534 places and
+        changed the shape of every saved record for no visible gain.</p>
+        <div class="meta"><span class="chip">Persons</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Employee and Other person types</h4>
+        <p>Neither trades, so the form hides currency, payment terms, credit limit and portal
+        access, and explains why. They cannot be chosen on a contract.</p>
+        <div class="meta"><span class="chip">Persons</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Invoices and claims on the person page</h4>
+        <p>Two new tabs. Invoices shows both buying and selling in one list, because the same
+        person can be both. Claims shows what was raised against them.</p>
+        <div class="meta"><span class="chip">Persons</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Roles</h4>
+        <p>CEO, Manager, Staff and Customer. Each sees only its own menu, and typing a URL
+        directly does not get around it. The charges card on an invoice is hidden completely for
+        staff — an empty card would still reveal that costs exist.</p>
+        <div class="meta"><span class="chip">Security</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== Costs ===================== -->
+  <h2 id="costs">Costs, income and claims</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Expenses and revenues</h4>
+        <p>One document per invoice, then category lines inside it. Each line splits equally
+        across the invoice goods, and you can change any share by hand. Revenue works the same
+        way, sharing one implementation.</p>
+        <div class="meta"><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Every cost line names a person</h4>
+        <p>Required when saving. Lines saved before this rule show a dash and ask for a person
+        the next time you edit them, so old data moves forward instead of breaking.</p>
+        <div class="meta"><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Costs can be booked on sale invoices</h4>
+        <p>The form only allowed purchase invoices for expenses. Your own requirements say an
+        invoice expense relates to a purchase <em>or sale</em> invoice, and the demo data already
+        contained such a record that nobody could recreate. The limit was removed.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Found by review</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Claims per invoice item</h4>
+        <p>Pick one invoice, then enter an amount and reason per good. The header total is the
+        sum and cannot be typed. Claims are typed as quantity or quality.</p>
+        <div class="meta"><span class="chip">Claims</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Costs survive invoice conversion</h4>
+        <p>Book a cost or claim on a confirmed provisional invoice, convert it to a final
+        invoice, and everything still appears against the new document.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Proved by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== Trade ===================== -->
+  <h2 id="trade">Trading</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Six invoice types</h4>
+        <p>Purchase and sale, each as order, provisional and invoice. Documents convert along a
+        chain and the link back to the earlier document is kept.</p>
+        <div class="meta"><span class="chip">Purchase</span><span class="chip">Sale</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Contract quantity check</h4>
+        <p>You cannot invoice more than the contract allows. The message shows the contract
+        quantity, what is already invoiced, what remains and what you asked for.</p>
+        <div class="meta"><span class="chip">Contracts</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Containers are logistics only</h4>
+        <p>Containers hold goods, weights and load dates. No money, no status, no contract link.
+        Shipped quantity is worked out from the invoices instead.</p>
+        <div class="meta"><span class="chip">Containers</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Warehouse documents</h4>
+        <p>Goods in and goods out, linked to a confirmed invoice, with stock per warehouse.</p>
+        <div class="meta"><span class="chip">Warehouse</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Record payment removed from invoices</h4>
+        <p>Payments are created in the Payments menu with a header and lines. Keeping a second,
+        different way to do it from an invoice would have split the rules in two. The list of
+        payments already made still shows on the invoice.</p>
+        <div class="meta"><span class="chip">Purchase</span><span class="chip">Sale</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== Quality ===================== -->
+  <h2 id="quality">Quality and fixes</h2>
+  <div class="card">
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Menu highlighted the wrong page</h4>
+        <p>Opening an invoice lit up Dashboard in the menu. The menu matched the address against
+        its own entries, found nothing, and fell back to the first item. Now nothing is
+        highlighted when nothing matches, which is honest.</p>
+        <div class="meta"><span class="chip">Bug fix</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Exchange amounts lost their cents</h4>
+        <p>A gain of $3.33 was shown as $3. The calculation was right; only the display rounded.
+        Found by looking at a screenshot instead of trusting a text match.</p>
+        <div class="meta"><span class="chip">Bug fix</span><span class="chip">Found in the browser</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Wrong word in activate messages</h4>
+        <p>Clicking Deactivate said "activated". The message read the record after it had already
+        changed. Fixed on five pages.</p>
+        <div class="meta"><span class="chip">Bug fix</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Three languages, right to left</h4>
+        <p>English, Arabic and Persian, with 1115 text keys matching exactly across all three.
+        Every new page was opened in Arabic and Persian to confirm no raw key appears.</p>
+        <div class="meta"><span class="chip">i18n</span><span class="chip">1115 keys</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Independent review of the big change</h4>
+        <p>Three separate reviews of the costs and claims work, from different angles: money and
+        maths, data integrity, and screens and access. Ten real problems were found and fixed,
+        each proved by running the code rather than by reading it.</p>
+        <div class="meta"><span class="chip">Review</span><span class="chip">10 defects fixed</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="open">
+      <div>
+        <h4>Console warning on unknown record pages</h4>
+        <p>Opening a page for a record that does not exist writes one warning in the browser
+        console. The page itself shows a correct "not found" screen. This existed long before the
+        recent work and affects nothing a user sees.</p>
+        <div class="meta"><span class="chip">Low priority</span></div>
+      </div>
+      <span class="badge b-open">Open</span>
+    </div>
+
+    <div class="task" data-s="partial">
+      <div>
+        <h4>Screenshot test runs on Edge</h4>
+        <p><code>npm run smoke</code> normally downloads its own copy of Chrome. That download is
+        blocked from this location, so the script now falls back to the Edge already installed on
+        the machine. The test works; it simply runs on a different browser, and the output says
+        which one it used.</p>
+        <div class="meta"><span class="chip">Tooling</span></div>
+      </div>
+      <span class="badge b-partial">Partly done</span>
+    </div>
+
+    <div class="task" data-s="open">
+      <div>
+        <h4>Sample data does not include transfers or cheques</h4>
+        <p>"Load sample data" fills customers, contracts, invoices, goods and bank accounts, but
+        creates no cheques, transfers or revaluations. Seeding those would also fix a starting
+        value into every account, which the revaluation maths then measures from.</p>
+        <div class="meta"><span class="chip">Demo data</span></div>
+      </div>
+      <span class="badge b-open">Open</span>
+    </div>
+
+  </div>
+
+  <!-- ===================== Data safety ===================== -->
+  <h2 id="safety">Data safety</h2>
+
+  <div class="callout">
+    <strong>No saved data was ever thrown away</strong>
+    <p>Every new feature was added so that a database saved by an older version still loads. The
+    new parts simply fill in as empty. This was tested with hand-built copies of old databases
+    four separate times, covering goods, bank accounts, cheques, transfers and payments.</p>
+  </div>
+
+  <div class="card scroll-x">
+    <table>
+      <thead>
+        <tr><th>Added</th><th>How old data is handled</th><th>Checked</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Goods</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
+        <tr><td>Banks and cash safes</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
+        <tr><td>Cheques</td><td>Missing list fills in as empty</td><td>Yes</td></tr>
+        <tr><td>Transfers and revaluations</td><td>Missing lists fill in as empty</td><td>Yes</td></tr>
+        <tr><td>Payment status</td><td>Missing status counts as confirmed</td><td>Yes</td></tr>
+        <tr><td>Payment type</td><td>Worked out from whether an invoice is linked</td><td>Yes</td></tr>
+        <tr><td>Cost line person</td><td>Shows a dash, asked for on next edit</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="foot">
+    Finora build status · Generated from the work delivered in this project.
+    See <a href="./docs.html">Documentation</a> for how each part of the app works.
+  </p>
+
+</main>
+
+<script>
+  // Simple filter. No framework: this page is served as a plain file.
+  var wrap = document.getElementById('filters');
+  wrap.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    var want = btn.dataset.f;
+    Array.prototype.forEach.call(wrap.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.task'), function (t) {
+      t.style.display = want === 'all' || t.dataset.s === want ? '' : 'none';
+    });
+    // Hide a card and its heading when the filter empties it.
+    Array.prototype.forEach.call(document.querySelectorAll('.card'), function (card) {
+      var tasks = card.querySelectorAll('.task');
+      if (!tasks.length) return;
+      var anyVisible = Array.prototype.some.call(tasks, function (t) { return t.style.display !== 'none'; });
+      card.style.display = anyVisible ? '' : 'none';
+      var heading = card.previousElementSibling;
+      if (heading && heading.tagName === 'H2') heading.style.display = anyVisible ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>

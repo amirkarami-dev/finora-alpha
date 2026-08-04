@@ -25,6 +25,7 @@ export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
     'claims',
     'reports',
     'settings',
+    'develop',
   ],
   // BaseInfo (cost centres + expense/revenue categories, spec §7): Manager + Staff — Staff
   // retains today's cost-centre capability under the new shell. `expenses`/`revenues`/`claims`
@@ -107,4 +108,5 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'baseInfo', route: ROUTES.baseInfo, icon: 'database', group: 'system' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
+  { key: 'develop', route: ROUTES.develop, icon: 'code', group: 'system' },
 ];

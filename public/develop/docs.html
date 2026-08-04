@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finora — Documentation</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo"><span class="mark">F</span> Finora <span class="chip">Develop</span></div>
+  <nav class="tabs">
+    <a href="./index.html">Build status</a>
+    <a class="active" href="./docs.html">Documentation</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <h1>Documentation</h1>
+  <p class="lede">
+    What each part of Finora does, and the rules behind it. Written for someone who uses the app
+    or works on it — not only for developers.
+  </p>
+
+  <ul class="toc">
+    <li><a href="#basics">Basics</a></li>
+    <li><a href="#dashboard">Dashboard</a></li>
+    <li><a href="#persons">Persons</a></li>
+    <li><a href="#contracts">Contracts</a></li>
+    <li><a href="#containers">Containers</a></li>
+    <li><a href="#warehouse">Warehouse</a></li>
+    <li><a href="#invoices">Purchase &amp; Sale</a></li>
+    <li><a href="#payments">Payments</a></li>
+    <li><a href="#cheques">Cheques</a></li>
+    <li><a href="#transfers">Transfers</a></li>
+    <li><a href="#exchange">Exchange gain/loss</a></li>
+    <li><a href="#charges">Expenses &amp; Revenues</a></li>
+    <li><a href="#claims">Claims</a></li>
+    <li><a href="#baseinfo">Base Info</a></li>
+    <li><a href="#reports">Reports</a></li>
+    <li><a href="#settings">Settings</a></li>
+    <li><a href="#portal">Customer portal</a></li>
+    <li><a href="#tech">How it is built</a></li>
+  </ul>
+
+  <!-- ============================= BASICS ============================= -->
+  <h2 id="basics">Basics</h2>
+  <div class="card">
+    <h3>Money</h3>
+    <p>The app supports <strong>USD, AED and IQD</strong>. USD is the base currency: every total
+    you compare or report on is a US dollar figure.</p>
+    <p>A foreign-currency record always stores the rate that was used at that moment. Changing a
+    rate in Settings never rewrites old records — that rate is only the value offered when you
+    create something new.</p>
+    <p>Rates are written as <em>units per one dollar</em>. So 3.6725 means 3.6725 AED buys one
+    dollar.</p>
+
+    <h3>Draft and confirmed</h3>
+    <p>Many documents start as a <strong>draft</strong>. A draft is visible but does not affect
+    any balance, total or report. It only counts once you <strong>confirm</strong> it. Payments,
+    transfers and revaluations all work this way.</p>
+
+    <h3>Deactivate, not delete</h3>
+    <p>Master records — persons, goods, categories, accounts — are never deleted. You deactivate
+    them. They stop appearing in new documents, and every old document that used them stays
+    exactly as it was.</p>
+
+    <h3>Starting empty</h3>
+    <p>A fresh install has no data at all. To explore with realistic figures, use
+    <em>Settings → Danger zone → Load sample data</em>. <em>Reset</em> clears everything again.</p>
+  </div>
+
+  <!-- ============================= DASHBOARD ============================= -->
+  <h2 id="dashboard">Dashboard</h2>
+  <div class="card">
+    <p>The opening screen for Manager and Staff. It shows total outstanding, overdue, collected
+    and invoiced, plus charts for money in against money out, product mix, contract status and
+    how old the unpaid amounts are.</p>
+    <p>Every figure counts <strong>confirmed</strong> money only. A draft payment does not appear
+    here.</p>
+    <p>CEO users see a separate <strong>Executive</strong> screen instead, with the same story at
+    a higher level.</p>
+  </div>
+
+  <!-- ============================= PERSONS ============================= -->
+  <h2 id="persons">Persons</h2>
+  <div class="card">
+    <p>Everyone you deal with: buyers, suppliers, employees and others. This list used to be
+    called Customers; the name was widened because it now holds more than customers.</p>
+
+    <h3>Types</h3>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Type</th><th>Meaning</th><th>Can sign contracts?</th></tr></thead>
+        <tbody>
+          <tr><td>Buyer</td><td>You sell to them</td><td>Sale contracts</td></tr>
+          <tr><td>Supplier</td><td>You buy from them</td><td>Purchase contracts</td></tr>
+          <tr><td>Buyer &amp; supplier</td><td>Both</td><td>Both</td></tr>
+          <tr><td>Employee</td><td>Works for you</td><td>No</td></tr>
+          <tr><td>Other</td><td>Anyone else, such as an authority</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Employees and Others do not trade, so the form hides currency, payment terms, credit limit
+    and portal access, and explains why. They never appear when you choose a party for a
+    contract.</p>
+
+    <h3>The person page</h3>
+    <p>Four tabs: <strong>Contracts</strong>, <strong>Invoices</strong>, <strong>Claims</strong>
+    and <strong>Payments</strong>. Invoices shows buying and selling together, because the same
+    person can be both. Claims shows what was raised against them; it is tied to the invoice, so
+    a claim can never appear under the wrong person.</p>
+
+    <h3>Portal access</h3>
+    <p>One person at a time can be linked to the customer portal. Turning it on for someone
+    automatically turns it off for anyone else. Deactivating a person also removes their portal
+    link.</p>
+  </div>
+
+  <!-- ============================= CONTRACTS ============================= -->
+  <h2 id="contracts">Contracts</h2>
+  <div class="card">
+    <p>A contract is an agreement with one person to buy or sell goods. It holds one or more
+    goods lines.</p>
+
+    <h3>Pricing</h3>
+    <p>Each goods line is priced from the metal exchange:</p>
+    <pre><code>unit price = LME price × (LME percent ÷ 100) + premium
+line value = unit price × quantity in tonnes</code></pre>
+    <p>The LME percent reflects how much metal the material actually contains. The premium is what
+    you add on top.</p>
+
+    <div class="callout">
+      <strong>Prices belong to the deal, not the product</strong>
+      <p>LME percent, premium and incoterm sit on the contract line, never on the goods record.
+      The same copper sold to two buyers carries two different premiums.</p>
+    </div>
+
+    <h3>Quantity limit</h3>
+    <p>You cannot invoice more than the contract agreed. If you try, the message shows the
+    contract quantity, what is already invoiced, what is left and what you asked for. Provisional
+    invoices count towards the limit.</p>
+  </div>
+
+  <!-- ============================= CONTAINERS ============================= -->
+  <h2 id="containers">Containers</h2>
+  <div class="card">
+    <p>A container is a shipment record and nothing more. It holds a reference, load date, gross
+    and net weight, and the goods inside.</p>
+    <p>It carries <strong>no money, no status and no contract link</strong>. How much has shipped
+    is worked out from the invoices instead, so there is only one place that decides it.</p>
+  </div>
+
+  <!-- ============================= WAREHOUSE ============================= -->
+  <h2 id="warehouse">Warehouse</h2>
+  <div class="card">
+    <p>Goods in and goods out. Each document is linked to a confirmed, priced invoice and moves
+    stock into or out of one warehouse.</p>
+    <p>Stock per warehouse and per product is calculated from these documents. A document that
+    would push stock below zero is refused.</p>
+    <p>Warehouses themselves are master records you can deactivate.</p>
+  </div>
+
+  <!-- ============================= INVOICES ============================= -->
+  <h2 id="invoices">Purchase and Sale</h2>
+  <div class="card">
+    <p>Six document types, three on each side:</p>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Stage</th><th>Purchase</th><th>Sale</th><th>Has prices?</th></tr></thead>
+        <tbody>
+          <tr><td>Order</td><td>Purchase order</td><td>Sale order</td><td>No</td></tr>
+          <tr><td>Provisional</td><td>Purchase provisional</td><td>Sale provisional</td><td>Yes</td></tr>
+          <tr><td>Final</td><td>Purchase invoice</td><td>Sale invoice</td><td>Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The chain</h3>
+    <p>An order becomes a provisional, and a provisional becomes a final invoice. Each new
+    document remembers the one it came from. That chain matters: payments, costs and claims booked
+    on an earlier document still appear on the later one.</p>
+
+    <div class="callout">
+      <strong>Why the chain holds</strong>
+      <p>Every line carries a stable reference that does not change when a document converts.
+      Without it, converting a provisional would silently orphan every cost and claim attached
+      to it.</p>
+    </div>
+
+    <h3>Status</h3>
+    <p>Draft, confirmed, sent or cancelled. Only confirmed and priced documents count towards
+    receivables, stock and the pickers used elsewhere in the app.</p>
+
+    <h3>Charges card</h3>
+    <p>A confirmed invoice shows the expenses, revenues and claims booked against it, with a
+    breakdown per good. Each part respects your role: if you cannot see costs, the whole card is
+    hidden rather than shown empty.</p>
+  </div>
+
+  <!-- ============================= PAYMENTS ============================= -->
+  <h2 id="payments">Payments</h2>
+  <div class="card">
+    <p>Three tabs: <strong>Invoice payments</strong>, <strong>General payments</strong> and
+    <strong>Cheques</strong>.</p>
+
+    <h3>How to record an invoice payment</h3>
+    <ol>
+      <li>Create the header: person, amount, date, currency, notes. No exchange rate here — the
+      header is a control total.</li>
+      <li>It opens as a <strong>draft</strong>.</li>
+      <li>Add one line per invoice being settled. Each line has its own currency, rate and method.</li>
+      <li>Confirm. Only now does the money count towards balances.</li>
+    </ol>
+
+    <h3>Splitting across invoice items</h3>
+    <p>Leave the grid at zero and the amount fills automatically from the first item down, each
+    item taking only what it still owes. You can also type the split yourself.</p>
+    <p>A line can never pay an item more than it owes. The check counts other confirmed payments
+    but ignores the payment you are editing, so re-saving a line does not block itself.</p>
+
+    <h3>Methods</h3>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Method</th><th>Also needs</th></tr></thead>
+        <tbody>
+          <tr><td>TT (bank transfer)</td><td>Which bank account</td></tr>
+          <tr><td>Cheque</td><td>Which cheque</td></tr>
+          <tr><td>Cash, Offset, Credit note</td><td>Nothing extra</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>General payments</h3>
+    <p>Money moved with a person that no invoice sits behind. It has a person and an amount, no
+    lines, and rests on that person's account.</p>
+
+    <h3>Reopening</h3>
+    <p>A confirmed payment can be reopened to a draft. The app warns you first, because reopening
+    pulls that money back out of every balance until you confirm again.</p>
+  </div>
+
+  <!-- ============================= CHEQUES ============================= -->
+  <h2 id="cheques">Cheques</h2>
+  <div class="card">
+    <p>A cheque is its own record, not a field on a payment, because one cheque can settle lines
+    on several invoices.</p>
+
+    <h3>Fields</h3>
+    <p>Type (normal or security), number, issuing bank, owner, due date, amount and currency.</p>
+
+    <h3>Numbers</h3>
+    <div class="callout">
+      <strong>Unique per issuing bank</strong>
+      <p>Two different banks may issue the same cheque number, so the check is per bank, not
+      across all of them. The one exception: a <em>returned</em> cheque's number can be entered
+      again, because a bounced cheque is usually replaced by a new one with the same number.</p>
+    </div>
+
+    <h3>Status</h3>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Can move to</th></tr></thead>
+        <tbody>
+          <tr><td>Pending</td><td>Waiting to clear</td><td>Paid, Returned, Expired, Changed</td></tr>
+          <tr><td>Paid</td><td>Cleared into your account</td><td>Nothing — final</td></tr>
+          <tr><td>Returned</td><td>Bounced</td><td>Changed, back to Pending</td></tr>
+          <tr><td>Expired</td><td>Past due, never cleared</td><td>Paid, Returned, Changed</td></tr>
+          <tr><td>Changed</td><td>Replaced by another cheque</td><td>Nothing — final</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Marking a cheque as <strong>paid requires naming which of your accounts received the
+    money</strong>. Cheques past their due date are flagged with a warning banner so they are easy
+    to find. A cleared cheque cannot be edited, because its amount is what the payment lines
+    pointing at it are worth.</p>
+  </div>
+
+  <!-- ============================= TRANSFERS ============================= -->
+  <h2 id="transfers">Transfers</h2>
+  <div class="card">
+    <p>Moving money between <em>your own</em> accounts: bank to cash safe, safe to safe, bank to
+    bank. Across currencies too.</p>
+
+    <div class="callout">
+      <strong>A transfer stands alone</strong>
+      <p>It needs no invoice, no contract and no person. You may link parts of it to invoices
+      afterwards — all of it, some of it, or none. An unlinked remainder is perfectly valid.</p>
+    </div>
+
+    <h3>The rate</h3>
+    <p>The rate says how many units of the destination currency one unit of the source buys. If
+    both accounts hold the same currency the rate is locked at 1, because anything else would
+    create or destroy money.</p>
+    <pre><code>Example
+From:  CashSafe USD    100 USD
+Rate:  3.1
+To:    CashSafe IQD    310 IQD</code></pre>
+
+    <h3>Status</h3>
+    <p>Draft, confirmed or cancelled. Nothing moves until you confirm. A confirmed transfer cannot
+    be cancelled once its account has been revalued, because that would rewrite the balance the
+    gain was measured from.</p>
+  </div>
+
+  <!-- ============================= EXCHANGE ============================= -->
+  <h2 id="exchange">Exchange gain and loss</h2>
+  <div class="card">
+    <p>When you hold foreign currency and the rate moves, what you hold is worth a different
+    number of dollars. A <strong>revaluation</strong> records that change.</p>
+
+    <h3>The worked example</h3>
+    <pre><code>You hold        310 IQD
+Carried at      3.1  →  worth $100.00
+
+New rate        3.0  →  worth $103.33
+
+Exchange gain           +$3.33</code></pre>
+
+    <h3>The rule that matters most</h3>
+    <div class="callout warn">
+      <strong>Never count the same gain twice</strong>
+      <p>The "previous rate" is what the balance is <em>currently carried at</em> — not the rate
+      of the transfer that created it. After booking +$3.33 the balance is carried at $103.33, so
+      the next revaluation starts from there.</p>
+      <p style="margin-top:8px">Revalue again at the same rate and it books <strong>zero</strong>.
+      Return to the old rate and it books <strong>−$3.33</strong>. A full round trip nets to
+      nothing.</p>
+    </div>
+
+    <h3>Three tabs</h3>
+    <ul>
+      <li><strong>Revaluations</strong> — open drafts. The full calculation is shown before you
+      confirm.</li>
+      <li><strong>History</strong> — confirmed and cancelled records, with their source transfers
+      on an expandable row.</li>
+      <li><strong>Reports</strong> — gain and loss grouped by person, contract, invoice, currency
+      or account.</li>
+    </ul>
+
+    <h3>Tracing a gain back</h3>
+    <p>Where a link exists, the app follows the chain from the gain back to the transfer, the
+    invoice, the contract and the person. Where no link exists — a plain cash safe, for example —
+    the person and contract reports simply stay empty. That is correct: such a gain genuinely has
+    no person behind it, and inventing an "unknown" row would be misleading.</p>
+
+    <div class="callout">
+      <strong>What counts towards an account balance</strong>
+      <p>Confirmed transfers, plus gains already booked. Payments name a bank account too, but are
+      not yet included. This is a known limit, written down on purpose.</p>
+    </div>
+
+    <h3>Realized and unrealized</h3>
+    <p>Unrealized means you still hold the currency and only its value moved. Realized means it
+    was actually converted or settled. Both are supported; revaluation records are unrealized.</p>
+  </div>
+
+  <!-- ============================= CHARGES ============================= -->
+  <h2 id="charges">Expenses and Revenues</h2>
+  <div class="card">
+    <p>Costs and extra income tied to your trading. Both work the same way and share one
+    implementation — anything true of expenses below is true of revenues.</p>
+
+    <h3>Two kinds</h3>
+    <ul>
+      <li><strong>Invoice</strong> — attached to one invoice, and spread across its goods.</li>
+      <li><strong>General</strong> — company costs such as rent or salaries, with no invoice.</li>
+    </ul>
+
+    <h3>How to record one</h3>
+    <ol>
+      <li>Create the document and pick the invoice. The picker offers both purchase and sale
+      invoices, and can be filtered by party, type, date or number.</li>
+      <li>Open it and add category lines: category, date, amount, currency, rate, person, cost
+      centre, notes.</li>
+      <li>Each line splits equally across the invoice goods. Change any share by hand, remove a
+      good, or press "re-split equally" to start over.</li>
+    </ol>
+
+    <h3>Rules</h3>
+    <ul>
+      <li>Every line must name a <strong>person</strong>.</li>
+      <li>The per-good amounts always add up exactly to the line, and the lines to the document.</li>
+      <li>Only confirmed, priced, latest-in-chain invoices can be chosen.</li>
+      <li>A cancelled document is excluded from every total.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Cents</strong>
+      <p>Splitting $100 across three goods gives 33.34 / 33.33 / 33.33 — never 33.33 three times.
+      The odd cent goes to the first line so the parts always add up exactly.</p>
+    </div>
+  </div>
+
+  <!-- ============================= CLAIMS ============================= -->
+  <h2 id="claims">Claims</h2>
+  <div class="card">
+    <p>A claim records damage or a shortfall against one invoice.</p>
+    <ul>
+      <li>Two sides: an <strong>expense claim</strong> is raised on a purchase invoice, a
+      <strong>revenue claim</strong> on a sale invoice.</li>
+      <li>Two types: <strong>quantity</strong> or <strong>quality</strong>.</li>
+      <li>Pick one invoice, then enter an amount and a reason per good. Only goods with an amount
+      are saved.</li>
+      <li>The header total is the sum of the items and cannot be typed.</li>
+    </ul>
+    <p>The person on a claim comes from the invoice, never from a dropdown, so a claim cannot be
+    filed against the wrong party.</p>
+  </div>
+
+  <!-- ============================= BASE INFO ============================= -->
+  <h2 id="baseinfo">Base Info</h2>
+  <div class="card">
+    <p>The master lists the rest of the app draws on. Six tabs.</p>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Tab</th><th>Holds</th><th>Used by</th></tr></thead>
+        <tbody>
+          <tr><td>Goods</td><td>Name, code, metal type, form, unit, customs code</td><td>Contract goods suggestions</td></tr>
+          <tr><td>Expense categories</td><td>Name, code, scope</td><td>Expense lines</td></tr>
+          <tr><td>Revenue categories</td><td>Name, code, scope</td><td>Revenue lines</td></tr>
+          <tr><td>Cost centres</td><td>Name, code</td><td>Expense and revenue lines</td></tr>
+          <tr><td>Banks</td><td>Name, currency, account number, IBAN, SWIFT, address</td><td>Payments, cheques, transfers</td></tr>
+          <tr><td>Cash safes</td><td>Name, currency</td><td>Transfers, revaluation</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>An account's <strong>currency cannot change</strong> after you create it, because that
+    currency defines what its balance means and every transfer already booked against it.</p>
+    <p>Bank accounts require an account number and IBAN. Cash safes do not, and any bank-only
+    field typed by mistake is discarded rather than stored.</p>
+  </div>
+
+  <!-- ============================= REPORTS ============================= -->
+  <h2 id="reports">Reports</h2>
+  <div class="card">
+    <p>A summary view of trading and receivables: what is invoiced, what is collected, what is
+    overdue, and how old the unpaid amounts are.</p>
+    <p>Exchange gain and loss has its own reports inside the Exchange screen, grouped five
+    different ways.</p>
+  </div>
+
+  <!-- ============================= SETTINGS ============================= -->
+  <h2 id="settings">Settings</h2>
+  <div class="card">
+    <p>Theme, language, company name, base currency, and the default exchange rates for AED and
+    IQD.</p>
+    <div class="callout">
+      <strong>Changing a rate is safe</strong>
+      <p>These rates are only the values offered when you create something new. Every saved
+      record keeps the rate that was actually used, so editing this never rewrites history.</p>
+    </div>
+    <p><strong>Danger zone</strong> holds <em>Load sample data</em> and <em>Reset</em>. Both
+    replace everything and reload the page.</p>
+  </div>
+
+  <!-- ============================= PORTAL ============================= -->
+  <h2 id="portal">Customer portal</h2>
+  <div class="card">
+    <p>A separate, limited view for one linked customer. They see only their own contracts,
+    invoices, payments and balance — never anyone else's, and never the internal screens.</p>
+    <p>The link is set from the person's record, and only one person can hold it at a time.</p>
+  </div>
+
+  <!-- ============================= TECH ============================= -->
+  <h2 id="tech">How it is built</h2>
+  <div class="card">
+    <h3>Technology</h3>
+    <p>React 18 with TypeScript, Vite, Ant Design 5, TanStack Query, Zustand and react-i18next.
+    Three languages with full right-to-left support, plus light and dark themes.</p>
+
+    <h3>Where the data lives</h3>
+    <p>There is no server. All data is kept in the browser's local storage, behind a small
+    service layer. To connect a real backend later, only that layer needs replacing — the screens
+    stay as they are.</p>
+
+    <h3>Layers</h3>
+    <pre><code>screens  →  query hooks  →  service layer  →  stored data</code></pre>
+    <p>Screens never reach the data directly. Every total, split and check happens in the service
+    layer, so the same rule cannot be written twice and drift apart.</p>
+
+    <h3>Upgrading safely</h3>
+    <p>When something new is added, a database saved by an older version must still load. New
+    lists fill in as empty, and missing fields fall back to a safe meaning. This is tested with
+    hand-built copies of old databases before each release.</p>
+
+    <h3>Checking the work</h3>
+    <ul>
+      <li>Type check, linting and a production build must all pass.</li>
+      <li>Rules are proved by <em>running</em> them, not by reading the code.</li>
+      <li>Screens are opened in a real browser, in all three languages, with the console watched
+      for errors.</li>
+      <li>Text keys are compared across the three language files so none can go missing.</li>
+    </ul>
+  </div>
+
+  <p class="foot">
+    Finora documentation · See <a href="./index.html">Build status</a> for what is finished and
+    what is still open.
+  </p>
+
+</main>
+</body>
+</html>

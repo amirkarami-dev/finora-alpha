@@ -189,4 +189,5 @@ export const ROUTES = {
   partners: '/app/partners',
   portal: '/app/portal',
   baseInfo: '/app/base-info',
+  develop: '/app/develop',
 } as const;
