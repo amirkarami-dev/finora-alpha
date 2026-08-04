@@ -535,15 +535,19 @@
       <span class="badge b-partial">Partly done</span>
     </div>
 
-    <div class="task" data-s="open">
+    <div class="task" data-s="done">
       <div>
-        <h4>Sample data does not include transfers or cheques</h4>
-        <p>"Load sample data" fills persons, contracts, invoices, goods and bank accounts, but
-        creates no cheques or transfers. So the banks and cash safes report opens empty until you
-        enter some yourself, even though every other report is full.</p>
-        <div class="meta"><span class="chip">Demo data</span></div>
+        <h4>Sample data includes cheques and transfers</h4>
+        <p>Four transfers — one across currencies, one left as a draft to show that nothing moves
+        until you confirm — and six cheques covering paid, pending, past-due, returned, expired and
+        a security cheque. Two of them settle real supplier payments, so one counts towards the
+        balances and one shows as "not counted yet" beside it.</p>
+        <p>Two advances on account fund the banks. Without them the seeded accounts only ever paid
+        money out and opened several hundred thousand in the red, which reads as a broken app
+        rather than a funded desk.</p>
+        <div class="meta"><span class="chip">Demo data</span><span class="chip">Determinism unchanged</span></div>
       </div>
-      <span class="badge b-open">Open</span>
+      <span class="badge b-done">Done</span>
     </div>
 
   </div>

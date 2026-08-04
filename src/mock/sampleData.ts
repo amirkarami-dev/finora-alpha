@@ -5,6 +5,7 @@ import type {
   ChargeDoc,
   ChargeLine,
   ChargeScope,
+  Cheque,
   Claim,
   ClaimItem,
   ClaimSide,
@@ -29,11 +30,12 @@ import type {
   Item,
   ItemPartner,
   MetalType,
+  MoneyTransfer,
   Partner,
   Payment,
   Warehouse,
 } from '@/types';
-import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
+import { DEFAULT_FX_AED_PER_USD, DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { invoiceItemAmount, invoiceItemUnitPrice, splitEqually, unitPrice } from '@/utils/calc';
 import type { Db } from './data';
 
@@ -1357,6 +1359,258 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     });
   }
 
+  /* ------------------------------------------------------------------ *
+   * Transfers + cheques.
+   *
+   * ZERO rnd() draws, appended after every draw-consuming pass — same rule as the portal,
+   * goods and charge passes above, so `cust-am`'s creditLimit (2,750,000) and every other
+   * generated value stay byte-identical.
+   *
+   * Ids are minted LITERALLY in the formats `api.ts` max-scans for (`tr-0001`, `tralloc-<n>`,
+   * `chq-0001`, `payitem-<n>`, `payalloc-<n>`), so records the user creates afterwards continue
+   * the sequence instead of colliding.
+   *
+   * Every cheque payment is booked on the PURCHASE side. Sale invoices are already settled to
+   * exactly what the generator decided they collected, and adding more there would break the
+   * "collected never exceeds invoiced" invariant that pass works to hold. Purchase invoices
+   * carry no seeded payments at all, so there is room, and paying a supplier by cheque is what
+   * a cheque is usually for anyway.
+   * ------------------------------------------------------------------ */
+  const day = (n: number) => anchor.subtract(n, 'day').toISOString();
+  const usdOf = (amount: number, currency: Currency) =>
+    currency === 'USD'
+      ? round(amount, 2)
+      : round(amount / (currency === 'AED' ? DEFAULT_FX_AED_PER_USD : DEFAULT_FX_IQD_PER_USD), 2);
+
+  const moneyTransfers: MoneyTransfer[] = [
+    {
+      id: 'tr-0001', number: 'TR-0001', date: day(48),
+      fromAccountId: 'fa-0002', toAccountId: 'fa-0004',
+      fromCurrency: 'USD', toCurrency: 'USD',
+      fromAmount: 75000, toAmount: 75000, exchangeRate: 1, baseAmount: 75000,
+      status: 'CONFIRMED', notes: 'Cash float for port handling and haulage', allocations: [],
+    },
+    {
+      // Cross-currency, so the rate column has something to show and the Basra accounts hold
+      // a real balance for the bank & cash report.
+      id: 'tr-0002', number: 'TR-0002', date: day(34),
+      fromAccountId: 'fa-0002', toAccountId: 'fa-0003',
+      fromCurrency: 'USD', toCurrency: 'IQD',
+      fromAmount: 40000, toAmount: round(40000 * DEFAULT_FX_IQD_PER_USD, 2),
+      exchangeRate: DEFAULT_FX_IQD_PER_USD, baseAmount: 40000,
+      status: 'CONFIRMED', notes: 'Funding the Basra office', allocations: [],
+    },
+    {
+      id: 'tr-0003', number: 'TR-0003', date: day(19),
+      fromAccountId: 'fa-0001', toAccountId: 'fa-0005',
+      fromCurrency: 'AED', toCurrency: 'AED',
+      fromAmount: 30000, toAmount: 30000, exchangeRate: 1, baseAmount: usdOf(30000, 'AED'),
+      status: 'CONFIRMED', notes: 'Petty cash top-up', allocations: [],
+    },
+    {
+      // Left as a DRAFT on purpose: it proves nothing moves until you confirm.
+      id: 'tr-0004', number: 'TR-0004', date: day(4),
+      fromAccountId: 'fa-0003', toAccountId: 'fa-0006',
+      fromCurrency: 'IQD', toCurrency: 'IQD',
+      fromAmount: 12000000, toAmount: 12000000, exchangeRate: 1,
+      baseAmount: usdOf(12000000, 'IQD'),
+      status: 'DRAFT', notes: 'Awaiting approval', allocations: [],
+    },
+  ];
+
+  /** A confirmed, priced purchase invoice with room to be paid — the cheque payments hang off
+   *  these. `find` rather than a hard-coded id so a change upstream cannot silently break it. */
+  const payableInvoices = invoices.filter(
+    (inv) => inv.invoiceType === 'PURCHASE_INVOICE' && inv.status === 'CONFIRMED' &&
+      inv.currency === 'USD' && inv.items.length > 0,
+  );
+
+  const cheques: Cheque[] = [
+    // Cleared, and banked — this one counts towards the USD bank balance and the supplier's
+    // ledger. Amount is filled in below from the invoice line it settles.
+    {
+      id: 'chq-0001', type: 'NORMAL', number: '440118', bankName: 'Mashreq',
+      dueDate: day(26), amount: 0, currency: 'USD', ownerName: 'Finora Metals FZE',
+      status: 'PAID', bankAccountId: 'fa-0002', notes: 'Cleared on presentation',
+    },
+    // Written but not yet cleared: shows as "not counted yet" on the supplier's balance detail.
+    {
+      id: 'chq-0002', type: 'NORMAL', number: '440119', bankName: 'Mashreq',
+      dueDate: anchor.add(21, 'day').toISOString(), amount: 0, currency: 'USD',
+      ownerName: 'Finora Metals FZE', notes: 'Post-dated, agreed with the supplier',
+      status: 'PENDING',
+    },
+    // Past its due date and still uncleared, so the register's "needs action" banner and filter
+    // have something to catch.
+    {
+      id: 'chq-0003', type: 'NORMAL', number: '440120', bankName: 'Emirates NBD',
+      dueDate: day(6), amount: 61500, currency: 'AED', ownerName: 'Gulf Alloys Trading LLC',
+      status: 'PENDING', notes: 'Chase the drawer — past due',
+    },
+    {
+      id: 'chq-0004', type: 'NORMAL', number: '882301', bankName: 'Emirates NBD',
+      dueDate: day(41), amount: 19750, currency: 'AED', ownerName: 'Sun Metals Casting LLC',
+      status: 'RETURNED', notes: 'Returned unpaid — replacement requested',
+    },
+    {
+      id: 'chq-0005', type: 'NORMAL', number: '773905', bankName: 'Trade Bank of Iraq',
+      dueDate: day(74), amount: 15250000, currency: 'IQD', ownerName: 'Basra Metal Works',
+      status: 'EXPIRED', notes: 'Never presented',
+    },
+    // Security cheques are held as cover, not to be banked — hence a large round figure and no
+    // payment line pointing at it.
+    {
+      id: 'chq-0006', type: 'SECURITY', number: '900014', bankName: 'Emirates NBD',
+      dueDate: anchor.add(180, 'day').toISOString(), amount: 250000, currency: 'AED',
+      ownerName: 'Transmetals Trading DMCC', status: 'PENDING',
+      notes: 'Held as security against the open credit line',
+    },
+  ];
+
+  /**
+   * Two supplier payments settled by cheque — one cleared, one still pending — so the register's
+   * usage count is real and the "a cheque counts only once it is paid" rule is visible side by
+   * side on the same person's balance detail.
+   *
+   * Each line settles ONE invoice item in full, so the allocation always fits inside what that
+   * item still owes and no rounding split is needed.
+   */
+  let payItemSeq = 0;
+  let payAllocSeq = 0;
+
+  /** Pushes a modern header-and-lines payment and returns it, with the line's `paymentId`
+   *  stitched to the header id — only knowable once the header exists. */
+  const pushLinePayment = (spec: {
+    customerId: string;
+    date: string;
+    currency: Currency;
+    fxRate: number;
+    amount: number;
+    method: Payment['method'];
+    direction: 'IN' | 'OUT';
+    notes: string;
+    reference?: string;
+    invoiceId?: string;
+    chequeId?: string;
+    bankAccountId?: string;
+    allocation?: { invoiceItemId: string; referenceDocumentItemId: string; product: string };
+  }): Payment => {
+    payItemSeq += 1;
+    const itemId = `payitem-${payItemSeq}`;
+    const amountUSD = round(spec.amount / spec.fxRate, 2);
+    const allocations = spec.allocation
+      ? [
+          {
+            id: `payalloc-${(payAllocSeq += 1)}`,
+            paymentItemId: itemId,
+            invoiceItemId: spec.allocation.invoiceItemId,
+            referenceDocumentItemId: spec.allocation.referenceDocumentItemId,
+            product: spec.allocation.product,
+            amount: spec.amount,
+            amountUSD,
+          },
+        ]
+      : [];
+    const payment: Payment = {
+      id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
+      customerId: spec.customerId,
+      date: spec.date,
+      currency: spec.currency,
+      amount: spec.amount,
+      fxRate: spec.fxRate,
+      amountUSD,
+      method: spec.method,
+      reference: spec.reference,
+      notes: spec.notes,
+      direction: spec.direction,
+      type: spec.invoiceId ? 'INVOICE' : 'GENERAL',
+      status: 'CONFIRMED',
+      items: [
+        {
+          id: itemId,
+          paymentId: '',
+          invoiceId: spec.invoiceId,
+          date: spec.date,
+          amount: spec.amount,
+          currency: spec.currency,
+          fxRate: spec.fxRate,
+          amountUSD,
+          method: spec.method,
+          chequeId: spec.chequeId,
+          bankAccountId: spec.bankAccountId,
+          allocations,
+        },
+      ],
+    };
+    payment.items![0].paymentId = payment.id;
+    payments.push(payment);
+    return payment;
+  };
+
+  /**
+   * Money IN, so the seeded accounts do not read as overdrawn.
+   *
+   * Every sale payment above is a legacy header-only row with no account on it, so nothing ever
+   * credited a bank — left alone, the demo opened with every account several hundred thousand in
+   * the red, which reads as a broken app rather than a funded desk.
+   *
+   * These are GENERAL payments (money on account), deliberately: they settle no invoice, so they
+   * cannot disturb the "collected never exceeds invoiced" invariant the sale pass works to hold,
+   * and an advance from a buyer is ordinary in this trade.
+   */
+  const buyers = customers.filter((c) => c.customerType === 'BUYER' || c.customerType === 'BOTH');
+  if (buyers[0]) {
+    pushLinePayment({
+      customerId: buyers[0].id, date: day(52), currency: 'USD', fxRate: 1, amount: 750000,
+      method: 'TT', direction: 'IN', bankAccountId: 'fa-0002',
+      notes: 'Advance received on account',
+    });
+  }
+  if (buyers[1]) {
+    pushLinePayment({
+      customerId: buyers[1].id, date: day(37), currency: 'AED', fxRate: DEFAULT_FX_AED_PER_USD,
+      amount: 220000, method: 'TT', direction: 'IN', bankAccountId: 'fa-0001',
+      notes: 'Advance received on account',
+    });
+  }
+
+  /**
+   * Two supplier payments settled by cheque — one cleared, one still pending — so the register's
+   * usage count is real and the "a cheque counts only once it is paid" rule is visible side by
+   * side on the same page.
+   *
+   * Each is a PART payment of one invoice line, capped by what that line is worth, so the
+   * allocation always fits inside what the item still owes.
+   */
+  ([
+    { cheque: cheques[0], target: 185000, note: 'Paid by cheque, cleared' },
+    { cheque: cheques[1], target: 96500, note: 'Paid by cheque, not yet cleared' },
+  ] as const).forEach((spec, i) => {
+    const invoice = payableInvoices[i];
+    const line = invoice?.items[0];
+    if (!invoice || !line || line.amount <= 0) return;
+
+    spec.cheque.amount = round(Math.min(spec.target, line.amount), 2);
+    pushLinePayment({
+      customerId: invoice.customerId,
+      date: spec.cheque.dueDate,
+      currency: 'USD',
+      fxRate: 1,
+      amount: spec.cheque.amount,
+      method: 'Cheque',
+      direction: 'OUT',
+      notes: spec.note,
+      reference: invoice.invoiceNumber,
+      invoiceId: invoice.id,
+      chequeId: spec.cheque.id,
+      allocation: {
+        invoiceItemId: line.id,
+        referenceDocumentItemId: line.referenceDocumentItemId,
+        product: line.product,
+      },
+    });
+  });
+
   return {
     customers,
     contracts,
@@ -1372,12 +1626,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     claims,
     goods,
     financialAccounts,
-    // Cheques are created through the payments flow, so the demo starts with none rather than
-    // inventing paper that no payment line points at.
-    cheques: [],
-    // Transfers and revaluations are created through the Finance screens; seeding them would
-    // also bake a book value into every account, which the revaluation maths then measures from.
-    moneyTransfers: [],
+    cheques,
+    moneyTransfers,
+    // Gains and losses are notes somebody writes when the rate moves; there is nothing to
+    // derive one from, so the demo leaves this for the user to fill in.
     exchangeGainLosses: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
