@@ -1094,9 +1094,26 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
   const eligiblePurchases = invoices.filter((inv) => chargeEligible(inv) && inv.invoiceType.startsWith('PURCHASE'));
   const eligibleSales = invoices.filter((inv) => chargeEligible(inv) && inv.invoiceType.startsWith('SALE'));
-  // ≥3 goods so the equal split (spec §3) is visible on screen rather than trivial.
-  const multiGoodPurchase = eligiblePurchases.find((inv) => inv.items.length >= 3);
-  const multiGoodSales = eligibleSales.filter((inv) => inv.items.length >= 3);
+
+  /**
+   * Costs land a few days AFTER the document they belong to, so booking them on a document
+   * invoiced today dates them in the FUTURE — past the end of every report window, where they
+   * are invisible on screen while still counting in the person's balance. Only documents that
+   * are already a month old are booked against.
+   */
+  const bookable = (inv: Invoice): boolean =>
+    // ≥3 goods so the equal split (spec §3) is visible on screen rather than trivial.
+    inv.items.length >= 3 && dayjs(inv.invoiceDate).isBefore(anchor.subtract(30, 'day'));
+
+  // The unfiltered list is the fallback: a dataset with no month-old multi-good document should
+  // still seed its charges rather than silently produce none.
+  const pickMultiGood = (list: Invoice[]): Invoice[] => {
+    const settled = list.filter(bookable);
+    return settled.length > 0 ? settled : list.filter((inv) => inv.items.length >= 3);
+  };
+  const multiGoodPurchases = pickMultiGood(eligiblePurchases);
+  const multiGoodPurchase = multiGoodPurchases[0];
+  const multiGoodSales = pickMultiGood(eligibleSales);
 
   const chargeDocs: ChargeDoc[] = [];
   const claims: Claim[] = [];
@@ -1293,19 +1310,72 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     });
   }
 
-  // chg-0003: a GENERAL expense — no invoice, no goods, `allocations: []` on every line.
-  pushChargeDoc({
-    direction: 'EXPENSE',
-    kind: 'GENERAL',
-    title: 'Office overheads',
-    date: rel('2026-06-01').toISOString(),
-    description: 'Monthly overheads not attributable to a single document',
-    lines: [
-      { categoryId: 'ccat-0006', amount: 45000, currency: 'AED', costCentreId: 'cc-0003', description: 'Premises rent and service charge', dayOffset: 0 },
-      { categoryId: 'ccat-0007', amount: 62500, currency: 'USD', costCentreId: 'cc-0003', description: 'Desk and back-office payroll', dayOffset: 1 },
-      { categoryId: 'ccat-0008', amount: 1180, currency: 'USD', costCentreId: 'cc-0004', description: 'LC issuance and transfer fees', dayOffset: 2 },
-    ],
-  });
+  // GENERAL expenses — no invoice, no goods, `allocations: []` on every line.
+  //
+  // Four months rather than one: a single month gives every overhead category exactly one line,
+  // which demonstrates neither the grouping in the expense report nor a category's own history.
+  // The amounts drift the way real overheads do — rent steps once, payroll creeps, bank charges
+  // move with what was drawn that month.
+  const OVERHEAD_MONTHS = [
+    { iso: '2026-03-01', rentAED: 45000, payrollUSD: 58200, bankUSD: 940 },
+    { iso: '2026-04-01', rentAED: 45000, payrollUSD: 59750, bankUSD: 1425 },
+    { iso: '2026-05-01', rentAED: 46800, payrollUSD: 61300, bankUSD: 1080 },
+    { iso: '2026-06-01', rentAED: 45000, payrollUSD: 62500, bankUSD: 1180 },
+  ];
+  for (const month of OVERHEAD_MONTHS) {
+    pushChargeDoc({
+      direction: 'EXPENSE',
+      kind: 'GENERAL',
+      title: `Office overheads ${dayjs(month.iso).format('MMMM')}`,
+      date: rel(month.iso).toISOString(),
+      description: 'Monthly overheads not attributable to a single document',
+      lines: [
+        { categoryId: 'ccat-0006', amount: month.rentAED, currency: 'AED', costCentreId: 'cc-0003', description: 'Premises rent and service charge', dayOffset: 0 },
+        { categoryId: 'ccat-0007', amount: month.payrollUSD, currency: 'USD', costCentreId: 'cc-0003', description: 'Desk and back-office payroll', dayOffset: 1 },
+        { categoryId: 'ccat-0008', amount: month.bankUSD, currency: 'USD', costCentreId: 'cc-0004', description: 'LC issuance and transfer fees', dayOffset: 2 },
+      ],
+    });
+  }
+
+  // A second import build-up, so the invoice-scope categories are not one-line each either.
+  if (multiGoodPurchases[1]) {
+    pushChargeDoc({
+      direction: 'EXPENSE',
+      kind: 'INVOICE',
+      title: `Import costs ${multiGoodPurchases[1].invoiceNumber}`,
+      invoice: multiGoodPurchases[1],
+      date: dayjs(multiGoodPurchases[1].invoiceDate).add(4, 'day').toISOString(),
+      description: 'Landed-cost build-up for the received cargo',
+      lines: [
+        { categoryId: 'ccat-0001', amount: 14750, currency: 'USD', costCentreId: 'cc-0001', description: 'Sea freight, 3 × 40HC', dayOffset: 0 },
+        { categoryId: 'ccat-0002', amount: 17600, currency: 'AED', costCentreId: 'cc-0001', description: 'Duty and clearance at Jebel Ali', dayOffset: 3 },
+        { categoryId: 'ccat-0003', amount: 2850, currency: 'USD', costCentreId: 'cc-0002', description: 'Pre-shipment sampling and assay', dayOffset: 5 },
+      ],
+    });
+  }
+
+  // Two more shipments' outbound costs, spread across the year rather than bunched in one month.
+  const OUTBOUND: Array<{ index: number; freightUSD: number; portUSD: number; insuranceUSD: number }> = [
+    { index: 2, freightUSD: 21300, portUSD: 4980, insuranceUSD: 3120 },
+    { index: 3, freightUSD: 16850, portUSD: 7420, insuranceUSD: 1690 },
+  ];
+  for (const shipment of OUTBOUND) {
+    const invoice = multiGoodSales[shipment.index];
+    if (!invoice) continue;
+    pushChargeDoc({
+      direction: 'EXPENSE',
+      kind: 'INVOICE',
+      title: `Outbound handling ${invoice.invoiceNumber}`,
+      invoice,
+      date: dayjs(invoice.invoiceDate).add(3, 'day').toISOString(),
+      description: 'Freight, terminal and cover costs on the shipped parcel',
+      lines: [
+        { categoryId: 'ccat-0001', amount: shipment.freightUSD, currency: 'USD', costCentreId: 'cc-0001', description: 'Sea freight to destination port', dayOffset: 0 },
+        { categoryId: 'ccat-0004', amount: shipment.portUSD, currency: 'USD', costCentreId: 'cc-0001', description: 'Terminal handling and lift-on', dayOffset: 2 },
+        { categoryId: 'ccat-0005', amount: shipment.insuranceUSD, currency: 'USD', costCentreId: 'cc-0004', description: 'Marine cargo cover to destination', dayOffset: 4 },
+      ],
+    });
+  }
 
   // chg-0004: the REVENUE mirror — a second SALE document so the Revenues list is independent
   // of the Expenses list (spec §10.7).
@@ -1322,6 +1392,37 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       ],
     });
   }
+
+  // A second, differently-typed recovery, so the Revenues report groups by more than one
+  // category — with one line only there is nothing to group.
+  if (multiGoodSales[2]) {
+    pushChargeDoc({
+      direction: 'REVENUE',
+      kind: 'INVOICE',
+      title: `Assay premium ${multiGoodSales[2].invoiceNumber}`,
+      invoice: multiGoodSales[2],
+      date: dayjs(multiGoodSales[2].invoiceDate).add(9, 'day').toISOString(),
+      description: 'Assay returned above the contracted grade',
+      lines: [
+        { categoryId: 'ccat-0010', amount: 12750, currency: 'USD', costCentreId: 'cc-0002', description: 'Copper content 0.4% above grade', dayOffset: 0 },
+        { categoryId: 'ccat-0009', amount: 3900, currency: 'USD', costCentreId: 'cc-0002', description: 'Outturn above invoiced quantity', dayOffset: 2 },
+      ],
+    });
+  }
+
+  // Income belonging to no document at all — the GENERAL half of the revenue 2×2, which had no
+  // seed and so left both of its categories unreachable from the demo data.
+  pushChargeDoc({
+    direction: 'REVENUE',
+    kind: 'GENERAL',
+    title: 'Treasury and yard income',
+    date: rel('2026-05-20').toISOString(),
+    description: 'Recoveries that belong to no single document',
+    lines: [
+      { categoryId: 'ccat-0011', amount: 5240, currency: 'USD', costCentreId: 'cc-0004', description: 'Interest on the call deposit', dayOffset: 0 },
+      { categoryId: 'ccat-0012', amount: 18600, currency: 'AED', costCentreId: 'cc-0002', description: 'Yard sweepings sold locally', dayOffset: 4 },
+    ],
+  });
 
   // clm-0001 / clm-0002: a claim's side IS its invoice's side, so the purchase claim sits on a
   // PURCHASE document and the sale claim on a SALE one. (These two seeds already sat on those
