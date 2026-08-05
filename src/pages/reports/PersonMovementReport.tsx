@@ -18,6 +18,8 @@ const KIND_COLOR: Record<LedgerKind, string> = {
   PURCHASE_INVOICE: 'orange',
   PURCHASE_CLAIM: 'gold',
   PURCHASE_PAYMENT: 'volcano',
+  EXPENSE: 'red',
+  REVENUE: 'green',
   TRANSFER: 'default',
 };
 

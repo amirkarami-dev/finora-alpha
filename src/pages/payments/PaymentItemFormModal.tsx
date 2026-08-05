@@ -89,6 +89,10 @@ interface PaymentItemFormModalProps {
   /** GENERAL hides the invoice picker and the allocation grid — money on account settles no
    *  particular document, and the server refuses an invoice on such a line. */
   paymentType: PaymentType;
+  /** The person on the header. The picker offers only THEIR documents — a payment settles what
+   *  one person owes or is owed, so offering everybody's invoices invites paying the wrong
+   *  party's document from this person's money. */
+  customerId: string;
   /** Header currency + what the header still has unallocated, used to seed a new line. */
   defaultCurrency: Currency;
   unallocated: number;
@@ -105,6 +109,7 @@ export function PaymentItemFormModal({
   onClose,
   paymentId,
   paymentType,
+  customerId,
   defaultCurrency,
   unallocated,
   item,
@@ -154,11 +159,18 @@ export function PaymentItemFormModal({
 
   const invoiceOptions = useMemo(
     () =>
-      [...(purchaseInvoices ?? []), ...(saleInvoices ?? [])].map((inv) => ({
-        value: inv.id,
-        label: `${inv.invoiceNumber} · ${inv.customerName}`,
-      })),
-    [purchaseInvoices, saleInvoices],
+      [...(purchaseInvoices ?? []), ...(saleInvoices ?? [])]
+        // Only the header's own person. An unfiltered list let this person's money settle
+        // somebody else's document — the customer name on each row was the only thing
+        // standing between you and paying the wrong party.
+        .filter((inv) => inv.customerId === customerId)
+        // The list is already scoped to one person, so the number and the document type
+        // identify it; repeating the customer name on every row would just be noise.
+        .map((inv) => ({
+          value: inv.id,
+          label: `${inv.invoiceNumber} · ${t(`tradeInvoices.type.${inv.invoiceType}`)}`,
+        })),
+    [purchaseInvoices, saleInvoices, customerId, t],
   );
 
   /**
@@ -310,6 +322,7 @@ export function PaymentItemFormModal({
                 optionFilterProp="label"
                 options={invoiceOptions}
                 placeholder={t('payments.pickInvoice')}
+                notFoundContent={<Text type="secondary">{t('payments.noInvoicesForPerson')}</Text>}
                 // Changing invoice must drop the old grid, else amounts from the previous
                 // document would be submitted against items that are not on this one.
                 onChange={() => {

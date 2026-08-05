@@ -59,6 +59,7 @@ import type {
   Warehouse,
 } from '@/types';
 import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
+import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
@@ -211,6 +212,7 @@ export function computeAccounts(): CustomerAccount[] {
  *
  *   net = +sale invoices −sale payments −sale claims
  *         −purchase invoices +purchase claims +purchase payments
+ *         −expenses booked against them +revenues booked against them
  *
  * Positive means the person owes us; negative means we owe them. It is NOT floored at zero —
  * that is the whole point, and it is why this lives alongside `totalOutstanding` rather than
@@ -226,6 +228,8 @@ export type LedgerKind =
   | 'PURCHASE_INVOICE'
   | 'PURCHASE_CLAIM'
   | 'PURCHASE_PAYMENT'
+  | 'EXPENSE'
+  | 'REVENUE'
   | 'TRANSFER';
 
 /** Tie-break order within one date, so the running column is reproducible. */
@@ -236,7 +240,9 @@ const LEDGER_KIND_ORDER: Record<LedgerKind, number> = {
   PURCHASE_INVOICE: 3,
   PURCHASE_CLAIM: 4,
   PURCHASE_PAYMENT: 5,
-  TRANSFER: 6,
+  EXPENSE: 6,
+  REVENUE: 7,
+  TRANSFER: 8,
 };
 
 export interface PersonLedgerEntry {
@@ -354,6 +360,42 @@ export function personLedgers(): Map<string, PersonLedger> {
       // purchase reduces what we owe, which raises the net.
       effect: claim.side === 'SALE' ? -claim.amountUSD : claim.amountUSD,
     });
+  }
+
+  /*
+   * Expenses and revenues booked against a person.
+   *
+   * Attribution is per LINE, not per document: `personId` lives on the line, which is what
+   * says who the money is with. A document's own invoice may belong to somebody else entirely
+   * — a freight bill sitting on a customer's sale invoice is still owed to the freight agent.
+   *
+   * An expense means we owe them, so it lowers the balance, exactly like a purchase invoice;
+   * a revenue means they owe us and raises it. Both scopes count — invoice-linked and general
+   * alike — because a charge document is its own record and its amount is nowhere inside the
+   * invoice's own total, so nothing is counted twice.
+   *
+   * Lines with no person are skipped rather than bucketed somewhere: they predate the rule that
+   * a cost line must name one, and inventing an owner for them would be a guess.
+   */
+  for (const doc of db.chargeDocs) {
+    if (doc.status === 'CANCELLED') continue;
+    for (const line of doc.lines) {
+      if (!line.personId) continue;
+      const isExpense = doc.direction === 'EXPENSE';
+      push(line.personId, {
+        id: `chgline:${line.id}`,
+        date: line.date,
+        kind: isExpense ? 'EXPENSE' : 'REVENUE',
+        // Grouped with the side that points the same way, so the two subtotals still add up to
+        // the net: the purchase side is what we owe them, the sale side what they owe us.
+        side: isExpense ? 'PURCHASE' : 'SALE',
+        reference: doc.title,
+        refId: doc.id,
+        currency: line.currency,
+        amount: line.amount,
+        effect: isExpense ? -line.amountUSD : line.amountUSD,
+      });
+    }
   }
 
   for (const p of db.payments) {
@@ -5229,16 +5271,51 @@ function buildPaymentItem(payment: Payment, input: PaymentItemInput, existing?: 
   };
 }
 
-/** DRAFT ⇄ CONFIRMED. Confirming is reversible, which is the spec's "open payment". */
+/** Units of `currency` per 1 USD, from the same rates the rest of the app converts with. */
+function unitsPerUsd(currency: Currency): number {
+  if (currency === 'USD') return 1;
+  return currency === 'AED' ? db.fxRate : DEFAULT_FX_IQD_PER_USD;
+}
+
+/** The header's declared control total, in USD. */
+export function paymentHeaderUSD(p: Payment): number {
+  return round(p.amount / unitsPerUsd(p.currency));
+}
+
+/** What the lines actually settle, in USD. */
+export function paymentLinesUSD(p: Payment): number {
+  return round(paymentItems(p).reduce((s, it) => s + it.amountUSD, 0));
+}
+
+/**
+ * DRAFT ⇄ CONFIRMED. Confirming is reversible, which is the spec's "open payment".
+ *
+ * Confirming requires the lines to add up to the header. The header amount is what the person
+ * actually handed over; the lines say where it went. Letting the two disagree books a
+ * settlement for an amount nobody paid, and every balance downstream reads the lines.
+ *
+ * Compared in USD, because a line carries its own currency and rate while the header is a
+ * control total in its own — summing the two raw would add dirhams to dollars. Reopening to
+ * DRAFT is never blocked: that is how you go and fix the difference.
+ */
 export async function setPaymentStatus(id: string, status: PaymentStatus): Promise<Payment> {
   await delay(160);
   const payment = db.payments.find((p) => p.id === id);
   if (!payment) throw new Error('payment-not-found');
-  // Confirming a payment with nothing on it would move every balance by zero and still read as
-  // a real settlement in every report. True of GENERAL payments as much as INVOICE ones — they
-  // carry lines too, they just do not name a document.
-  if (status === 'CONFIRMED' && paymentItems(payment).length === 0 && payment.items !== undefined) {
-    throw new Error('no-payment-items');
+  if (status === 'CONFIRMED' && payment.items !== undefined) {
+    // Confirming a payment with nothing on it would move every balance by zero and still read
+    // as a real settlement in every report. True of GENERAL payments as much as INVOICE ones —
+    // they carry lines too, they just do not name a document.
+    if (paymentItems(payment).length === 0) throw new Error('no-payment-items');
+    const headerUSD = paymentHeaderUSD(payment);
+    const linesUSD = paymentLinesUSD(payment);
+    // A cent of slack: two independent conversions each round to 2dp.
+    if (Math.abs(linesUSD - headerUSD) > 0.01) {
+      const err = new Error('payment-total-mismatch') as Error & { headerUSD?: number; linesUSD?: number };
+      err.headerUSD = headerUSD;
+      err.linesUSD = linesUSD;
+      throw err;
+    }
   }
   payment.status = status;
   persistDb();

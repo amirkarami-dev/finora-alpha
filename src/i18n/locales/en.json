@@ -864,8 +864,11 @@
       "over-allocated": "That is more than the item still owes",
       "allocations-required": "Allocate the amount across at least one item",
       "allocation-mismatch": "The allocated amounts must add up to the line amount",
-      "no-payment-items": "Add at least one line before confirming"
-    }
+      "no-payment-items": "Add at least one line before confirming",
+      "payment-total-mismatch": "The lines add up to ${{lines}} but the header says ${{header}} — a difference of ${{difference}}."
+    },
+    "noInvoicesForPerson": "This person has no open documents to settle",
+    "totalMismatch": "Lines must total the header amount before you can confirm"
   },
   "reports": {
     "title": "Reports",
@@ -1024,7 +1027,9 @@
       "PURCHASE_INVOICE": "Purchase invoice",
       "PURCHASE_CLAIM": "Purchase claim",
       "PURCHASE_PAYMENT": "Payment on purchase",
-      "TRANSFER": "Transfer"
+      "TRANSFER": "Transfer",
+      "EXPENSE": "Expense",
+      "REVENUE": "Revenue"
     }
   },
   "claims": {

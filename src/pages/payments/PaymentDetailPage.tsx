@@ -41,9 +41,19 @@ export default function PaymentDetailPage() {
       await statusMut.mutateAsync({ id: payment.id, status: next });
       message.success(next === 'CONFIRMED' ? t('payments.confirmed') : t('payments.reopened'));
     } catch (e) {
-      const code = e instanceof Error ? e.message : '';
+      const err = e as Error & { headerUSD?: number; linesUSD?: number };
+      const code = err.message;
       if (code === 'no-payment-items') message.error(t('payments.errors.no-payment-items'));
-      else message.error(t('common.saveFailed'));
+      // Say by how much, and in which direction — "they do not match" leaves you hunting.
+      else if (code === 'payment-total-mismatch') {
+        message.error(
+          t('payments.errors.payment-total-mismatch', {
+            header: formatNumber(err.headerUSD ?? 0, 2),
+            lines: formatNumber(err.linesUSD ?? 0, 2),
+            difference: formatNumber(Math.abs((err.headerUSD ?? 0) - (err.linesUSD ?? 0)), 2),
+          }),
+        );
+      } else message.error(t('common.saveFailed'));
     }
   };
 
@@ -290,6 +300,7 @@ export default function PaymentDetailPage() {
           }}
           paymentId={payment.id}
           paymentType={type}
+          customerId={payment.customerId}
           defaultCurrency={payment.currency}
           unallocated={unallocated}
           item={activeModal === 'editItem' ? editingItem : undefined}

@@ -17,6 +17,10 @@ const KIND_COLOR: Record<LedgerKind, string> = {
   PURCHASE_INVOICE: 'orange',
   PURCHASE_CLAIM: 'gold',
   PURCHASE_PAYMENT: 'volcano',
+  // Charges sit apart from the trade colours: they are money with the person, but not a
+  // document they bought or sold.
+  EXPENSE: 'red',
+  REVENUE: 'green',
   TRANSFER: 'default',
 };
 

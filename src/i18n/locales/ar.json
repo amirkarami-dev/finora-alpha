@@ -864,8 +864,11 @@
       "over-allocated": "هذا أكثر مما تبقّى على البند",
       "allocations-required": "وزّع المبلغ على بند واحد على الأقل",
       "allocation-mismatch": "يجب أن يساوي مجموع التوزيع مبلغ البند",
-      "no-payment-items": "أضف بنداً واحداً على الأقل قبل التأكيد"
-    }
+      "no-payment-items": "أضف بنداً واحداً على الأقل قبل التأكيد",
+      "payment-total-mismatch": "مجموع البنود ${{lines}} بينما الترويسة ${{header}} — بفارق ${{difference}}."
+    },
+    "noInvoicesForPerson": "لا توجد مستندات مفتوحة لهذا الشخص",
+    "totalMismatch": "يجب أن يساوي مجموع البنود مبلغ الترويسة قبل التأكيد"
   },
   "reports": {
     "title": "التقارير",
@@ -1024,7 +1027,9 @@
       "PURCHASE_INVOICE": "فاتورة شراء",
       "PURCHASE_CLAIM": "مطالبة شراء",
       "PURCHASE_PAYMENT": "دفعة على شراء",
-      "TRANSFER": "تحويل"
+      "TRANSFER": "تحويل",
+      "EXPENSE": "مصروف",
+      "REVENUE": "إيراد"
     }
   },
   "claims": {

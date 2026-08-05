@@ -864,8 +864,11 @@
       "over-allocated": "این بیش از باقی‌ماندهٔ این قلم است",
       "allocations-required": "مبلغ را حداقل به یک قلم تخصیص دهید",
       "allocation-mismatch": "جمع تخصیص‌ها باید برابر مبلغ بند باشد",
-      "no-payment-items": "پیش از تأیید حداقل یک بند اضافه کنید"
-    }
+      "no-payment-items": "پیش از تأیید حداقل یک بند اضافه کنید",
+      "payment-total-mismatch": "جمع سطرها ${{lines}} است اما سربرگ ${{header}} — اختلاف ${{difference}}."
+    },
+    "noInvoicesForPerson": "این شخص سند بازی برای تسویه ندارد",
+    "totalMismatch": "برای تأیید، جمع سطرها باید با مبلغ سربرگ برابر باشد"
   },
   "reports": {
     "title": "گزارش‌ها",
@@ -1024,7 +1027,9 @@
       "PURCHASE_INVOICE": "فاکتور خرید",
       "PURCHASE_CLAIM": "مطالبه خرید",
       "PURCHASE_PAYMENT": "پرداخت روی خرید",
-      "TRANSFER": "انتقال"
+      "TRANSFER": "انتقال",
+      "EXPENSE": "هزینه",
+      "REVENUE": "درآمد"
     }
   },
   "claims": {
