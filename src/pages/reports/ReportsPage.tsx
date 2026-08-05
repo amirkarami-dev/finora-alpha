@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Col, DatePicker, Row, Skeleton, Space, Tooltip, Typography } from 'antd';
+import { Card, Col, DatePicker, Row, Skeleton, Space, Tooltip, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useTabParam } from '@/hooks/useTabParam';
@@ -158,11 +157,9 @@ export default function ReportsPage() {
 
   return (
     <div className="fade-in">
-      <PageHeader
-        title={t('reports.title')}
-        subtitle={t('reports.subtitle')}
-        extra={<Button icon={<DownloadOutlined />}>{t('common.export')}</Button>}
-      />
+      {/* No page-level export: each report exports its own summary and detail sheets, and a
+          single button here could not know which tab it was meant to write. */}
+      <PageHeader title={t('reports.title')} subtitle={t('reports.subtitle')} />
 
       <Card
         variant="borderless"

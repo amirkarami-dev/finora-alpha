@@ -392,10 +392,6 @@
     "noContainerForGood": "No container carries this good yet",
     "containerNotCarryingGood": "(does not carry this good)",
     "showAllContainers": "Show all containers",
-    "containerAppliedToSome": "Container applied to {{applied}} of {{total}} lines",
-    "containerAppliedToNone": "Container doesn't carry any of this document's lines — nothing applied",
-    "convertPickContainer": "Container (optional — applies to all lines)",
-    "convertContainerHint": "Optionally pick a container to apply to every line of the new document. You can also assign containers per line afterwards.",
     "editHeader": "Edit header",
     "addItems": "Add items",
     "confirmAction": "Confirm",
@@ -451,7 +447,8 @@
     "remaining": "Remaining",
     "overpaidBy": "Overpaid by {{amount}}",
     "emptyTab": "No documents in this tab yet",
-    "typeLabel": "Type"
+    "typeLabel": "Type",
+    "convertHint": "A new draft document is created from this one. Assign containers per line on the new document afterwards."
   },
   "warehouse": {
     "title": "Warehouse",
@@ -933,7 +930,9 @@
     "sources": {
       "TRANSFER": "Transfer",
       "PAYMENT": "Payment"
-    }
+    },
+    "movements": "Movements",
+    "items": "Items"
   },
   "settings": {
     "title": "Settings",

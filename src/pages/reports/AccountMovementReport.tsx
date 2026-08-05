@@ -1,9 +1,11 @@
-import { Alert, Card, Empty, Skeleton, Space, Statistic, Table, Tag, Typography, theme } from 'antd';
+import { Alert, Button, Card, Empty, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
 import { useAccountMovementReport } from '@/services/queries';
-import { formatDate } from '@/utils/format';
+import { formatDate, formatNumber } from '@/utils/format';
+import { datedFileName, downloadXlsx } from '@/utils/exportXlsx';
 import type { AccountMovementBlock, AccountMovementRow, DateRange } from '@/services/api';
 
 const { Text } = Typography;
@@ -22,14 +24,49 @@ interface AccountMovementReportProps {
 /**
  * Report (a): balance and movement of banks and cash safes.
  *
- * Every figure on screen is served by `getAccountMovementReport` — opening, money in, money out
- * and closing are printed as received, never re-added here. The server guarantees
+ * One row per account with its four figures; open a row for the movements behind them. Stacking
+ * every account's full movement list on one screen buried the summary that most visits actually
+ * want.
+ *
+ * Every figure is served by `getAccountMovementReport` — opening, in, out and closing are
+ * printed as received, never re-added here. The server guarantees
  * `opening + totalIn − totalOut === closing`; recomputing any of them in the view would create a
  * second, silently disagreeing source of truth.
  */
 export function AccountMovementReport({ range }: AccountMovementReportProps) {
   const { t } = useTranslation();
   const { data, isLoading } = useAccountMovementReport(range);
+
+  const blocks = data ?? [];
+
+  const exportAll = () => {
+    downloadXlsx(datedFileName(t('reports.tabAccounts'), new Date().toISOString()), [
+      {
+        name: t('reports.tabAccounts'),
+        rows: blocks.map((b) => ({
+          [t('reports.reference')]: b.accountName,
+          [t('customers.currency')]: b.currency,
+          [t('reports.opening')]: b.opening,
+          [t('reports.moneyIn')]: b.totalIn,
+          [t('reports.moneyOut')]: b.totalOut,
+          [t('reports.closing')]: b.closing,
+        })),
+      },
+      // One sheet per account, so a movement list can be read without hunting through a
+      // single merged tab for the account it belongs to.
+      ...blocks.map((b) => ({
+        name: b.accountName,
+        rows: b.rows.map((r) => ({
+          [t('reports.date')]: formatDate(r.date),
+          [t('reports.reference')]: r.reference,
+          [t('reports.source')]: t(`reports.sources.${r.source}`),
+          [`${t('reports.amount')} (${b.currency})`]: r.amount,
+          [t('reports.amountUsd')]: r.baseUSD,
+          [t('reports.running')]: r.running,
+        })),
+      })),
+    ]);
+  };
 
   if (isLoading) {
     return (
@@ -39,8 +76,6 @@ export function AccountMovementReport({ range }: AccountMovementReportProps) {
     );
   }
 
-  const blocks = data ?? [];
-
   if (blocks.length === 0) {
     return (
       <Card variant="borderless" className="soft-card">
@@ -49,31 +84,89 @@ export function AccountMovementReport({ range }: AccountMovementReportProps) {
     );
   }
 
+  const columns: ColumnsType<AccountMovementBlock> = [
+    {
+      title: t('reports.reference'),
+      dataIndex: 'accountName',
+      render: (v: string, r) => (
+        <Space size={6} wrap>
+          <Text strong>{v}</Text>
+          <Tag>{r.accountType === 'BANK' ? t('banks.title') : t('cashSafes.title')}</Tag>
+          <Tag>{r.currency}</Tag>
+        </Space>
+      ),
+    },
+    {
+      title: t('reports.opening'),
+      dataIndex: 'opening',
+      width: 150,
+      align: 'right',
+      render: (v: number, r) => <Money value={v} currency={r.currency} fractionDigits={2} signed />,
+    },
+    {
+      title: t('reports.moneyIn'),
+      dataIndex: 'totalIn',
+      width: 150,
+      align: 'right',
+      render: (v: number, r) => <Money value={v} currency={r.currency} fractionDigits={2} muteZero />,
+    },
+    {
+      title: t('reports.moneyOut'),
+      dataIndex: 'totalOut',
+      width: 150,
+      align: 'right',
+      render: (v: number, r) => <Money value={v} currency={r.currency} fractionDigits={2} muteZero />,
+    },
+    {
+      title: t('reports.closing'),
+      dataIndex: 'closing',
+      width: 160,
+      align: 'right',
+      render: (v: number, r) => <Money value={v} currency={r.currency} fractionDigits={2} signed strong />,
+    },
+    {
+      title: t('reports.movements'),
+      dataIndex: 'rows',
+      width: 110,
+      align: 'center',
+      render: (rows: AccountMovementRow[]) => formatNumber(rows.length, 0),
+    },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {blocks.map((block) => (
-        <AccountBlockCard key={block.accountId} block={block} />
-      ))}
-    </div>
+    <>
+      <Space style={{ marginBottom: 12 }}>
+        <Button icon={<DownloadOutlined />} onClick={exportAll}>
+          {t('common.export')}
+        </Button>
+      </Space>
+      <Table<AccountMovementBlock>
+        rowKey="accountId"
+        size="small"
+        columns={columns}
+        dataSource={blocks}
+        pagination={false}
+        scroll={{ x: 900 }}
+        expandable={{
+          // The whole row is the target: "click the account to see its movements" is the one
+          // thing this screen does, and hunting for a caret is a poor way to be told that.
+          expandRowByClick: true,
+          rowExpandable: (b) => b.rows.length > 0 || b.skippedCurrency > 0,
+          expandedRowRender: (b) => <AccountMovements block={b} />,
+        }}
+      />
+    </>
   );
 }
 
-function AccountBlockCard({ block }: { block: AccountMovementBlock }) {
+function AccountMovements({ block }: { block: AccountMovementBlock }) {
   const { t } = useTranslation();
-  const { token } = theme.useToken();
-  const isBank = block.accountType === 'BANK';
 
   const columns: ColumnsType<AccountMovementRow> = [
-    {
-      title: t('reports.date'),
-      dataIndex: 'date',
-      width: 130,
-      render: (v: string) => formatDate(v),
-    },
+    { title: t('reports.date'), dataIndex: 'date', width: 130, render: (v: string) => formatDate(v) },
     {
       title: t('reports.reference'),
       dataIndex: 'reference',
-      width: 190,
       render: (v: string) => (
         <span dir="ltr" style={{ fontFamily: 'monospace' }}>
           {v}
@@ -83,83 +176,37 @@ function AccountBlockCard({ block }: { block: AccountMovementBlock }) {
     {
       title: t('reports.source'),
       dataIndex: 'source',
-      width: 130,
-      render: (v: AccountMovementRow['source']) => <Tag color={SOURCE_COLOR[v]}>{t(`reports.sources.${v}`)}</Tag>,
+      width: 120,
+      align: 'center',
+      render: (v: AccountMovementRow['source']) => (
+        <Tag color={SOURCE_COLOR[v]}>{t(`reports.sources.${v}`)}</Tag>
+      ),
     },
     {
       title: t('reports.amount'),
       dataIndex: 'amount',
       width: 160,
       align: 'right',
-      // The account's own currency, and the sign IS the direction — money out renders in brackets.
       render: (v: number) => <Money value={v} currency={block.currency} fractionDigits={2} signed />,
     },
     {
       title: t('reports.amountUsd'),
       dataIndex: 'baseUSD',
-      width: 160,
+      width: 150,
       align: 'right',
       render: (v: number) => <Money value={v} fractionDigits={2} signed />,
     },
     {
       title: t('reports.running'),
       dataIndex: 'running',
-      width: 170,
+      width: 160,
       align: 'right',
       render: (v: number) => <Money value={v} currency={block.currency} fractionDigits={2} signed strong />,
     },
   ];
 
   return (
-    <Card
-      variant="borderless"
-      className="soft-card"
-      styles={{ header: { borderBottom: 'none', fontWeight: 600 } }}
-      title={
-        <Space size={8} wrap>
-          <span>{block.accountName}</span>
-          <Tag color={isBank ? 'blue' : 'gold'}>{isBank ? t('banks.title') : t('cashSafes.title')}</Tag>
-        </Space>
-      }
-    >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 12,
-          marginBottom: 16,
-        }}
-      >
-        <Statistic
-          title={t('reports.opening')}
-          valueRender={() => <Money value={block.opening} currency={block.currency} fractionDigits={2} signed />}
-        />
-        <Statistic
-          title={t('reports.moneyIn')}
-          // `totalIn`/`totalOut` arrive as magnitudes; the colour carries the direction rather
-          // than a sign, so the two never read as a subtraction the user has to perform.
-          valueRender={() => (
-            <span style={{ color: token.colorSuccess }}>
-              <Money value={block.totalIn} currency={block.currency} fractionDigits={2} />
-            </span>
-          )}
-        />
-        <Statistic
-          title={t('reports.moneyOut')}
-          valueRender={() => (
-            <span style={{ color: token.colorError }}>
-              <Money value={block.totalOut} currency={block.currency} fractionDigits={2} />
-            </span>
-          )}
-        />
-        <Statistic
-          title={t('reports.closing')}
-          valueRender={() => (
-            <Money value={block.closing} currency={block.currency} fractionDigits={2} signed strong />
-          )}
-        />
-      </div>
-
+    <>
       {block.skippedCurrency > 0 && (
         <Alert
           type="warning"
@@ -168,16 +215,15 @@ function AccountBlockCard({ block }: { block: AccountMovementBlock }) {
           message={t('reports.skippedCurrency', { n: block.skippedCurrency })}
         />
       )}
-
       <Table<AccountMovementRow>
         rowKey="id"
         size="small"
         columns={columns}
         dataSource={block.rows}
-        scroll={{ x: 940 }}
         pagination={{ pageSize: 15, hideOnSinglePage: true, showSizeChanger: false }}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<Text type="secondary">{t('reports.noMovements')}</Text>} /> }}
+        scroll={{ x: 860 }}
+        locale={{ emptyText: t('reports.noMovements') }}
       />
-    </Card>
+    </>
   );
 }

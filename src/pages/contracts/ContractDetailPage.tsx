@@ -183,7 +183,7 @@ export default function ContractDetailPage() {
       />
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={16}>
+        <Col xs={24}>
           <Card variant="borderless" loading={isLoading} title={t('contracts.detailTitle')}>
             <Descriptions
               column={{ xs: 1, sm: 2, lg: 3 }}
@@ -205,20 +205,6 @@ export default function ContractDetailPage() {
                 {contract.notes}
               </Text>
             )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card variant="borderless" loading={isLoading} title={t('contracts.progress')} style={{ height: '100%' }}>
-            <div style={{ display: 'grid', placeItems: 'center', padding: '8px 0' }}>
-              <Progress
-                type="dashboard"
-                percent={contract ? Math.round(contract.shippedPct) : 0}
-                strokeColor={{ '0%': '#b87333', '100%': '#e0a36b' }}
-              />
-              <Text type="secondary" style={{ marginTop: 8 }}>
-                {formatMt(totalQty - totalRemaining)} / {formatMt(totalQty)}
-              </Text>
-            </div>
           </Card>
         </Col>
       </Row>

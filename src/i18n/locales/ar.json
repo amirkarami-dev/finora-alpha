@@ -392,10 +392,6 @@
     "noContainerForGood": "لا توجد حاوية تحمل هذه البضاعة بعد",
     "containerNotCarryingGood": "(لا تحمل هذه البضاعة)",
     "showAllContainers": "إظهار جميع الحاويات",
-    "containerAppliedToSome": "تم تطبيق الحاوية على {{applied}} من {{total}} بنود",
-    "containerAppliedToNone": "الحاوية لا تحمل أيًا من بنود هذا المستند — لم يتم تطبيق شيء",
-    "convertPickContainer": "الحاوية (اختياري — تُطبّق على جميع البنود)",
-    "convertContainerHint": "يمكنك اختياريًا تحديد حاوية لتطبيقها على جميع بنود المستند الجديد. يمكنك أيضًا تعيين الحاويات لكل بند لاحقًا.",
     "editHeader": "تعديل الترويسة",
     "addItems": "إضافة بنود",
     "confirmAction": "تأكيد",
@@ -451,7 +447,8 @@
     "remaining": "المتبقي",
     "overpaidBy": "دفع زائد بمقدار {{amount}}",
     "emptyTab": "لا توجد مستندات في هذا التبويب بعد",
-    "typeLabel": "النوع"
+    "typeLabel": "النوع",
+    "convertHint": "يُنشأ مستند مسودة جديد من هذا المستند. عيّن الحاويات لكل بند على المستند الجديد بعد ذلك."
   },
   "warehouse": {
     "title": "المستودع",
@@ -933,7 +930,9 @@
     "sources": {
       "TRANSFER": "تحويل",
       "PAYMENT": "دفعة"
-    }
+    },
+    "movements": "الحركات",
+    "items": "البنود"
   },
   "settings": {
     "title": "الإعدادات",

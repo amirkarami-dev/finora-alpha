@@ -542,15 +542,6 @@ export const useMarkInvoiceSent = () => {
   });
 };
 
-export const useApplyContainerToAll = () => {
-  const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: ({ invoiceId, containerId }: { invoiceId: string; containerId: string }) =>
-      api.applyContainerToAll(invoiceId, containerId),
-    onSuccess: ({ invoice }) => invalidate(invalidateArgsFor(invoice)),
-  });
-};
-
 function useInvalidateWarehouses() {
   const qc = useQueryClient();
   return () => {

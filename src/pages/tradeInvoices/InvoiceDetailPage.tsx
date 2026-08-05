@@ -55,7 +55,7 @@ import { CreateInvoiceModal } from './CreateInvoiceModal';
 import { InvoiceChargesCard } from './InvoiceChargesCard';
 import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
-import { ConvertContainerModal } from './ConvertContainerModal';
+import { ConvertInvoiceModal } from './ConvertInvoiceModal';
 import { EditLineModal } from './EditLineModal';
 
 const { Text } = Typography;
@@ -77,7 +77,7 @@ const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
   SALE_INVOICE: [],
 };
 
-type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'convertContainer' | null;
+type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'convert' | null;
 
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
@@ -429,7 +429,7 @@ export default function InvoiceDetailPage() {
                       items: convertMenuItems,
                       onClick: ({ key }) => {
                         setPendingConvertTarget(key as InvoiceType);
-                        setActiveModal('convertContainer');
+                        setActiveModal('convert');
                       },
                     }}
                   >
@@ -714,8 +714,8 @@ export default function InvoiceDetailPage() {
       )}
 
       {pendingConvertTarget && (
-        <ConvertContainerModal
-          open={activeModal === 'convertContainer'}
+        <ConvertInvoiceModal
+          open={activeModal === 'convert'}
           onClose={() => {
             setActiveModal(null);
             setPendingConvertTarget(undefined);

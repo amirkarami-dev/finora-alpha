@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Empty, Select, Space, Statistic, Table, Tag, Typography, theme } from 'antd';
+import { Button, Empty, Select, Space, Statistic, Table, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
 import { useAccounts, usePersonLedger } from '@/services/queries';
 import { formatDate } from '@/utils/format';
+import { datedFileName, downloadXlsx } from '@/utils/exportXlsx';
 import type { DateRange, LedgerKind, PersonLedgerEntry } from '@/services/api';
 
 const { Text } = Typography;
@@ -78,6 +80,32 @@ export function PersonMovementReport({ range }: PersonMovementReportProps) {
   // Both ends are 2dp-rounded already; subtracting them can still leave float dust behind.
   const netChange = Math.round((closing - opening) * 100) / 100;
 
+  const exportRows = () => {
+    const name = people.find((p) => p.value === personId)?.label ?? t('reports.person');
+    downloadXlsx(datedFileName(name, new Date().toISOString()), [
+      {
+        name: t('reports.tabPersons'),
+        rows: [
+          { [t('reports.reference')]: t('reports.opening'), [t('ledger.running')]: opening },
+          { [t('reports.reference')]: t('reports.netChange'), [t('ledger.running')]: netChange },
+          { [t('reports.reference')]: t('reports.closing'), [t('ledger.running')]: closing },
+        ],
+      },
+      {
+        name: t('ledger.title'),
+        rows: rows.map((r) => ({
+          [t('reports.date')]: formatDate(r.date),
+          [t('ledger.kind')]: t(`ledger.kinds.${r.kind}`),
+          [t('reports.reference')]: r.reference,
+          [t('reports.amount')]: r.amount,
+          [t('customers.currency')]: r.currency,
+          [t('ledger.effect')]: r.effect,
+          [t('ledger.running')]: r.running,
+        })),
+      },
+    ]);
+  };
+
   const columns: ColumnsType<PersonLedgerEntry> = [
     {
       title: t('reports.date'),
@@ -135,19 +163,24 @@ export function PersonMovementReport({ range }: PersonMovementReportProps) {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Space direction="vertical" size={4}>
-        <Text type="secondary">{t('reports.person')}</Text>
-        <Select
-          showSearch
-          allowClear
-          optionFilterProp="label"
-          style={{ minWidth: 280 }}
-          placeholder={t('reports.pickPerson')}
-          loading={accounts.isLoading}
-          value={personId}
-          onChange={setPersonId}
-          options={people}
-        />
+      <Space align="end" wrap>
+        <Space direction="vertical" size={4}>
+          <Text type="secondary">{t('reports.person')}</Text>
+          <Select
+            showSearch
+            allowClear
+            optionFilterProp="label"
+            style={{ minWidth: 280 }}
+            placeholder={t('reports.pickPerson')}
+            loading={accounts.isLoading}
+            value={personId}
+            onChange={setPersonId}
+            options={people}
+          />
+        </Space>
+        <Button icon={<DownloadOutlined />} onClick={exportRows} disabled={!personId || isLoading}>
+          {t('common.export')}
+        </Button>
       </Space>
 
       {!personId ? (

@@ -26,6 +26,7 @@
     "react-i18next": "^15.2.0",
     "react-router-dom": "^6.28.0",
     "recharts": "^2.15.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
