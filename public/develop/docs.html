@@ -116,6 +116,8 @@
   - purchase invoices
   + purchase claims
   + payments made on purchases
+  - expense lines naming them
+  + revenue lines naming them
   ------------------------------
   = balance</code></pre>
     <p>Positive means <strong>they owe you</strong>. A number in brackets, like <code>(390)</code>,
@@ -132,6 +134,14 @@
       <p>A cheque that has not cleared is listed but counts zero, marked <em>not counted yet</em>.
       Transfers linked to that person's invoices are listed <em>for information</em> and count zero
       too — they move your money between your own accounts.</p>
+    </div>
+
+    <div class="callout">
+      <strong>Costs and income count too</strong>
+      <p>An expense line naming a person lowers their balance; a revenue line raises it. It counts
+      per <em>line</em>, not per document, so one expense split across three people lands on three
+      balances. Cancelled documents count nothing, and a line with no person named touches no
+      balance at all.</p>
     </div>
 
     <div class="callout">
@@ -225,6 +235,11 @@ line value = unit price × quantity in tonnes</code></pre>
       to it.</p>
     </div>
 
+    <p>Converting asks nothing but which type you are converting to: it copies the document into a
+    new <strong>draft</strong>, which you then edit as usual. Containers are set per line on that
+    new draft. Convert used to ask for one container up front and stamp it on every line, which was
+    only ever a guess you had to undo by hand.</p>
+
     <h3>Status</h3>
     <p>Draft, confirmed, sent or cancelled. Only confirmed and priced documents count towards
     receivables, stock and the pickers used elsewhere in the app.</p>
@@ -246,9 +261,20 @@ line value = unit price × quantity in tonnes</code></pre>
       <li>Create the header: person, amount, date, currency, notes. No exchange rate here — the
       header is a control total.</li>
       <li>It opens as a <strong>draft</strong>.</li>
-      <li>Add one line per invoice being settled. Each line has its own currency, rate and method.</li>
+      <li>Add one line per invoice being settled. Each line has its own currency, rate and method.
+      The invoice list offers only documents belonging to the person on the header.</li>
       <li>Confirm. Only now does the money count towards balances.</li>
     </ol>
+
+    <div class="callout">
+      <strong>The lines must add up to the header</strong>
+      <p>Confirming is refused while the lines total something other than the header amount, and
+      the message names both figures and the difference. The header is a control total, so letting
+      the two disagree would make it a decoration.</p>
+      <p>Reopening a confirmed payment is never blocked by this check — a payment that failed it
+      could otherwise be neither confirmed nor corrected. Both figures are compared in USD, to the
+      cent.</p>
+    </div>
 
     <h3>Splitting across invoice items</h3>
     <p>Leave the grid at zero and the amount fills automatically from the first item down, each
@@ -547,10 +573,10 @@ To:    CashSafe IQD    310 IQD</code></pre>
         <thead><tr><th>Tab</th><th>One row per</th><th>Shows</th></tr></thead>
         <tbody>
           <tr><td>Overview</td><td>—</td><td>The charts: money in against money out, product mix, contract status, ageing</td></tr>
-          <tr><td>Banks &amp; cash safes</td><td>Movement on an account</td><td>Opening, money in, money out, closing — per account, in its own currency and in dollars</td></tr>
-          <tr><td>Persons</td><td>Movement on a person</td><td>The same balance detail you get by clicking a person's balance</td></tr>
-          <tr><td>Expenses</td><td>Expense line</td><td>Totals by category and by cost centre, switchable to revenues</td></tr>
-          <tr><td>Purchases &amp; sales</td><td>Invoice item</td><td>Value and tonnage per side, down to product, quantity and unit price</td></tr>
+          <tr><td>Banks &amp; cash safes</td><td>Account</td><td>Opening, money in, money out, closing — in its own currency and in dollars. Open a row for its movements</td></tr>
+          <tr><td>Persons</td><td>The person you pick</td><td>The same balance detail you get by clicking a person's balance</td></tr>
+          <tr><td>Expenses</td><td>Category</td><td>Totals by category and by cost centre, switchable to revenues. Open a category for its lines</td></tr>
+          <tr><td>Purchases &amp; sales</td><td>Invoice</td><td>Value and tonnage per side. Open an invoice for its goods, quantities and unit prices</td></tr>
         </tbody>
       </table>
     </div>
@@ -567,6 +593,23 @@ To:    CashSafe IQD    310 IQD</code></pre>
       <p>The Persons report takes its opening from the running balance of the last row before the
       window, rather than re-adding the amounts itself. Two ways of computing the same number are
       two chances to disagree.</p>
+    </div>
+
+    <h3>Summary first, detail on click</h3>
+    <p>Each report opens as a short list — one row per account, per category, per invoice — with its
+    totals. Click anywhere on a row and its movements or lines open underneath it. You can have
+    several open at once.</p>
+
+    <h3>Export</h3>
+    <p>Each report has its own <strong>Export</strong> button, which downloads a real
+    <code>.xlsx</code>: a summary sheet followed by the detail — for banks and cash safes, one sheet
+    per account. Figures are written as numbers rather than text, so they can be summed in Excel
+    without cleaning them up first. The file is named after the report and the day, so two downloads
+    never collide.</p>
+    <div class="callout">
+      <strong>There is no page-wide Export</strong>
+      <p>One button above the tabs could not know which report it was meant to write, so it wrote
+      nothing at all. Export now belongs to the report you are actually looking at.</p>
     </div>
   </div>
 

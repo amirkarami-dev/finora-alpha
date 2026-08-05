@@ -162,6 +162,42 @@
 
     <div class="task" data-s="done">
       <div>
+        <h4>Costs booked against a person count in their balance</h4>
+        <p>An expense line naming a person now reduces their balance, and a revenue line raises it,
+        exactly as an invoice would. Before this, money you spent on somebody's behalf sat in the
+        expense report and nowhere else, so their balance was quietly short by that amount. Each
+        line counts on its own, so one document spread across three people lands on three
+        balances.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">18 checks passed</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Payment lines must add up to the header</h4>
+        <p>You cannot confirm a payment of $50,000 whose lines settle $48,000. The message names
+        both figures and the difference. Reopening a confirmed payment to fix it is never blocked —
+        otherwise a payment that failed this check could be neither confirmed nor corrected.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Checked by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>The line picker only offers that person's invoices</h4>
+        <p>Adding a line to a payment used to list every invoice in the system, so it was easy to
+        settle a document belonging to somebody else. It now lists only documents of the person on
+        the payment header, labelled with their type, and says so plainly when that person has
+        none.</p>
+        <div class="meta"><span class="chip">Fix</span><span class="chip">Payments</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
         <h4>Exchange gain and loss is now a plain record</h4>
         <p>Pick gain or loss on a toggle, type a positive amount, add a date and notes. That is all.
         It replaced a revaluation engine with book rates, previews, proportional allocation back to
@@ -390,6 +426,32 @@
 
     <div class="task" data-s="done">
       <div>
+        <h4>Reports open one row at a time</h4>
+        <p>Each report is now a short summary — one row per bank or cash safe, per expense category,
+        per invoice — with its totals. Click a row and its movements or lines open underneath.
+        Stacking every account's full history on one screen buried the totals most visits actually
+        want. Checked line by line: an invoice's items add up to exactly the figure on its summary
+        row.</p>
+        <div class="meta"><span class="chip">Reports</span><span class="chip">Totals reconciled</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Export writes a real Excel file</h4>
+        <p>Every report now downloads a genuine <code>.xlsx</code> — a summary sheet plus the detail,
+        or one sheet per account — with figures stored as numbers, not text, so they can be summed in
+        Excel straight away. The old page-wide Export button did nothing and is gone; a single button
+        could not know which report it was meant to write. The spreadsheet writer is only fetched
+        when you press Export, so the app itself starts a third lighter than before.</p>
+        <div class="meta"><span class="chip">Reports</span><span class="chip">File opened and read back</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
         <h4>Costs survive invoice conversion</h4>
         <p>Book a cost or claim on a confirmed provisional invoice, convert it to a final
         invoice, and everything still appears against the new document.</p>
@@ -445,6 +507,29 @@
 
     <div class="task" data-s="done">
       <div>
+        <h4>Converting a document no longer asks for a container</h4>
+        <p>Convert used to open a container picker and stamp your choice on every line at once.
+        But containers belong to lines, not to documents, and the new draft's lines are editable
+        anyway — so the step only ever guessed, and the guess had to be undone by hand. Convert is
+        now a plain confirmation; you assign containers per line afterwards, where you were
+        changing them regardless.</p>
+        <div class="meta"><span class="chip">Purchase</span><span class="chip">Sale</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Shipped-percent dial removed from contracts</h4>
+        <p>The circle repeated what the Quantity and Remaining figures beside it already said, and
+        took a third of the width to do it. The contract card is now full width.</p>
+        <div class="meta"><span class="chip">Contracts</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
         <h4>Record payment removed from invoices</h4>
         <p>Payments are created in the Payments menu with a header and lines. Keeping a second,
         different way to do it from an invoice would have split the rules in two. The list of
@@ -494,9 +579,9 @@
     <div class="task" data-s="done">
       <div>
         <h4>Three languages, right to left</h4>
-        <p>English, Arabic and Persian, with 1115 text keys matching exactly across all three.
+        <p>English, Arabic and Persian, with 1195 text keys matching exactly across all three.
         Every new page was opened in Arabic and Persian to confirm no raw key appears.</p>
-        <div class="meta"><span class="chip">i18n</span><span class="chip">1115 keys</span></div>
+        <div class="meta"><span class="chip">i18n</span><span class="chip">1195 keys</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
