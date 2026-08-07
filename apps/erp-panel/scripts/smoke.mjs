@@ -1,9 +1,14 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const BASE = 'http://localhost:4173';
-const OUT = '/tmp/finora-shots';
+// Both are overridable: 4173 is not always free (other projects on this machine use it too),
+// and `/tmp` does not exist on Windows, which silently wrote screenshots to C:\tmp.
+const BASE = process.env.SMOKE_BASE ?? 'http://localhost:4173';
+const OUT = process.env.SMOKE_OUT ?? join(tmpdir(), 'finora-shots');
 mkdirSync(OUT, { recursive: true });
+console.log(`Target: ${BASE}\nScreenshots: ${OUT}`);
 
 const errors = [];
 

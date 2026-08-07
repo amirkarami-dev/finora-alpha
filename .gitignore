@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Next.js (apps/land-web)
+.next/
+out/
+next-env.d.ts
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -20,8 +25,11 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+*.user
+
+# NOTE: `*.sln` deliberately NOT ignored. The Visual Studio boilerplate ignores it, which
+# would have made backend/Finora.slnx invisible to git — the solution file is source.
 
 # Env
 .env
@@ -33,3 +41,13 @@ dist-ssr
 coverage
 .eslintcache
 *.tsbuildinfo
+.tsbuild/
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Tool output (graphify), never source
+graphify-out/
+.claude-flow/

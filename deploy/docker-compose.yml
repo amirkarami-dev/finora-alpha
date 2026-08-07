@@ -1,14 +1,27 @@
-# Finora (metals-trading SPA) — erp.metal-uae.com
-# Additive deployment: attaches to the existing external `traefik` network.
-# Distinct names (metal-erp*) so it never collides with the other `finora` stack.
+# Finora — one stack for all three deployables, deployed to /data/apps/metal-erp.
+#
+# Replaces the two separate stacks that used to live at /data/apps/metal-erp (SPA only) and
+# /data/apps/metal-uae (corporate site). Both hosts keep their existing names and routers, so
+# the consolidation is invisible from outside.
+#
+# Attaches to the existing external `traefik` network. Cloudflare proxies every domain
+# (SSL mode "Full") and Traefik terminates TLS with `tls=true`. We do NOT use the `myresolver`
+# ACME resolver: it runs the DNS-01 challenge against ArvanCloud DNS, which is not
+# authoritative for these Cloudflare-hosted zones.
+#
+# Every image is built from the REPO ROOT context, after building the apps locally:
+#     npm run build          # both frontends
+#     docker compose -f deploy/docker-compose.yml build
 services:
+  # ── ERP panel — erp.metal-uae.com ────────────────────────────────────────────────
   web:
-    build: .
+    build:
+      context: ..
+      dockerfile: deploy/erp-panel/Dockerfile
     image: metal-erp-web:latest
     container_name: metal-erp-web
     restart: unless-stopped
-    networks:
-      - traefik
+    networks: [traefik]
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
@@ -16,6 +29,33 @@ services:
       - "traefik.http.routers.metal-erp.rule=Host(`erp.metal-uae.com`)"
       - "traefik.http.routers.metal-erp.tls=true"
       - "traefik.http.services.metal-erp.loadbalancer.server.port=80"
+
+  # ── Corporate site — metal-uae.com ───────────────────────────────────────────────
+  land:
+    build:
+      context: ..
+      dockerfile: deploy/land-web/Dockerfile
+    image: metal-uae-web:latest
+    container_name: metal-uae-web
+    restart: unless-stopped
+    networks: [traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.metal-uae.entrypoints=websecure"
+      - "traefik.http.routers.metal-uae.rule=Host(`metal-uae.com`)"
+      - "traefik.http.routers.metal-uae.tls=true"
+      - "traefik.http.services.metal-uae.loadbalancer.server.port=3000"
+      # www -> root (301), handled at the origin so it works regardless of any Cloudflare
+      # redirect rule. $$ escapes compose interpolation -> Traefik ${1}.
+      - "traefik.http.routers.metal-uae-www.entrypoints=websecure"
+      - "traefik.http.routers.metal-uae-www.rule=Host(`www.metal-uae.com`)"
+      - "traefik.http.routers.metal-uae-www.tls=true"
+      - "traefik.http.routers.metal-uae-www.service=metal-uae"
+      - "traefik.http.routers.metal-uae-www.middlewares=metal-uae-wwwredir"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.regex=^https?://www\\.metal-uae\\.com/(.*)"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.replacement=https://metal-uae.com/$${1}"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.permanent=true"
 
 networks:
   traefik:

@@ -13,6 +13,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Same-origin in development, same-origin in production (traefik routes /api on the same
+    // host). Cookies and CSRF then behave identically in both, and there is no CORS to
+    // configure in the happy path. The backend's Kestrel port is 5080 — see backend/README.
+    proxy: {
+      '/api': { target: 'http://localhost:5080', changeOrigin: false },
+    },
   },
   build: {
     outDir: 'dist',

@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    // This app is on React 19 while apps/erp-panel is on React 18, and npm hoists the 18
+    // types to the repo root. Without this, tsc walks up and loads BOTH @types/react
+    // packages as globals, so a ReactNode from one is not assignable to the other.
+    // Pinning typeRoots to this workspace's own copy keeps the two majors apart.
+    "typeRoots": ["./node_modules/@types"],
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

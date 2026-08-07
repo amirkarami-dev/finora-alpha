@@ -1,8 +1,11 @@
 {
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-    "outDir": "./node_modules/.tmp/node",
+    // Under npm workspaces, dependencies hoist to the repo root and this app may have no
+    // local node_modules at all — so the build info cannot live there. `.tsbuild/` is
+    // app-local, gitignored, and exists regardless of how the workspace resolves.
+    "tsBuildInfoFile": "./.tsbuild/tsconfig.node.tsbuildinfo",
+    "outDir": "./.tsbuild/node",
     "emitDeclarationOnly": true,
     "target": "ES2022",
     "lib": ["ES2023"],

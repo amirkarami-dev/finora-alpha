@@ -1,0 +1,525 @@
+/* ============================================================
+   Jalil Jalal Metals Trading — global styles & design tokens
+   Dark "copper luxury" industrial theme.
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --bg: #0a0d0f;
+  --bg-2: #0e1114;
+  --surface: #1a1f24;
+  --card: #111518;
+
+  /* Copper palette */
+  --copper: #b87333;
+  --copper-light: #e8a87c;
+  --copper-dark: #7c4a1e;
+  --copper-gradient: linear-gradient(135deg, #7c4a1e, #b87333, #e8a87c);
+
+  /* Text */
+  --text: #f5f0eb;
+  --text-dim: #c8bfb5;
+  --muted: #9a8f85;
+  --accent: #d4956a;
+
+  /* WhatsApp green */
+  --wa: #25d366;
+  --wa-dark: #1faa50;
+
+  /* Typography (font CSS vars injected by next/font in layout) */
+  --ff-display: var(--font-playfair), Georgia, "Times New Roman", serif;
+  --ff-body: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmerMove {
+  0% { transform: translateX(-130%) skewX(-20deg); }
+  100% { transform: translateX(240%) skewX(-20deg); }
+}
+@keyframes floatPulse {
+  0%, 100% { box-shadow: 0 10px 34px rgba(37, 211, 102, 0.42); }
+  50% { box-shadow: 0 14px 50px rgba(37, 211, 102, 0.72); }
+}
+
+/* ============================================================
+   Scroll-reveal system
+   Elements tagged .reveal start hidden; ScrollReveal adds .jjm-in
+   as they enter the viewport. <noscript> + reduced-motion reveal all.
+   ============================================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  will-change: opacity, transform;
+}
+.reveal.reveal-sm {
+  transform: translateY(22px);
+}
+.reveal.jjm-in {
+  opacity: 1 !important;
+  transform: none !important;
+  transition:
+    opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .float-cta { animation: none !important; }
+}
+
+/* ============================================================
+   Navbar
+   ============================================================ */
+.jjm-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px clamp(18px, 4.5vw, 64px);
+  background: linear-gradient(180deg, rgba(10, 13, 15, 0.55), rgba(10, 13, 15, 0));
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: all 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.jjm-header.nav-scrolled {
+  background: rgba(10, 13, 15, 0.82);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid rgba(184, 115, 51, 0.38);
+  box-shadow: 0 10px 44px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(232, 168, 124, 0.14);
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.jjm-desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  justify-content: center;
+}
+
+.jjm-navlink {
+  text-decoration: none;
+  font-family: var(--ff-body);
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: color 0.25s;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.jjm-navlink:hover,
+.jjm-navlink.is-active {
+  color: var(--copper-light);
+}
+.jjm-navlink.is-active[data-nav] {
+  color: var(--accent);
+}
+
+.jjm-prodwrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.jjm-chev {
+  transition: transform 0.3s;
+  margin-top: 1px;
+}
+.jjm-prodwrap:hover .jjm-chev {
+  transform: rotate(180deg);
+}
+.jjm-drop {
+  position: absolute;
+  top: calc(100% + 16px);
+  left: -16px;
+  min-width: 232px;
+  background: rgba(17, 21, 24, 0.94);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(184, 115, 51, 0.3);
+  border-radius: 14px;
+  padding: 9px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(232, 168, 124, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.jjm-prodwrap:hover .jjm-drop {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.jjm-droplink {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+  padding: 11px 13px;
+  border-radius: 9px;
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.jjm-droplink:hover {
+  background: rgba(184, 115, 51, 0.16);
+  color: var(--copper-light);
+}
+
+.jjm-contactbtn {
+  text-decoration: none;
+  font-family: var(--ff-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 9px 20px;
+  border-radius: 30px;
+  border: 1px solid rgba(184, 115, 51, 0.55);
+  background: rgba(184, 115, 51, 0.08);
+  transition: all 0.28s;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jjm-contactbtn:hover,
+.jjm-contactbtn.is-active {
+  background: linear-gradient(135deg, #7c4a1e, #b87333);
+  border-color: var(--copper);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(184, 115, 51, 0.45);
+}
+
+.jjm-burger {
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  background: rgba(184, 115, 51, 0.1);
+  border: 1px solid rgba(184, 115, 51, 0.3);
+  border-radius: 11px;
+  cursor: pointer;
+  padding: 0;
+  display: none;
+}
+.jjm-burger span {
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.jjm-burger.is-open .hb1 { transform: translateY(7px) rotate(45deg); }
+.jjm-burger.is-open .hb2 { opacity: 0; }
+.jjm-burger.is-open .hb3 { transform: translateY(-7px) rotate(-45deg); }
+
+@media (max-width: 939px) {
+  .jjm-desktop-nav { display: none; }
+  .jjm-contactbtn { display: none; }
+  .jjm-burger { display: flex; }
+}
+
+/* ---------- Mobile overlay menu ---------- */
+.jjm-mob-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: linear-gradient(160deg, #0a0d0f 0%, #15100c 60%, #0a0d0f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.jjm-mob-ov.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+.jjm-mob-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(78vw, 360px);
+  transform: translateY(16px);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.jjm-mob-ov.is-open .jjm-mob-inner {
+  transform: translateY(0);
+}
+.jjm-mlink {
+  text-decoration: none;
+  font-family: var(--ff-display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 10px 0;
+  letter-spacing: 0.01em;
+  transition: color 0.2s;
+}
+.jjm-mlink:hover { color: var(--copper-light); }
+.jjm-mlink.sub {
+  font-family: var(--ff-body);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--accent);
+  padding: 7px 0 7px 16px;
+  border-left: 2px solid rgba(184, 115, 51, 0.4);
+}
+.jjm-mob-label {
+  font-family: var(--ff-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin: 6px 0 2px;
+}
+.jjm-mob-div {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(184, 115, 51, 0.4), transparent);
+  margin: 14px 0;
+}
+
+/* ============================================================
+   Floating WhatsApp CTA
+   ============================================================ */
+.float-cta {
+  position: fixed;
+  bottom: 26px;
+  right: 26px;
+  z-index: 880;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 60px;
+  width: 60px;
+  padding-left: 15px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--wa), var(--wa-dark));
+  border-radius: 32px;
+  text-decoration: none;
+  box-shadow: 0 10px 34px rgba(37, 211, 102, 0.42);
+  animation: floatPulse 3s ease-in-out infinite;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), gap 0.4s;
+}
+.float-cta:hover {
+  width: 188px;
+  gap: 11px;
+}
+.float-cta svg { flex: 0 0 auto; }
+.float-cta span {
+  color: #fff;
+  font-family: var(--ff-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+/* ============================================================
+   Product card (catalogue)
+   ============================================================ */
+.jjm-pcard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  height: 100%;
+  background: linear-gradient(165deg, rgba(26, 31, 36, 0.7), rgba(17, 21, 24, 0.85));
+  border: 1px solid rgba(184, 115, 51, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s, box-shadow 0.4s;
+}
+.jjm-pcard:hover {
+  transform: translateY(-7px);
+  border-color: rgba(184, 115, 51, 0.55);
+  box-shadow:
+    0 26px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(232, 168, 124, 0.18),
+    0 0 38px rgba(184, 115, 51, 0.22);
+}
+.jjm-pcard:hover .jjm-pimg { transform: scale(1.08); }
+.jjm-pcard:hover .jjm-pshim { animation: shimmerMove 0.95s ease-out; }
+.jjm-pcard:hover .jjm-parrow { transform: translateX(3px); }
+.jjm-pcard:hover .jjm-pbtn {
+  background: linear-gradient(135deg, #7c4a1e, #b87333);
+  border-color: var(--copper);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(184, 115, 51, 0.4);
+}
+
+/* ============================================================
+   Industries card
+   ============================================================ */
+.jjm-icard {
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.45s;
+}
+.jjm-icard:hover {
+  transform: translateY(-8px);
+  border-color: rgba(184, 115, 51, 0.55);
+}
+.jjm-icard:hover .jjm-iimg { transform: scale(1.08); }
+
+/* ============================================================
+   Bento / generic hover helpers
+   ============================================================ */
+.bento-card {
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bento-card:hover { transform: translateY(-8px); }
+
+.why-card {
+  transition: all 0.35s;
+}
+.why-card:hover {
+  border-color: rgba(184, 115, 51, 0.5);
+  transform: translateY(-5px);
+}
+
+.lift-hover { transition: all 0.3s; }
+.lift-hover:hover { transform: translateY(-3px); }
+
+/* Buttons */
+.btn-copper {
+  transition: all 0.3s;
+}
+.btn-copper:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 46px rgba(184, 115, 51, 0.6);
+}
+.btn-ghost { transition: all 0.3s; }
+.btn-ghost:hover {
+  border-color: rgba(232, 168, 124, 0.7) !important;
+  background: rgba(184, 115, 51, 0.1) !important;
+}
+.btn-dark { transition: all 0.3s; }
+.btn-dark:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+}
+.btn-dark-soft { transition: all 0.25s; }
+.btn-dark-soft:hover { background: #15191d !important; }
+
+/* Footer + inline text links */
+.link-hover { transition: color 0.2s; }
+.link-hover:hover { color: var(--copper-light) !important; }
+.link-hover-erp:hover { color: var(--copper) !important; }
+
+/* Contact cards */
+.jjm-cc { transition: all 0.25s; }
+.jjm-cc:hover { border-color: rgba(184, 115, 51, 0.5); }
+
+/* Contact-for-price modal */
+.modal-close:hover { background: rgba(184, 115, 51, 0.18) !important; color: var(--copper-light) !important; }
+.email-cta:hover { background: rgba(184, 115, 51, 0.16) !important; border-color: var(--copper) !important; }
+.wa-cta-card { transition: all 0.25s; }
+.wa-cta-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 38px rgba(37, 211, 102, 0.5);
+}
+.map-link { transition: color 0.2s; }
+.map-link:hover { color: var(--text) !important; }
+
+/* ============================================================
+   Contact form fields
+   ============================================================ */
+.jjm-field {
+  width: 100%;
+  padding: 13px 15px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(184, 115, 51, 0.22);
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 14.5px;
+  outline: none;
+  transition: all 0.2s;
+}
+.jjm-field:focus {
+  border-color: var(--copper);
+  background: rgba(184, 115, 51, 0.08);
+}
+.jjm-field::placeholder { color: #6f675f; }
+select.jjm-field {
+  appearance: none;
+  cursor: pointer;
+}
+select.jjm-field option {
+  background: #15191d;
+  color: var(--text);
+}
+textarea.jjm-field {
+  resize: vertical;
+  min-height: 110px;
+}
+
+/* ============================================================
+   Product overview table (About page)
+   ============================================================ */
+.jjm-trow { transition: background 0.2s; }
+.jjm-trow:hover { background: rgba(184, 115, 51, 0.08) !important; }
+
+/* Grain / noise overlay used on hero + dark sections */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}

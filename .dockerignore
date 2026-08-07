@@ -1,0 +1,16 @@
+# Build context is the repo root for every image, so keep it small and deterministic.
+.git
+.github
+.claude
+.claude-flow
+graphify-out
+docs
+node_modules
+**/node_modules
+backend/**/bin
+backend/**/obj
+apps/erp-panel/.tsbuild
+apps/land-web/.next/cache
+**/*.log
+.env
+.env.*
