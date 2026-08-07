@@ -4,54 +4,11 @@ import { ROUTES } from '@/config/constants';
 /** Route keys that can be role-guarded / shown in the sidebar. */
 export type RouteKey = Exclude<keyof typeof ROUTES, 'landing' | 'login' | 'app'>;
 
-/** Which routes each role may access (and see in the menu). */
-export const ROLE_ACCESS: Record<Role, RouteKey[]> = {
-  CEO: ['executive', 'reports', 'settings'],
-  Manager: [
-    'dashboard',
-    'customers',
-    'contracts',
-    'partners',
-    'containers',
-    'baseInfo',
-    'purchase',
-    'sale',
-    'warehouse',
-    'payments',
-    'transfers',
-    'exchange',
-    'expenses',
-    'revenues',
-    'claims',
-    'reports',
-    'settings',
-    'develop',
-  ],
-  // BaseInfo (cost centres + expense/revenue categories, spec §7): Manager + Staff — Staff
-  // retains today's cost-centre capability under the new shell. `expenses`/`revenues`/`claims`
-  // are Manager-only (NOT Staff, NOT CEO) per spec §9 Phase 4b/5/6's registration instructions.
-  Staff: [
-    'dashboard',
-    'customers',
-    'contracts',
-    'partners',
-    'containers',
-    'baseInfo',
-    'purchase',
-    'sale',
-    'warehouse',
-  ],
-  Customer: ['portal'],
-};
-
-/** Landing route per role. */
-export const ROLE_HOME: Record<Role, string> = {
-  CEO: ROUTES.executive,
-  Manager: ROUTES.dashboard,
-  Staff: ROUTES.dashboard,
-  Customer: ROUTES.portal,
-};
-
+/**
+ * The demo accounts listed on the login page, so a visitor can click one instead of being told
+ * a password. They mirror the backend's seed (backend AccessCatalogue's SeededAccounts); the
+ * server is what actually validates them.
+ */
 export interface SeededUser {
   email: string;
   password: string;
@@ -60,7 +17,7 @@ export interface SeededUser {
   avatarColor: string;
 }
 
-/** Seeded demo accounts (mock, non-production). */
+
 export const USERS: SeededUser[] = [
   { email: 'ceo@finora.app', password: 'Ceo@2026', role: 'CEO', name: 'Khalid Al Mansoori', avatarColor: '#b87333' },
   { email: 'amir@finora.app', password: 'demo1234', role: 'Manager', name: 'Amir Karami', avatarColor: '#b87333' },

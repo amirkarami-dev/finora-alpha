@@ -40,7 +40,30 @@ Everything above also runs per app: `npm run <script> -w @finora/erp-panel`.
 > It keeps its own `package-lock.json` and `node_modules`; the root scripts drive it
 > with `--prefix`.
 
-Demo login accepts **any** email/password (until the Identity module lands).
+### Running the backend
+
+```bash
+dotnet run --project backend/src/Finora.AppHost
+```
+
+Aspire starts PostgreSQL 17, Redis and pgAdmin, migrates, seeds, then serves the API on
+**:5080** — the port both the vite dev server and `vite preview` proxy `/api` to. The ERP panel
+needs it running to sign in.
+
+**Sign-in is real.** Four seeded accounts, listed on the login page:
+
+| Account | Role | Sees |
+|---|---|---|
+| ceo@finora.app | CEO | executive, reports, settings |
+| amir@finora.app | Manager | everything (18 route keys) |
+| staff@finora.app | Staff | operations, no finance pages |
+| portal@alcometal.ae | Customer | the portal only |
+
+The session is an **HttpOnly cookie**, not a token — nothing in the browser can read it, and
+nothing is persisted client-side. Permissions come from `/api/identity/me` on every load, so the
+sidebar and route guards show what the server actually granted rather than what a table in the
+bundle claims. The demo passwords only seed in development; production requires
+`Identity:SeedPasswords:<email>` or the account is created unusable.
 
 ## Tech stack
 

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { Role } from '@/types';
-import { USERS, normalizeRole } from '@/config/roles';
+import type { RouteKey } from '@/config/roles';
+import { normalizeRole } from '@/config/roles';
+import { identityApi, type SessionUser } from '@/services/identity';
 
 export interface AuthUser {
   id: string;
@@ -13,63 +14,82 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  token: string | null;
+  /** Route keys this user may reach, as granted by the server. */
+  permissions: RouteKey[];
+  /** Where this role lands after signing in. */
+  home: string;
   isAuthenticated: boolean;
+  /** False until the first `restore()` finishes, so guards do not redirect mid-check. */
+  ready: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  restore: () => Promise<void>;
+}
+
+function toUser(session: SessionUser): AuthUser {
+  return {
+    id: session.id,
+    name: session.name,
+    email: session.email,
+    role: normalizeRole(session.role),
+    avatarColor: session.avatarColor,
+  };
 }
 
 /**
- * Mock auth. Seeded accounts (see config/roles.ts) validate their password and carry a
- * real role; any other email logs in as a demo Manager (any password).
+ * The session lives in an HttpOnly cookie, so there is nothing to persist here and nothing for
+ * a script — ours or an attacker's — to read. This store is a cache of what the server said,
+ * rebuilt on load by `restore()`; it is deliberately NOT persisted, because a persisted copy
+ * would outlive the cookie and let the app render a signed-in shell around a dead session.
  */
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      login: async (email: string, password: string) => {
-        await new Promise((r) => setTimeout(r, 600));
-        const target = email.trim().toLowerCase();
-        const seeded = USERS.find((u) => u.email.toLowerCase() === target);
-        if (seeded) {
-          if (seeded.password !== password) throw new Error('invalid-credentials');
-          const user: AuthUser = {
-            id: `u-${seeded.role.toLowerCase()}`,
-            name: seeded.name,
-            email: seeded.email,
-            role: seeded.role,
-            avatarColor: seeded.avatarColor,
-          };
-          set({ user, token: 'demo-token', isAuthenticated: true });
-          return user;
-        }
-        const name =
-          email
-            .split('@')[0]
-            ?.replace(/[._-]+/g, ' ')
-            .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Trading Desk';
-        const user: AuthUser = { id: 'u-001', name, email, role: 'Manager', avatarColor: '#b87333' };
-        set({ user, token: 'demo-token', isAuthenticated: true });
-        return user;
-      },
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
-    }),
-    {
-      name: 'finora-auth',
-      version: 1,
-      // Without this, a version mismatch with no `migrate` logs a console.error and DROPS the
-      // persisted state entirely (zustand's default behaviour) — which fails `npm run smoke`
-      // (screenshots redirect to /login, and the console.error trips the failure check).
-      // Migrating to a logged-out state is the safe default for an auth store.
-      migrate: () => ({ user: null, token: null, isAuthenticated: false }),
-      // Coerce any legacy/persisted role (e.g. 'Finance Manager') to a valid Role.
-      merge: (persisted, current) => {
-        const merged = { ...current, ...(persisted as Partial<AuthState>) } as AuthState;
-        if (merged.user) merged.user = { ...merged.user, role: normalizeRole(merged.user.role) };
-        return merged;
-      },
-    },
-  ),
-);
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  permissions: [],
+  home: '/app',
+  isAuthenticated: false,
+  ready: false,
+
+  login: async (email, password) => {
+    const session = await identityApi.login(email, password);
+    const user = toUser(session);
+    set({
+      user,
+      permissions: session.permissions,
+      home: session.home,
+      isAuthenticated: true,
+      ready: true,
+    });
+    return user;
+  },
+
+  logout: async () => {
+    try {
+      await identityApi.logout();
+    } finally {
+      // Clear locally even if the call failed: the user asked to be signed out, and leaving
+      // them looking signed in because the network blipped is the wrong way to be wrong.
+      set({ user: null, permissions: [], home: '/app', isAuthenticated: false, ready: true });
+    }
+  },
+
+  restore: async () => {
+    try {
+      const session = await identityApi.me();
+      set(
+        session
+          ? {
+              user: toUser(session),
+              permissions: session.permissions,
+              home: session.home,
+              isAuthenticated: true,
+              ready: true,
+            }
+          : { user: null, permissions: [], home: '/app', isAuthenticated: false, ready: true },
+      );
+    } catch {
+      // The API is unreachable. Treat it as signed out rather than blocking the app forever;
+      // the login attempt that follows will surface the real problem.
+      set({ user: null, permissions: [], home: '/app', isAuthenticated: false, ready: true });
+    }
+  },
+}));

@@ -1,5 +1,6 @@
 using Finora.Api.Endpoints;
 using Finora.Api.Infrastructure;
+using Finora.Identity.Infrastructure;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,11 +13,17 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 
+builder.AddFinoraAuthentication();
+builder.AddIdentityModule();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // The generated document is what packages/api-client's types are generated from, so it is
 // served in every environment — a contract that only exists in development is not a contract.
@@ -24,6 +31,7 @@ app.MapOpenApi();
 app.MapScalarApiReference(options => options.WithTitle("Finora API"));
 
 app.MapMetaEndpoints();
+app.MapIdentityEndpoints();
 
 // Off unless a test switches it on. See DiagnosticEndpoints for why the seam exists at all.
 if (app.Configuration.GetValue<bool>("Api:EnableDiagnosticEndpoints"))

@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
-import { db, persistDb } from '@/mock/data';
+import { db, persistDb, resetDb } from '@/mock/data';
+import { buildSampleData } from '@/mock/sampleData';
 import type {
   ChargeAllocation,
   ChargeCategory,
@@ -4747,7 +4748,26 @@ function nextChequeId(): string {
  * the record's data is editable only while PENDING. A cheque's status is a statement about the
  * real world, and the real world can be corrected.
  */
-export const CHEQUE_STATUSES: ChequeStatus[] = ['PENDING', 'PAID', 'RETURNED', 'EXPIRED', 'CHANGED'];
+/**
+ * Replaces everything with a fresh demo dataset centred on today, then reloads.
+ *
+ * The reload is required, not cosmetic: this module holds customerById/contractById/itemProduct
+ * indexes that would be stale against the swapped arrays. Lives here rather than in the page so
+ * that `@/mock` has exactly one consumer — when the server owns this data, only this function
+ * changes.
+ */
+export function loadSampleData(): void {
+  Object.assign(db, buildSampleData());
+  persistDb();
+  window.location.reload();
+}
+
+/** Wipes all persisted data and reloads; the app starts empty again. */
+export function resetData(): void {
+  resetDb();
+}
+
+export { CHEQUE_STATUSES } from '@/config/constants';
 
 /**
  * Cheque numbers are unique PER ISSUING BANK, not globally — two banks may legitimately issue

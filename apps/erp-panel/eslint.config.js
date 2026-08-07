@@ -23,4 +23,21 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  {
+    // `@/mock` is the localStorage database. Everything reaches it through the api.ts seam, so
+    // that swapping the seam's internals for HTTP calls is a change in one directory rather
+    // than a hunt through the pages. A page importing it directly would keep writing to
+    // localStorage after the cutover, and nothing would fail — the data would simply stop
+    // being the data everyone else sees.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/services/**', 'src/mock/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['@/mock', '@/mock/*'],
+          message: 'Reach the data through @/services/api, not the mock database directly.',
+        }],
+      }],
+    },
+  },
 );

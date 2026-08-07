@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes';
 import { getThemeConfig } from '@/theme/tokens';
 import { useUiStore } from '@/store/useUiStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useLocaleEffect } from '@/hooks/useLocaleEffect';
 import { LOCALES } from '@/config/constants';
 
@@ -31,9 +32,16 @@ const ANTD_LOCALES: Record<string, AntdLocale> = {
 function ThemedApp() {
   const themeMode = useUiStore((s) => s.theme);
   const locale = useLocaleEffect();
+  const restore = useAuthStore((s) => s.restore);
 
   const themeConfig = useMemo(() => getThemeConfig(themeMode), [themeMode]);
   const direction = LOCALES[locale].dir;
+
+  // The session is an HttpOnly cookie, so the app cannot see it — it has to ask. This runs
+  // once on load; until it answers, RequireAuth holds the route rather than redirecting.
+  useEffect(() => {
+    void restore();
+  }, [restore]);
 
   useEffect(() => {
     const bg = themeMode === 'dark' ? '#0b1220' : '#f4f6fb';

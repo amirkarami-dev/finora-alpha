@@ -1,0 +1,10 @@
+# EF Core writes migrations; we do not. Holding generated files to hand-written style rules
+# means every `dotnet ef migrations add` breaks the build until someone reformats output that
+# will be regenerated the same way next time.
+[**/Migrations/*.cs]
+dotnet_diagnostic.IDE0161.severity = none   # block-scoped namespace
+dotnet_diagnostic.IDE0300.severity = none   # collection expression
+dotnet_diagnostic.IDE0303.severity = none   # collection expression
+dotnet_diagnostic.CA1861.severity = none    # constant arrays as arguments
+dotnet_diagnostic.IDE0053.severity = none
+generated_code = true

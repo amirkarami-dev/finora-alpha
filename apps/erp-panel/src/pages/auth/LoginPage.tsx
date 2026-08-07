@@ -23,7 +23,7 @@ import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
-import { ROLE_HOME, USERS } from '@/config/roles';
+import { USERS } from '@/config/roles';
 
 const { Title, Paragraph, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -50,7 +50,8 @@ export default function LoginPage() {
     try {
       const user = await login(values.email, values.password);
       message.success(`${t('auth.loginSuccess')}, ${user.name}`);
-      navigate(ROLE_HOME[user.role], { replace: true });
+      // Where to land is the server's answer, alongside the permissions it granted.
+      navigate(useAuthStore.getState().home, { replace: true });
     } catch {
       message.error(t('auth.invalidCredentials'));
     } finally {

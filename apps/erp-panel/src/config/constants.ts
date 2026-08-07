@@ -1,4 +1,5 @@
 import type {
+  ChequeStatus,
   ContainerStatus,
   ContractStatus,
   Currency,
@@ -191,3 +192,11 @@ export const ROUTES = {
   baseInfo: '/app/base-info',
   develop: '/app/develop',
 } as const;
+
+/**
+ * Every cheque status, in lifecycle order. A plain list rather than a transition map: any status
+ * may follow any other, because a cheque's status is a statement about the real world and the
+ * real world can be corrected. What is guarded is the money — entering PAID demands a live
+ * account, leaving PAID drops it — not the shape of the graph.
+ */
+export const CHEQUE_STATUSES: ChequeStatus[] = ['PENDING', 'PAID', 'RETURNED', 'EXPIRED', 'CHANGED'];

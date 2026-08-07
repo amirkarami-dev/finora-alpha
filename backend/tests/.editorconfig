@@ -10,3 +10,7 @@ dotnet_diagnostic.CA1707.severity = none
 # CA1861: constant arrays as arguments. Inline expected values in assertions are clearer where
 # they are used than hoisted into a static field far from the test.
 dotnet_diagnostic.CA1861.severity = none
+
+# CA1711: xUnit collection-definition classes are named after their collection by convention
+# ([Collection(nameof(X))] must match), so the suffix is required, not incidental.
+dotnet_diagnostic.CA1711.severity = none

@@ -75,9 +75,33 @@ touched. `422` is a refused business rule, `404` a missing record, `400` a malfo
 
 `GET /api/meta/error-codes` serves the contract so CI can diff it against what `api.ts` throws.
 
+## Authentication
+
+The ERP panel and the API are one origin (the vite proxy in development, one traefik host in
+production), so the session is a **cookie**, not a token: `HttpOnly` so no script can read it,
+`SameSite=Strict` so nothing cross-site can ride it, and nothing persisted in the browser at all.
+`POST /api/identity/login` sets it, `GET /api/identity/me` reports the current user with their
+permissions, `POST /api/identity/logout` clears it.
+
+An OIDC surface (OpenIddict) is deliberately **not** here yet. A redirect flow buys a
+same-origin first-party SPA nothing while costing it the branded login page, and OpenIddict is
+additive when a second client — land-web-panel, or a mobile app — actually needs it.
+
+Permissions are strings, and today every one of them is a front-end route key
+(`dashboard`, `payments`, `baseInfo`). `AccessCatalogue` mirrors `apps/erp-panel/src/config/
+roles.ts` exactly, and an integration test compares them, because the failure mode otherwise is
+a menu item that silently appears or disappears for one role. Finer-grained codes
+(`erp.sales.invoice.create`) are rows, not a schema change.
+
+**Seeded passwords.** The four demo accounts use their published passwords only when
+`Identity:AllowDemoPasswords` is set, which happens in development and in the integration tests.
+Production must supply `Identity:SeedPasswords:<email>`; without one the account is created with
+a random secret nobody holds, because seeding a published password into a production database is
+the same as having no password.
+
 ## Status
 
-Phase 1 (walking skeleton) is complete: solution, orchestration, telemetry, OpenAPI, the error
-contract and the guard rails. There is **no schema yet** — Identity lands in phase 2 and the ERP
-tables in phase 3. The Cms projects exist and are deliberately empty, so the module boundary is
-enforced from the first line of CMS code rather than retrofitted.
+Phases 1 and 2 are complete: solution, orchestration, telemetry, OpenAPI, the error contract,
+the guard rails, and the `identity` schema with real sign-in. The ERP tables land in phase 3.
+The Cms projects exist and are deliberately empty, so the module boundary is enforced from the
+first line of CMS code rather than retrofitted.

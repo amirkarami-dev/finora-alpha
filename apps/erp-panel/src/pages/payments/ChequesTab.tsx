@@ -12,7 +12,8 @@ import { Money } from '@/components/common/Money';
 import { useCheques, useFinancialAccounts, useSetChequeStatus } from '@/services/queries';
 import { formatDate } from '@/utils/format';
 import { CURRENCIES } from '@/config/constants';
-import { CHEQUE_STATUSES, type ChequeRow } from '@/services/api';
+import type { ChequeRow } from '@/services/api';
+import { CHEQUE_STATUSES } from '@/config/constants';
 import type { ChequeStatus, ChequeType, Currency } from '@/types';
 import { ChequeFormModal } from './ChequeFormModal';
 

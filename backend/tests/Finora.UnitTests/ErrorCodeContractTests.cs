@@ -10,6 +10,17 @@ namespace Finora.UnitTests;
 /// </summary>
 public sealed class ErrorCodeContractTests
 {
+    /// <summary>
+    /// Codes the server can return that the mock <c>api.ts</c> never had a reason to throw.
+    /// The list is short and explicit so it cannot become a dumping ground: anything added here
+    /// needs a translation in all three locale files, or the user sees the raw slug.
+    /// </summary>
+    private static readonly string[] BackendOnlyCodes =
+    [
+        // Authentication did not exist while the app ran on mock data.
+        "invalid-credentials",
+    ];
+
     [Fact]
     public void The_contract_holds_every_code_the_front_end_throws()
     {
@@ -22,13 +33,26 @@ public sealed class ErrorCodeContractTests
             .ToHashSet(StringComparer.Ordinal);
 
         var missing = thrown.Except(ErrorCodes.All, StringComparer.Ordinal).Order().ToList();
-        var extra = ErrorCodes.All.Except(thrown, StringComparer.Ordinal).Order().ToList();
+        var extra = ErrorCodes.All
+            .Except(thrown, StringComparer.Ordinal)
+            .Except(BackendOnlyCodes, StringComparer.Ordinal)
+            .Order()
+            .ToList();
 
         Assert.True(missing.Count == 0,
             $"api.ts throws codes the backend contract does not list: {string.Join(", ", missing)}");
         Assert.True(extra.Count == 0,
             $"The backend contract lists codes api.ts never throws: {string.Join(", ", extra)}. " +
-            "Remove them, or add the matching guard on the server.");
+            "Remove them, add the matching guard on the server, or list them in BackendOnlyCodes.");
+    }
+
+    [Fact]
+    public void Backend_only_codes_are_actually_in_the_contract()
+    {
+        // Guards the allowlist itself: an entry that is not in the contract would silently
+        // widen the `extra` exclusion above without granting anything.
+        var orphans = BackendOnlyCodes.Except(ErrorCodes.All, StringComparer.Ordinal).ToList();
+        Assert.True(orphans.Count == 0, $"Listed but not in the contract: {string.Join(", ", orphans)}");
     }
 
     [Fact]

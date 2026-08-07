@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { Logo } from '@/components/common/Logo';
 import { useUiStore } from '@/store/useUiStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { NAV_ITEMS, ROLE_ACCESS, normalizeRole, type NavGroup } from '@/config/roles';
+import { NAV_ITEMS, type NavGroup } from '@/config/roles';
 
 interface Props {
   collapsed?: boolean;
@@ -71,9 +71,10 @@ export function SidebarNav({ collapsed = false, onNavigate }: Props) {
   const location = useLocation();
   const themeMode = useUiStore((s) => s.theme);
   const isDark = themeMode === 'dark';
-  const role = normalizeRole(useAuthStore((s) => s.user?.role));
+  // What the server granted this session, not what a table in the bundle says. The two
+  // agreed by construction until now; only one of them is authoritative.
+  const allowed = useAuthStore((s) => s.permissions);
 
-  const allowed = ROLE_ACCESS[role];
   const visible = NAV_ITEMS.filter((i) => allowed.includes(i.key));
 
   const items: MenuProps['items'] = GROUP_ORDER.map((group) => {

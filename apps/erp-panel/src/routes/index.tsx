@@ -1,8 +1,9 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
+import { Spin } from 'antd';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
-import { ROLE_ACCESS, ROLE_HOME, normalizeRole, type RouteKey } from '@/config/roles';
+import type { RouteKey } from '@/config/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
 import LandingPage from '@/pages/landing/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
@@ -36,27 +37,42 @@ import NotFoundPage from '@/pages/NotFoundPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const ready = useAuthStore((s) => s.ready);
   const location = useLocation();
+
+  // The session lives in a cookie, so on a fresh load the app does not yet know whether there
+  // is one until `restore()` has asked. Redirecting before that answer arrives would bounce a
+  // signed-in user to the login page on every refresh.
+  if (!ready) return <FullPageSpinner />;
+
   if (!isAuthenticated) {
     return <Navigate to={ROUTES.login} replace state={{ from: location }} />;
   }
   return children;
 }
 
-/** Renders children if the current role may access `routeKey` (any-of when an array), else redirects to the role's home. */
+/** Renders children if the user holds `routeKey` (any-of when an array), else redirects home. */
 function RoleRoute({ routeKey, children }: { routeKey: RouteKey | RouteKey[]; children: JSX.Element }) {
-  const role = normalizeRole(useAuthStore((s) => s.user?.role));
+  const permissions = useAuthStore((s) => s.permissions);
+  const home = useAuthStore((s) => s.home);
   const keys = Array.isArray(routeKey) ? routeKey : [routeKey];
-  if (!keys.some((k) => ROLE_ACCESS[role].includes(k))) {
-    return <Navigate to={ROLE_HOME[role]} replace />;
+  if (!keys.some((k) => permissions.includes(k))) {
+    return <Navigate to={home} replace />;
   }
   return children;
 }
 
-/** Redirects /app to the current role's home page. */
+/** Redirects /app to the current role's home page, as the server named it. */
 function RoleHome() {
-  const role = normalizeRole(useAuthStore((s) => s.user?.role));
-  return <Navigate to={ROLE_HOME[role]} replace />;
+  return <Navigate to={useAuthStore((s) => s.home)} replace />;
+}
+
+function FullPageSpinner() {
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100dvh' }}>
+      <Spin size="large" />
+    </div>
+  );
 }
 
 export function AppRoutes() {

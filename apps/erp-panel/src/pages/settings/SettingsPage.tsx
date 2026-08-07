@@ -14,14 +14,13 @@ import {
   Typography,
 } from 'antd';
 import { BgColorsOutlined, GlobalOutlined, MoonOutlined, SaveOutlined, SunOutlined } from '@ant-design/icons';
-import { db, persistDb, resetDb } from '@/mock/data';
-import { buildSampleData } from '@/mock/sampleData';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useUiStore } from '@/store/useUiStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { CURRENCIES, LOCALES, SUPPORTED_LOCALES } from '@/config/constants';
 import type { Currency, Locale } from '@/types';
+import * as api from '@/services/api';
 
 const { Text, Title } = Typography;
 
@@ -69,19 +68,11 @@ export default function SettingsPage() {
 
   const save = () => message.success(t('settings.saved'));
 
-  // Wipes all persisted data and reloads → the app starts EMPTY again (the demo dataset lives
-  // behind "Load sample data" below, not in the seed itself).
-  const resetData = () => resetDb();
-
-  // Overwrites the current (possibly empty) db with a fresh demo dataset centred on today,
-  // then reloads. The reload is required, not cosmetic: api.ts holds module-level
-  // customerById/contractById/itemProduct indexes that would be stale against the swapped
-  // arrays otherwise.
-  const loadSampleData = () => {
-    Object.assign(db, buildSampleData());
-    persistDb();
-    window.location.reload();
-  };
+  // Both live behind the api.ts seam so this page never reaches into @/mock directly — an
+  // eslint rule enforces that, because it is the one import that would survive the switch to
+  // a real backend and quietly keep writing to localStorage.
+  const resetData = () => api.resetData();
+  const loadSampleData = () => api.loadSampleData();
 
   return (
     <div className="fade-in" style={{ maxWidth: 880, margin: '0 auto' }}>

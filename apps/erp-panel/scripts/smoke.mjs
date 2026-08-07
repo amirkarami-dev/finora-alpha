@@ -7,6 +7,10 @@ import { join } from 'node:path';
 // and `/tmp` does not exist on Windows, which silently wrote screenshots to C:\tmp.
 const BASE = process.env.SMOKE_BASE ?? 'http://localhost:4173';
 const OUT = process.env.SMOKE_OUT ?? join(tmpdir(), 'finora-shots');
+// Signed-in screenshots need a real session now that auth is a server-side cookie; these are
+// the seeded development credentials.
+const SMOKE_USER = process.env.SMOKE_USER ?? 'amir@finora.app';
+const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD ?? 'demo1234';
 mkdirSync(OUT, { recursive: true });
 console.log(`Target: ${BASE}\nScreenshots: ${OUT}`);
 
@@ -63,30 +67,31 @@ function attach(page, tag) {
 
 async function seed(ctx, { theme = 'light', locale = 'en', auth = false } = {}) {
   await ctx.addInitScript(
-    ([theme, locale, auth]) => {
+    ([theme, locale]) => {
       localStorage.setItem(
         'finora-ui',
         JSON.stringify({ state: { theme, locale, sidebarCollapsed: false }, version: 0 }),
       );
       localStorage.setItem('finora-lang', locale);
-      if (auth) {
-        localStorage.setItem(
-          'finora-auth',
-          JSON.stringify({
-            state: {
-              user: { id: 'u-001', name: 'Amir Karami', email: 'amir@finora.app', role: 'Finance Manager', avatarColor: '#10a37f' },
-              token: 'demo-token',
-              isAuthenticated: true,
-            },
-            // Must match useAuthStore's persist `version` (currently 1) — a mismatch triggers
-            // zustand's `migrate`, which logs the seeded user straight back out.
-            version: 1,
-          }),
-        );
-      }
     },
-    [theme, locale, auth],
+    [theme, locale],
   );
+
+  if (!auth) return;
+
+  // The session is an HttpOnly cookie now, so it cannot be seeded from a page script the way
+  // the old localStorage auth store could — the browser has to actually sign in. This posts
+  // the seeded Manager's credentials through the context's own cookie jar, which every page
+  // opened from that context then carries.
+  const response = await ctx.request.post(`${BASE}/api/identity/login`, {
+    data: { email: SMOKE_USER, password: SMOKE_PASSWORD },
+  });
+  if (!response.ok()) {
+    throw new Error(
+      `Sign-in failed (${response.status()}). The API must be running and reachable at ` +
+        `${BASE}/api — check that the preview proxy is configured and the backend is up.`,
+    );
+  }
 }
 
 async function shot(ctx, path, file, tag, wait = 1600) {
