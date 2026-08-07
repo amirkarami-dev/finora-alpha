@@ -106,9 +106,9 @@
         <p>Cheques are their own records, because one cheque can settle several invoices. Every
         status can follow every other — Paid and Changed used to be dead ends, so a mistyped cheque
         was unfixable. To correct a paid cheque, move it back to pending, edit, then pay it again;
-        moving out of paid also clears the bank it went into. Marking one paid asks which account
-        received the money. Filters cover number, owner, bank, status, type, currency, due date and
-        amount.</p>
+        moving out of paid also clears the bank it went into. Marking one paid asks which of your
+        accounts it cleared through. Filters cover number, owner, bank, status, type, currency, due
+        date and amount.</p>
         <div class="meta"><span class="chip">Payments</span><span class="chip">Numbers unique per bank</span></div>
       </div>
       <span class="badge b-done">Done</span>
@@ -133,6 +133,66 @@
         A transfer needs no invoice, no contract and no person. It can be linked to invoices
         later, in full or in part.</p>
         <div class="meta"><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>You write the cheque, so you pick the bank</h4>
+        <p>On a line paying money out, the issuing bank is chosen from your own accounts instead of
+        typed — you are the one writing that cheque. A cheque you were given is drawn on the payer's
+        bank, which is not yours, so it stays free text. Which way a line's money goes is read the
+        same way the balances read it: from the line's own invoice, or from the header when there is
+        none. Reading the header alone would have called every supplier payment money coming in.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">Checked both ways in the browser</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Marking a cheque paid asks the right question</h4>
+        <p>A cheque you were given clears <em>into</em> an account; one you wrote clears <em>out
+        of</em> one. The question now follows the money instead of always saying "received". The
+        direction is worked out from the payment lines that use the cheque, not stored on it, and a
+        cheque used on both a sale and a purchase keeps the neutral wording rather than guessing.</p>
+        <div class="meta"><span class="chip">Payments</span><span class="chip">22 checks passed</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Transfer rates are typed the way you quote them</h4>
+        <p>Always "how many units of the other currency one dollar buys", whichever way the money
+        moves — the same convention as every other rate in the app. The reverse conversion happens
+        for you, the label names both currencies, and the list shows the rate you typed rather than
+        its inverse. The rate is also prefilled from Settings now.</p>
+        <div class="meta"><span class="chip">Finance</span><span class="chip">Proved by running it</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>A transfer's rate used to start at 1 and stay there</h4>
+        <p>Nothing filled it in, so choosing an AED account and a USD one previewed "3,675 AED →
+        3,675 USD" and saved exactly that. Every other rate field in the app was already prefilled
+        from Settings; this one was the exception.</p>
+        <div class="meta"><span class="chip">Fix</span><span class="chip">Finance</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
+        <h4>Money moved into a dollar account was valued wrongly</h4>
+        <p>The USD value of a transfer was worked out by dividing where it should have multiplied,
+        so the first AED → USD transfer from an account with no history recorded 3,672.50 AED as
+        $13,486 instead of $1,000. When the money lands in dollars the destination side already
+        states the value exactly, so that is what it uses now.</p>
+        <div class="meta"><span class="chip">Fix</span><span class="chip">Finance</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -568,6 +628,19 @@
 
     <div class="task" data-s="done">
       <div>
+        <h4>Three demo cost lines were dated in the future</h4>
+        <p>Costs are booked a few days after the document they belong to, and the sample data picked
+        the newest purchase invoice — dated today. Its three lines landed next week: they counted in
+        the person's balance but sat past the end of every report window, so the expense report
+        showed five lines where the data held eight. Costs are now booked only on documents that are
+        already a month old.</p>
+        <div class="meta"><span class="chip">Bug fix</span><span class="chip">Found by checking the reports</span></div>
+      </div>
+      <span class="badge b-done">Done</span>
+    </div>
+
+    <div class="task" data-s="done">
+      <div>
         <h4>Wrong word in activate messages</h4>
         <p>Clicking Deactivate said "activated". The message read the record after it had already
         changed. Fixed on five pages.</p>
@@ -579,9 +652,9 @@
     <div class="task" data-s="done">
       <div>
         <h4>Three languages, right to left</h4>
-        <p>English, Arabic and Persian, with 1195 text keys matching exactly across all three.
+        <p>English, Arabic and Persian, with 1200 text keys matching exactly across all three.
         Every new page was opened in Arabic and Persian to confirm no raw key appears.</p>
-        <div class="meta"><span class="chip">i18n</span><span class="chip">1195 keys</span></div>
+        <div class="meta"><span class="chip">i18n</span><span class="chip">1200 keys</span></div>
       </div>
       <span class="badge b-done">Done</span>
     </div>
@@ -630,6 +703,11 @@
         <p>Two advances on account fund the banks. Without them the seeded accounts only ever paid
         money out and opened several hundred thousand in the red, which reads as a broken app
         rather than a funded desk.</p>
+        <p>Costs grew from 4 documents to 12, and from 9 lines to 31, so every expense category
+        carries two to four lines and the category report has something to group. Overheads run four
+        months instead of one, two more shipments carry freight, handling and cover, and revenues
+        gained an assay premium and a treasury document — which also reached two categories that
+        existed in the picker with nothing behind them.</p>
         <div class="meta"><span class="chip">Demo data</span><span class="chip">Determinism unchanged</span></div>
       </div>
       <span class="badge b-done">Done</span>
