@@ -83,3 +83,34 @@ export function splitEqually(amount: number, n: number): number[] {
   const remainder = totalCents - base * n;
   return Array.from({ length: n }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
 }
+
+/**
+ * Money transfers store `exchangeRate` as DESTINATION units per 1 SOURCE unit
+ * (`toAmount = fromAmount × rate`). Everywhere else in the app a rate means FOREIGN units per
+ * 1 USD and converts by dividing — so the transfer form used to be the one screen asking for a
+ * rate the other way round, and an AED → USD transfer wanted `0.2723` where the desk thinks
+ * `3.6725`.
+ *
+ * These two convert between what the user types and what is stored. They are exact inverses, so
+ * seeding the form from a saved transfer and saving it again is a round trip. Nothing about the
+ * stored shape changes: every transfer written before this still means what it always meant.
+ *
+ * When NEITHER side is USD there is no USD rate to state, so the entered rate IS the stored one
+ * — destination per source, which the form's label spells out.
+ */
+export function enteredToStoredRate(entered: number, fromCurrency: string, toCurrency: string): number {
+  if (fromCurrency === toCurrency) return 1;
+  // Source is USD: "AED per 1 USD" already IS "destination per source".
+  if (fromCurrency === 'USD') return entered;
+  // Destination is USD: the user typed source-units-per-USD, so one source unit buys its inverse.
+  if (toCurrency === 'USD') return entered === 0 ? 0 : 1 / entered;
+  return entered;
+}
+
+/** Inverse of `enteredToStoredRate` — what to show in the field for an already-saved transfer. */
+export function storedToEnteredRate(stored: number, fromCurrency: string, toCurrency: string): number {
+  if (fromCurrency === toCurrency) return 1;
+  if (fromCurrency === 'USD') return stored;
+  if (toCurrency === 'USD') return stored === 0 ? 0 : 1 / stored;
+  return stored;
+}

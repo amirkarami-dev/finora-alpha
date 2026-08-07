@@ -301,6 +301,7 @@ export default function PaymentDetailPage() {
           paymentId={payment.id}
           paymentType={type}
           customerId={payment.customerId}
+          paymentDirection={payment.direction ?? 'IN'}
           defaultCurrency={payment.currency}
           unallocated={unallocated}
           item={activeModal === 'editItem' ? editingItem : undefined}

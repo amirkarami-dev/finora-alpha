@@ -4225,13 +4225,19 @@ function buildTransfer(input: MoneyTransferInput, existing?: MoneyTransfer): Mon
   const fromAmount = round(input.fromAmount);
   const toAmount = round(fromAmount * input.exchangeRate);
   // The sending side defines what left the company, so the base value is measured there. For a
-  // USD source that is the amount itself; otherwise it converts at that account's book rate,
-  // falling back to the transfer rate when the account has no history yet.
+  // USD source that is the amount itself; when the money LANDS in USD the destination already
+  // states it exactly; otherwise it converts at the source account's book rate.
+  //
+  // The old fallback fed `input.exchangeRate` — destination units per source unit — into
+  // `toBaseUSD`, which divides by foreign-units-per-USD. On the first AED → USD transfer from a
+  // fresh account that valued 3,672.50 AED at $13,486 instead of $1,000.
   const fromBook = computeAccountBalance(from.id).bookRate;
   const baseAmount =
     from.currency === 'USD'
       ? fromAmount
-      : toBaseUSD(fromAmount, from.currency, fromBook ?? (to.currency === 'USD' ? input.exchangeRate : 1));
+      : to.currency === 'USD'
+        ? toAmount
+        : toBaseUSD(fromAmount, from.currency, fromBook ?? 1);
 
   seedTransferChildCounters();
   const id = existing?.id ?? nextTransferId();
@@ -4895,27 +4901,45 @@ export interface ChequeRow extends Cheque {
   /** True once `dueDate` has passed and it is still uncleared, so the tab can surface exactly
    *  the cheques the spec says need a bank chosen. */
   dueForAction: boolean;
+  /**
+   * Which way the money went on the lines that use this cheque — DERIVED, not stored, from the
+   * same `paymentLineSign` rule the balances use. `undefined` when the cheque is used nowhere,
+   * or on lines that disagree: one cheque settling both a sale and a purchase has no single
+   * direction, and guessing one would put the wrong question in front of the user.
+   */
+  direction?: 'IN' | 'OUT';
 }
 
 export async function getCheques(status?: ChequeStatus): Promise<ChequeRow[]> {
   await delay(160);
   const today = dayjs();
   const usage = new Map<string, number>();
+  // 'MIXED' is the disagreement marker: once two usages point opposite ways the answer is that
+  // there is no answer, and it must not be overwritten by whichever usage comes last.
+  const direction = new Map<string, 'IN' | 'OUT' | 'MIXED'>();
   for (const p of db.payments) {
     for (const it of paymentItems(p)) {
-      if (it.chequeId) usage.set(it.chequeId, (usage.get(it.chequeId) ?? 0) + 1);
+      if (!it.chequeId) continue;
+      usage.set(it.chequeId, (usage.get(it.chequeId) ?? 0) + 1);
+      const way = paymentLineSign(p, it) === -1 ? 'OUT' : 'IN';
+      const seen = direction.get(it.chequeId);
+      direction.set(it.chequeId, seen === undefined || seen === way ? way : 'MIXED');
     }
   }
   return db.cheques
     .filter((c) => (status ? c.status === status : true))
-    .map((c) => ({
-      ...c,
-      bankAccountName: c.bankAccountId
-        ? db.financialAccounts.find((a) => a.id === c.bankAccountId)?.name
-        : undefined,
-      usageCount: usage.get(c.id) ?? 0,
-      dueForAction: c.status === 'PENDING' && dayjs(c.dueDate).isBefore(today, 'day'),
-    }))
+    .map((c) => {
+      const way = direction.get(c.id);
+      return {
+        ...c,
+        bankAccountName: c.bankAccountId
+          ? db.financialAccounts.find((a) => a.id === c.bankAccountId)?.name
+          : undefined,
+        usageCount: usage.get(c.id) ?? 0,
+        dueForAction: c.status === 'PENDING' && dayjs(c.dueDate).isBefore(today, 'day'),
+        direction: way === 'MIXED' ? undefined : way,
+      };
+    })
     .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf());
 }
 

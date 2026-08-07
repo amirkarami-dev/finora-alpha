@@ -93,6 +93,9 @@ interface PaymentItemFormModalProps {
    *  one person owes or is owed, so offering everybody's invoices invites paying the wrong
    *  party's document from this person's money. */
   customerId: string;
+  /** The header's money direction, used only for a line that names no invoice — a line that
+   *  names one takes its direction from that document instead. */
+  paymentDirection: 'IN' | 'OUT';
   /** Header currency + what the header still has unallocated, used to seed a new line. */
   defaultCurrency: Currency;
   unallocated: number;
@@ -110,6 +113,7 @@ export function PaymentItemFormModal({
   paymentId,
   paymentType,
   customerId,
+  paymentDirection,
   defaultCurrency,
   unallocated,
   item,
@@ -147,6 +151,17 @@ export function PaymentItemFormModal({
         .map((a) => ({ value: a.id, label: `${a.name} (${a.currency})` })),
     [accountType, banks, cashSafes],
   );
+
+  /**
+   * Which way THIS line's money goes — the same rule `paymentLineSign` signs it with (api.ts):
+   * the line's own invoice decides when it has one, the header only when it does not.
+   *
+   * The header alone would be wrong: `PaymentFormModal` sends no `invoiceId`, so every
+   * invoice-type payment header is stored as `'IN'` even when all its lines settle purchases.
+   */
+  const outgoing = invoiceId
+    ? (purchaseInvoices ?? []).some((inv) => inv.id === invoiceId)
+    : paymentDirection === 'OUT';
 
   /** Only set when editing a line that already carries a cheque. */
   const attachedCheque = useMemo(
@@ -401,8 +416,30 @@ export function PaymentItemFormModal({
                 <Form.Item name="chequeNumber" label={t('cheques.number')} rules={[{ required: true, message: t('common.required') }]}>
                   <Input dir="ltr" />
                 </Form.Item>
-                <Form.Item name="chequeBankName" label={t('cheques.bankName')} rules={[{ required: true, message: t('common.required') }]}>
-                  <Input />
+                {/* Money OUT means WE write the cheque, so the issuing bank is one of our own
+                    accounts and can be picked from a list. Money IN means the cheque is drawn on
+                    the payer's bank, which is not ours and stays free text. The account's NAME is
+                    what gets stored, so `Cheque.bankName` keeps its meaning and the
+                    "numbers are unique per issuing bank" rule is untouched. */}
+                <Form.Item
+                  name="chequeBankName"
+                  label={t('cheques.bankName')}
+                  extra={outgoing ? t('cheques.bankNameOwnHint') : undefined}
+                  rules={[{ required: true, message: t('common.required') }]}
+                >
+                  {outgoing ? (
+                    <Select
+                      showSearch
+                      optionFilterProp="label"
+                      placeholder={t('payments.pickBank')}
+                      notFoundContent={t('payments.noBanks')}
+                      options={(banks ?? [])
+                        .filter((b) => b.active)
+                        .map((b) => ({ key: b.id, value: b.name, label: `${b.name} (${b.currency})` }))}
+                    />
+                  ) : (
+                    <Input />
+                  )}
                 </Form.Item>
                 <Form.Item name="chequeOwnerName" label={t('cheques.ownerName')} rules={[{ required: true, message: t('common.required') }]}>
                   <Input />

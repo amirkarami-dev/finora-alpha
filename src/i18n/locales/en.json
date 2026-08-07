@@ -1235,7 +1235,10 @@
       "duplicate-cheque-number": "This bank already has a cheque with that number",
       "cheque-not-pending": "Only a pending cheque can be edited. Move it back to pending first.",
       "bank-account-required": "Choose the account that received it"
-    }
+    },
+    "bankNameOwnHint": "You are writing this cheque, so it is drawn on one of your own accounts",
+    "markPaidHintIn": "Which of your accounts received this money?",
+    "markPaidHintOut": "Which of your accounts was this money withdrawn from?"
   },
   "transfers": {
     "title": "Transfers",
@@ -1285,7 +1288,9 @@
       "invoice-not-found": "That invoice no longer exists",
       "transfer-not-draft": "Only a draft transfer can be edited",
       "transfer-revalued": "This account has already been revalued, so the transfer cannot be cancelled"
-    }
+    },
+    "rateLabelUsd": "Rate ({{currency}} per 1 USD)",
+    "rateLabelCross": "Rate ({{to}} per 1 {{from}})"
   },
   "exchange": {
     "title": "Exchange gain/loss",

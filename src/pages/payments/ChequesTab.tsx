@@ -323,7 +323,17 @@ export function ChequesTab() {
         destroyOnHidden
       >
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">{t('cheques.markPaidHint')}</Text>
+          {/* A cheque we WROTE clears out of one of our accounts; one we were GIVEN clears into
+              one. Same question, opposite money — asking "which account received this" about a
+              cheque being paid out reads as the wrong question. Falls back to the neutral
+              wording when the cheque is used nowhere, or on lines that disagree. */}
+          <Text type="secondary">
+            {payState.cheque?.direction === 'OUT'
+              ? t('cheques.markPaidHintOut')
+              : payState.cheque?.direction === 'IN'
+                ? t('cheques.markPaidHintIn')
+                : t('cheques.markPaidHint')}
+          </Text>
           <Select
             style={{ width: '100%' }}
             showSearch

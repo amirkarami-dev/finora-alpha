@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { useMoneyTransfers, useSetTransferStatus } from '@/services/queries';
 import { formatDate, formatNumber } from '@/utils/format';
+import { storedToEnteredRate } from '@/utils/calc';
 import type { MoneyTransferRow } from '@/services/api';
 import type { TransferStatus } from '@/types';
 import { TransferFormModal } from './TransferFormModal';
@@ -75,7 +76,14 @@ export default function TransfersPage() {
       dataIndex: 'exchangeRate',
       width: 110,
       align: 'right',
-      render: (v: number) => (v === 1 ? <Text type="secondary">—</Text> : formatNumber(v, 4)),
+      // Shown the way it was entered — foreign per 1 USD — not in the stored destination-per-
+      // source form. A rate you typed as 3.6725 reading back as 0.2723 looks like a mistake.
+      render: (v: number, r) =>
+        v === 1 ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          formatNumber(storedToEnteredRate(v, r.fromCurrency, r.toCurrency), 4)
+        ),
     },
     {
       title: t('transfers.baseAmount'),
