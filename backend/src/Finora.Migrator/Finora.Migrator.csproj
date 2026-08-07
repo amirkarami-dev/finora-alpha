@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <UserSecretsId>dotnet-Finora.Migrator-afbc781c-645a-48c0-800b-015525f307bb</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Finora.ServiceDefaults\Finora.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Modules\Identity\Finora.Identity.Infrastructure\Finora.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Cms\Finora.Cms.Infrastructure\Finora.Cms.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Erp\Finora.Erp.Infrastructure\Finora.Erp.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

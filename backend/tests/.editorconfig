@@ -1,0 +1,12 @@
+# Test projects only.
+[*.cs]
+
+# CA1707: no underscores in member names.
+# Underscored test names are the convention precisely because a test name is a sentence read by
+# a human in a failure report, not an API called by code. `Money_rounds_half_away_from_zero`
+# beats `MoneyRoundsHalfAwayFromZero` at 2am.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1861: constant arrays as arguments. Inline expected values in assertions are clearer where
+# they are used than hoisted into a static field far from the test.
+dotnet_diagnostic.CA1861.severity = none

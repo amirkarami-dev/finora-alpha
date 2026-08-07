@@ -57,6 +57,51 @@ services:
       - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.replacement=https://metal-uae.com/$${1}"
       - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.permanent=true"
 
+  # ── API — api.metal-uae.com ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api/Dockerfile
+      target: api
+    image: metal-erp-api:latest
+    container_name: metal-erp-api
+    restart: unless-stopped
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      # The Postgres container already on this box, reachable by its container name. The
+      # password is supplied from the host environment, never committed.
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      ASPNETCORE_ENVIRONMENT: Production
+    networks: [traefik, postgres]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.metal-erp-api.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp-api.rule=Host(`api.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp-api.tls=true"
+      - "traefik.http.services.metal-erp-api.loadbalancer.server.port=8080"
+
+  # Runs pending migrations and exits. The API waits for it to succeed, so no replica ever
+  # serves traffic against a schema it does not match.
+  migrator:
+    build:
+      context: ..
+      dockerfile: deploy/api/Dockerfile
+      target: migrator
+    image: metal-erp-migrator:latest
+    container_name: metal-erp-migrator
+    restart: "no"
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    networks: [postgres]
+
 networks:
   traefik:
     external: true
+  # The network the existing `postgres` container is on. Declared external so this stack
+  # attaches to it rather than creating a second, isolated one.
+  postgres:
+    external: true
+    name: ${POSTGRES_NETWORK:-postgres_default}

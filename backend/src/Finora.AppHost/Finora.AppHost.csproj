@@ -1,0 +1,18 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Finora.Api\Finora.Api.csproj" />
+    <ProjectReference Include="..\Finora.Migrator\Finora.Migrator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>5c73c210-f1a0-48ab-ba06-cc1ae70aaf62</UserSecretsId>
+  </PropertyGroup>
+
+</Project>
