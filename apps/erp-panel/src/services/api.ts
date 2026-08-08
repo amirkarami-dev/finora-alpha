@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
-import { db, persistDb, resetDb } from '@/mock/data';
-import { buildSampleData } from '@/mock/sampleData';
+import { db, persistDb, onSnapshotApplied } from '@/mock/data';
 import type {
   ChargeAllocation,
   ChargeCategory,
@@ -85,6 +84,10 @@ function reindex() {
     db.contracts.flatMap((c) => c.items.map((i) => [i.id, i.product] as const)),
   );
 }
+
+// A snapshot refill swaps every array wholesale, so the indexes built above would otherwise
+// still point at the previous dataset — with no error, just stale answers.
+onSnapshotApplied(reindex);
 
 /* ----------------------------- Customers ---------------------------- */
 
@@ -4748,25 +4751,6 @@ function nextChequeId(): string {
  * the record's data is editable only while PENDING. A cheque's status is a statement about the
  * real world, and the real world can be corrected.
  */
-/**
- * Replaces everything with a fresh demo dataset centred on today, then reloads.
- *
- * The reload is required, not cosmetic: this module holds customerById/contractById/itemProduct
- * indexes that would be stale against the swapped arrays. Lives here rather than in the page so
- * that `@/mock` has exactly one consumer — when the server owns this data, only this function
- * changes.
- */
-export function loadSampleData(): void {
-  Object.assign(db, buildSampleData());
-  persistDb();
-  window.location.reload();
-}
-
-/** Wipes all persisted data and reloads; the app starts empty again. */
-export function resetData(): void {
-  resetDb();
-}
-
 export { CHEQUE_STATUSES } from '@/config/constants';
 
 /**

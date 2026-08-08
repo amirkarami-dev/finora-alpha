@@ -20,7 +20,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { CURRENCIES, LOCALES, SUPPORTED_LOCALES } from '@/config/constants';
 import type { Currency, Locale } from '@/types';
-import * as api from '@/services/api';
+import { loadSampleData as loadSample, resetData as reset } from '@/services/snapshot';
 
 const { Text, Title } = Typography;
 
@@ -71,8 +71,8 @@ export default function SettingsPage() {
   // Both live behind the api.ts seam so this page never reaches into @/mock directly — an
   // eslint rule enforces that, because it is the one import that would survive the switch to
   // a real backend and quietly keep writing to localStorage.
-  const resetData = () => api.resetData();
-  const loadSampleData = () => api.loadSampleData();
+  const resetData = () => void reset();
+  const loadSampleData = () => void loadSample();
 
   return (
     <div className="fade-in" style={{ maxWidth: 880, margin: '0 auto' }}>

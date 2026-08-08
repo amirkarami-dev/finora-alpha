@@ -10,6 +10,7 @@ import { AppRoutes } from '@/routes';
 import { getThemeConfig } from '@/theme/tokens';
 import { useUiStore } from '@/store/useUiStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { hydrateFromServer, setServerBacked } from '@/services/snapshot';
 import { useLocaleEffect } from '@/hooks/useLocaleEffect';
 import { LOCALES } from '@/config/constants';
 
@@ -37,10 +38,17 @@ function ThemedApp() {
   const themeConfig = useMemo(() => getThemeConfig(themeMode), [themeMode]);
   const direction = LOCALES[locale].dir;
 
-  // The session is an HttpOnly cookie, so the app cannot see it — it has to ask. This runs
-  // once on load; until it answers, RequireAuth holds the route rather than redirecting.
+  // Two things the app cannot know without asking: whether there is a session (the cookie is
+  // HttpOnly) and what the data is (it lives on the server now). Both run once on load, in
+  // parallel; RequireAuth holds the route until the session answer arrives, and the store is
+  // filled before any page reads it.
   useEffect(() => {
-    void restore();
+    void (async () => {
+      const [, hydrated] = await Promise.all([restore(), hydrateFromServer()]);
+      // Only push local edits to a backend that actually answered. Without this the app would
+      // try to sync to an API that is not there and log a failure on every keystroke.
+      setServerBacked(hydrated);
+    })();
   }, [restore]);
 
   useEffect(() => {

@@ -69,7 +69,10 @@ public sealed class ContractItem
 /// company keeps the remainder.</summary>
 public sealed class ItemPartner
 {
-    public required string ContractItemId { get; init; }
+    /// <summary>Set by EF from the parent when the graph is saved — not <c>required</c>, because
+    /// a partner only ever arrives nested inside its goods line, where repeating the parent key
+    /// in the payload would be redundant. An unset value fails on the foreign key, not silently.</summary>
+    public string ContractItemId { get; init; } = string.Empty;
     [JsonIgnore] public ContractItem? ContractItem { get; init; }
 
     public required string PartnerId { get; init; }
@@ -110,7 +113,9 @@ public sealed class Container
 /// <summary>How much of one contract goods line a container holds.</summary>
 public sealed class ContainerGood
 {
-    public required string ContainerId { get; init; }
+    /// <summary>Set by EF from the parent when the graph is saved — see
+    /// <see cref="ItemPartner.ContractItemId"/> for why this one is not <c>required</c>.</summary>
+    public string ContainerId { get; init; } = string.Empty;
     [JsonIgnore] public Container? Container { get; init; }
 
     public required string ContractItemId { get; init; }

@@ -293,6 +293,43 @@ export function persistDb(): void {
   } catch {
     /* quota exceeded / serialization issue — ignore in the mock layer */
   }
+  for (const listener of persistListeners) listener();
+}
+
+/**
+ * Called after every persist.
+ *
+ * A listener rather than a direct call to the sync layer: `services/` imports this module, so
+ * this module importing `services/` back would be a cycle — and at module-evaluation time a
+ * cycle here means `db` is `undefined` for whichever side loads first.
+ */
+const persistListeners: Array<() => void> = [];
+export function onPersist(listener: () => void): void {
+  persistListeners.push(listener);
+}
+
+/**
+ * Replaces the store's contents with a server snapshot.
+ *
+ * Mutates the existing object rather than rebinding it: every module that imported `db` holds
+ * that reference, and `api.ts` additionally keeps lookup indexes built from it. Assigning a new
+ * object would leave all of them pointing at the old data with no error anywhere.
+ */
+export function applySnapshot(snapshot: Partial<typeof seed>): void {
+  Object.assign(db, snapshot);
+  for (const listener of snapshotListeners) listener();
+}
+
+/**
+ * Called after the store is refilled wholesale.
+ *
+ * `api.ts` registers its index rebuild here. It cannot be called directly from this module —
+ * `api.ts` imports this one, so the reverse import would be a cycle, and a cycle at module
+ * evaluation leaves `db` undefined for whichever side loads first.
+ */
+const snapshotListeners: Array<() => void> = [];
+export function onSnapshotApplied(listener: () => void): void {
+  snapshotListeners.push(listener);
 }
 
 /** Wipe all persisted data and reload — the app starts EMPTY again (the demo dataset lives
