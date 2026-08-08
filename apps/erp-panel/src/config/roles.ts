@@ -64,6 +64,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'claims', route: ROUTES.claims, icon: 'exception', group: 'finance' },
   { key: 'reports', route: ROUTES.reports, icon: 'barchart', group: 'finance' },
   { key: 'baseInfo', route: ROUTES.baseInfo, icon: 'database', group: 'system' },
+  { key: 'users', route: ROUTES.users, icon: 'usergroup', group: 'system' },
   { key: 'settings', route: ROUTES.settings, icon: 'setting', group: 'system' },
   { key: 'develop', route: ROUTES.develop, icon: 'code', group: 'system' },
 ];

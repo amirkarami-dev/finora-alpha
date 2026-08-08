@@ -28,6 +28,7 @@ import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
 import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
 import WarehousePage from '@/pages/warehouse/WarehousePage';
 import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
+import UsersPage from '@/pages/users/UsersPage';
 import ExpensesPage from '@/pages/charges/ExpensesPage';
 import RevenuesPage from '@/pages/charges/RevenuesPage';
 import ChargeDocDetailPage from '@/pages/charges/ChargeDocDetailPage';
@@ -124,6 +125,7 @@ export function AppRoutes() {
         {/* Claims (design spec §9 Phase 6) — one page, tabbed expense/revenue via useTabParam. */}
         <Route path="claims" element={<RoleRoute routeKey="claims"><ClaimsPage /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
+        <Route path="users" element={<RoleRoute routeKey="users"><UsersPage /></RoleRoute>} />
         <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
       </Route>
 

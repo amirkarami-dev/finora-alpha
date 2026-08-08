@@ -33,6 +33,19 @@ public sealed class ErrorCodeContractTests
         "good-not-found",
         "partner-not-found",
         "warehouse-not-found",
+
+        // User administration. These live on the server because `api.ts` never had accounts to
+        // administer — the mock app had four hardcoded logins. Every one of them is reachable
+        // from a form a person is filling in, so each has a translation in all three locale
+        // files under `users.errors.*`, and the modals look them up by code.
+        "email-required",
+        "duplicate-email",
+        "user-not-found",
+        "role-not-found",
+        "password-too-short",
+        "current-password-incorrect",
+        "cannot-deactivate-self",
+        "cannot-change-own-role",
     ];
 
     [Fact]

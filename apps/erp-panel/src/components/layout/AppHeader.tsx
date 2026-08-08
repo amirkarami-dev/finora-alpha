@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Avatar, Badge, Button, Dropdown, Input, Layout, Space, type MenuProps, theme } from 'antd';
 import {
   BellOutlined,
@@ -5,6 +6,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   SearchOutlined,
+  KeyOutlined,
   SettingOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -13,6 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useHasAccess } from '@/hooks/useHasAccess';
+import { ChangePasswordModal } from '@/pages/users/ChangePasswordModal';
 import { ROUTES } from '@/config/constants';
 import { normalizeRole } from '@/config/roles';
 import { initials } from '@/utils/format';
@@ -31,6 +35,8 @@ export function AppHeader({ onMenuClick, collapsed, isMobile }: Props) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const canOpenSettings = useHasAccess('settings');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const userMenu: MenuProps['items'] = [
     {
@@ -40,7 +46,14 @@ export function AppHeader({ onMenuClick, collapsed, isMobile }: Props) {
       disabled: true,
     },
     { type: 'divider' },
-    { key: 'settings', icon: <SettingOutlined />, label: t('nav.settings') },
+    // Every signed-in role can change its own password, including the two that hold no
+    // `settings` permission — which is exactly why this does not live on the Settings page.
+    { key: 'password', icon: <KeyOutlined />, label: t('users.changePassword') },
+    // Settings is permission-gated, so offering it to a role that will be bounced straight back
+    // is a menu item that only ever fails.
+    ...(canOpenSettings
+      ? [{ key: 'settings', icon: <SettingOutlined />, label: t('nav.settings') }]
+      : []),
     {
       key: 'logout',
       icon: <LogoutOutlined />,
@@ -50,6 +63,7 @@ export function AppHeader({ onMenuClick, collapsed, isMobile }: Props) {
   ];
 
   const onUserMenu: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'password') setChangingPassword(true);
     if (key === 'settings') navigate(ROUTES.settings);
     if (key === 'logout') {
       logout();
@@ -120,6 +134,11 @@ export function AppHeader({ onMenuClick, collapsed, isMobile }: Props) {
             </span>
           </Space>
         </Dropdown>
+
+        <ChangePasswordModal
+          open={changingPassword}
+          onClose={() => setChangingPassword(false)}
+        />
       </Space>
     </Header>
   );

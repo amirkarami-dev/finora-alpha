@@ -22,13 +22,13 @@ public static class AccessCatalogue
     public static IReadOnlyDictionary<string, string[]> RolePermissions { get; } =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["CEO"] = ["executive", "reports", "settings"],
+            ["CEO"] = ["executive", "reports", "settings", "users"],
 
             ["Manager"] =
             [
                 "dashboard", "customers", "contracts", "partners", "containers", "baseInfo",
                 "purchase", "sale", "warehouse", "payments", "transfers", "exchange",
-                "expenses", "revenues", "claims", "reports", "settings", "develop",
+                "expenses", "revenues", "claims", "reports", "settings", "develop", "users",
             ],
 
             // Staff keeps baseInfo (its cost-centre capability predates the current shell) but

@@ -13,6 +13,7 @@ import type {
   InvoiceType,
 } from '@/types';
 import * as api from './api';
+import { usersApi, type UserInput } from '@/services/users';
 
 export const qk = {
   accounts: ['accounts'] as const,
@@ -45,6 +46,11 @@ export const qk = {
   portalCustomer: ['portalCustomer'] as const,
   receivableInvoices: (customerId?: string) => ['receivableInvoices', customerId ?? 'all'] as const,
   partners: ['partners'] as const,
+  // Accounts that can sign in. `roles` is a separate key: the assignable list comes from
+  // the server but never changes while the app is open, so it must not be refetched
+  // every time somebody edits a user.
+  users: ['users'] as const,
+  assignableRoles: ['assignableRoles'] as const,
   // ---- Trade documents (purchase/sale × order/provisional/invoice), spec §8 ----
   tradeInvoices: (side: InvoiceSide) => ['tradeInvoices', side] as const,
   // Person-detail tabs. Bare prefixes `['tradeInvoices']` / `['claims']` already cover these,
@@ -357,6 +363,57 @@ export const useSetPartnerActive = () => {
     onSuccess: invalidate,
   });
 };
+
+/* ------------------------------ User administration ------------------------------ */
+
+export const useUsers = () => useQuery({ queryKey: qk.users, queryFn: usersApi.list });
+
+/** The roles the server will accept. `staleTime: Infinity` because role definitions live in
+ *  backend code — they cannot change without a deploy, which reloads the app anyway. */
+export const useAssignableRoles = () =>
+  useQuery({ queryKey: qk.assignableRoles, queryFn: usersApi.roles, staleTime: Infinity });
+
+function useInvalidateUsers() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: qk.users });
+}
+
+export const useCreateUser = () => {
+  const invalidate = useInvalidateUsers();
+  return useMutation({
+    mutationFn: (input: UserInput & { password: string }) => usersApi.create(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateUser = () => {
+  const invalidate = useInvalidateUsers();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UserInput }) => usersApi.update(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useSetUserActive = () => {
+  const invalidate = useInvalidateUsers();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => usersApi.setActive(id, active),
+    onSuccess: invalidate,
+  });
+};
+
+/** Resets someone else's password. Nothing to invalidate — no visible field changes. */
+export const useSetUserPassword = () =>
+  useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      usersApi.setPassword(id, password),
+  });
+
+export const useChangeOwnPassword = () =>
+  useMutation({
+    mutationFn: ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) =>
+      usersApi.changeOwnPassword(currentPassword, newPassword),
+  });
 
 /* ---------------- Trade documents + warehouse + inventory (spec §8) --------------- */
 

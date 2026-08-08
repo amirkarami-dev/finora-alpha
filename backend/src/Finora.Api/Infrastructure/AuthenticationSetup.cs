@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Finora.Api.Infrastructure;
 
@@ -42,7 +43,11 @@ internal static class AuthenticationSetup
                 };
             });
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options => options.AddPermissionPolicies());
+        // Scoped, not singleton: the handler reads the caller's permissions through the
+        // request's IdentityDbContext. See PermissionAuthorization for why it asks the database
+        // rather than trusting a claim.
+        builder.Services.AddScoped<IAuthorizationHandler, PermissionHandler>();
 
         return builder;
     }

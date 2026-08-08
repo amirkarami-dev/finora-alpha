@@ -47,6 +47,7 @@ app.MapScalarApiReference(options => options.WithTitle("Finora API"));
 
 app.MapMetaEndpoints();
 app.MapIdentityEndpoints();
+app.MapUserAdminEndpoints();
 app.MapErpEndpoints();
 app.MapMasterDataEndpoints();
 

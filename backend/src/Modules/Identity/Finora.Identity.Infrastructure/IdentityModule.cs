@@ -33,6 +33,7 @@ public static class IdentityModule
         });
 
         builder.Services.AddScoped<SignInService>();
+        builder.Services.AddScoped<UserAdminService>();
         builder.Services.AddScoped<IdentitySeeder>();
 
         return builder;

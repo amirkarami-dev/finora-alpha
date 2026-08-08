@@ -20,6 +20,7 @@ import {
   ShoppingCartOutlined,
   TagsOutlined,
   TeamOutlined,
+  UsergroupAddOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -40,6 +41,7 @@ const ICONS: Record<string, ReactNode> = {
   appstore: <AppstoreOutlined />,
   wallet: <WalletOutlined />,
   team: <TeamOutlined />,
+  usergroup: <UsergroupAddOutlined />,
   filetext: <FileTextOutlined />,
   container: <ContainerOutlined />,
   creditcard: <CreditCardOutlined />,

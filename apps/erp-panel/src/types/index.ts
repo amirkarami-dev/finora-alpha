@@ -507,6 +507,25 @@ export type Locale = 'en' | 'ar' | 'fa';
 export type ThemeMode = 'light' | 'dark';
 export type Role = 'CEO' | 'Manager' | 'Staff' | 'Customer';
 
+/**
+ * An account that can sign in.
+ *
+ * Carries no password of any kind, hashed or otherwise — the admin list has no use for one, and
+ * a field that never leaves the server cannot leak from here. `role` is singular because the
+ * session reports a single role, even though the schema could hold several.
+ */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  avatarColor: string;
+  active: boolean;
+  createdAt: string;
+  /** Null until they have signed in once. */
+  lastLoginAt: string | null;
+}
+
 /* ------------------------------------------------------------------ *
  * Cost Centres — see docs/superpowers/specs/2026-07-24-empty-seed-and-expenses-design.md §5.
  * ------------------------------------------------------------------ */
