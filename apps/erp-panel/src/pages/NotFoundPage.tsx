@@ -22,12 +22,11 @@ export default function NotFoundPage() {
         status="404"
         title="404"
         subTitle={t('errors.notFoundDesc')}
+        // One destination for both: /app resolves itself. A visitor is sent to the login page,
+        // and a signed-in user to their own home — which is not always the dashboard, since a
+        // Customer has no permission for it.
         extra={
-          <Button
-            type="primary"
-            size="large"
-            onClick={() => navigate(isAuthenticated ? ROUTES.dashboard : ROUTES.landing)}
-          >
+          <Button type="primary" size="large" onClick={() => navigate(ROUTES.app)}>
             {isAuthenticated ? t('errors.goHome') : t('auth.backToHome')}
           </Button>
         }

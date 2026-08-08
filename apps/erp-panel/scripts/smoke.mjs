@@ -103,11 +103,12 @@ async function shot(ctx, path, file, tag, wait = 1600) {
   await page.close();
 }
 
-// 1. Landing (light, desktop)
+// 1. Entry points (light, desktop). `/` no longer renders a landing page — it redirects into
+// the app, which sends a signed-out visitor to the login screen.
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await seed(ctx, { theme: 'light', locale: 'en' });
-  await shot(ctx, '/', '01-landing.png', 'landing');
+  await shot(ctx, '/', '01-root.png', 'root redirect');
   await shot(ctx, '/login', '02-login.png', 'login');
   await ctx.close();
 }

@@ -5,7 +5,6 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { ROUTES } from '@/config/constants';
 import type { RouteKey } from '@/config/roles';
 import { AppLayout } from '@/components/layout/AppLayout';
-import LandingPage from '@/pages/landing/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
 import ExecutiveDashboardPage from '@/pages/executive/ExecutiveDashboardPage';
 import CustomerPortalPage from '@/pages/portal/CustomerPortalPage';
@@ -78,7 +77,12 @@ function FullPageSpinner() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path={ROUTES.landing} element={<LandingPage />} />
+      {/* erp.metal-uae.com is the trading desk, not a shop window — the marketing site is
+          metal-uae.com. The root goes into the app rather than straight to /login so that the
+          answer depends on who is asking: RequireAuth sends a visitor to the login page, and
+          RoleHome sends someone who already has a session to their own home page instead of a
+          form they do not need. */}
+      <Route path={ROUTES.landing} element={<Navigate to={ROUTES.app} replace />} />
       <Route path={ROUTES.login} element={<LoginPage />} />
 
       <Route

@@ -11,7 +11,6 @@ import {
   Typography,
 } from 'antd';
 import {
-  ArrowLeftOutlined,
   CheckCircleFilled,
   LockOutlined,
   MailOutlined,
@@ -22,7 +21,6 @@ import { Logo } from '@/components/common/Logo';
 import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
-import { ROUTES } from '@/config/constants';
 import { USERS } from '@/config/roles';
 
 const { Title, Paragraph, Text } = Typography;
@@ -108,10 +106,9 @@ export default function LoginPage() {
           padding: screens.md ? 40 : 24,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(ROUTES.landing)}>
-            {t('auth.backToHome')}
-          </Button>
+        {/* No "back to home": this app's root now redirects here, so the button led straight
+            back to the page it was on. The corporate site is a different host. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
           <Space>
             <LanguageSwitcher />
             <ThemeToggle />
