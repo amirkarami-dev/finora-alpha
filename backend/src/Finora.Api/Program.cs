@@ -1,5 +1,6 @@
 using Finora.Api.Endpoints;
 using Finora.Api.Infrastructure;
+using Finora.Erp.Infrastructure;
 using Finora.Identity.Infrastructure;
 using Scalar.AspNetCore;
 
@@ -15,6 +16,7 @@ builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 
 builder.AddFinoraAuthentication();
 builder.AddIdentityModule();
+builder.AddErpModule();
 
 builder.Services.AddOpenApi();
 

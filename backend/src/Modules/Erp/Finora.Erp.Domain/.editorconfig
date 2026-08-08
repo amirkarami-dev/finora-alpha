@@ -1,0 +1,15 @@
+[*.cs]
+
+# CA1707: no underscores in member names.
+#
+# These enum members ARE the wire format. `PURCHASE_PROVISIONAL`, `WIRE_ROD` and `CASH_SAFE` are
+# the exact strings the front end sends, stores and renders, and spelling the C# member the same
+# way is what lets EnumNames return the right value without an attribute on every single member.
+# Renaming them to PascalCase would mean 20-odd [JsonStringEnumMemberName] attributes whose only
+# job is to undo the rename — more code, one more place to get wrong, and a C# name that no
+# longer matches what is in the database.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1711: `ClaimType`, `PaymentType`, `InvoiceType` — the rule reserves the "Type" suffix, but
+# these are the domain's own words for a document's kind, and the front end calls them that too.
+dotnet_diagnostic.CA1711.severity = none

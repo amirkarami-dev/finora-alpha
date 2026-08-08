@@ -5,6 +5,10 @@
     <ProjectReference Include="..\..\..\BuildingBlocks\Finora.BuildingBlocks.Infrastructure\Finora.BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+  </ItemGroup>
+
   <PropertyGroup>
   </PropertyGroup>
 

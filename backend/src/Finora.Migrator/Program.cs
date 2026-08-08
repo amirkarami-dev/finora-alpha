@@ -1,3 +1,4 @@
+using Finora.Erp.Infrastructure;
 using Finora.Identity.Infrastructure;
 using Finora.Migrator;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,11 @@ builder.Services.AddScoped(sp => new MigrationTarget(
         await db.Database.MigrateAsync(ct);
         await sp.GetRequiredService<IdentitySeeder>().SeedAsync(ct);
     }));
+
+builder.AddErpModule();
+builder.Services.AddScoped(sp => new MigrationTarget(
+    nameof(ErpDbContext),
+    async ct => await sp.GetRequiredService<ErpDbContext>().Database.MigrateAsync(ct)));
 
 builder.Services.AddHostedService<MigrationRunner>();
 
