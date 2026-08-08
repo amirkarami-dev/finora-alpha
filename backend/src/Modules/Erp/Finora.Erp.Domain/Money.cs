@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finora.Erp.Domain;
 
 // Money: payments and how they land on documents, cheques, transfers between the company's own
@@ -17,7 +19,7 @@ public sealed class Payment
     public required string Id { get; init; }
 
     public required string CustomerId { get; init; }
-    public Customer? Customer { get; init; }
+    [JsonIgnore] public Customer? Customer { get; init; }
 
     public DateTimeOffset Date { get; set; }
     public Currency Currency { get; set; }
@@ -55,12 +57,12 @@ public sealed class PaymentItem
 {
     public required string Id { get; init; }
     public required string PaymentId { get; init; }
-    public Payment? Payment { get; init; }
+    [JsonIgnore] public Payment? Payment { get; init; }
 
     /// <summary>The document this line settles. Absent on a general payment's lines, which
     /// settle nothing in particular and take their side from the header's direction.</summary>
     public string? InvoiceId { get; init; }
-    public Invoice? Invoice { get; init; }
+    [JsonIgnore] public Invoice? Invoice { get; init; }
 
     public DateTimeOffset Date { get; set; }
 
@@ -76,12 +78,12 @@ public sealed class PaymentItem
     /// bank transfer names a bank and a cash payment names a safe, and pointing one at the
     /// other would make the two impossible to tell apart in any balance.</summary>
     public string? BankAccountId { get; set; }
-    public FinancialAccount? BankAccount { get; init; }
+    [JsonIgnore] public FinancialAccount? BankAccount { get; init; }
 
     /// <summary>Required for a cheque line. Points at a shared cheque rather than embedding its
     /// fields, because one cheque may settle lines on several invoices.</summary>
     public string? ChequeId { get; set; }
-    public Cheque? Cheque { get; init; }
+    [JsonIgnore] public Cheque? Cheque { get; init; }
 
     public ICollection<PaymentItemAllocation> Allocations { get; init; } = [];
 }
@@ -94,7 +96,7 @@ public sealed class PaymentItemAllocation
 {
     public required string Id { get; init; }
     public required string PaymentItemId { get; init; }
-    public PaymentItem? PaymentItem { get; init; }
+    [JsonIgnore] public PaymentItem? PaymentItem { get; init; }
 
     public required string InvoiceItemId { get; init; }
 
@@ -132,7 +134,7 @@ public sealed class Cheque
     /// <summary>The company account it cleared through. Set when the status becomes PAID and
     /// cleared when it leaves PAID — otherwise an uncleared cheque would keep reporting a bank.</summary>
     public string? BankAccountId { get; set; }
-    public FinancialAccount? BankAccount { get; init; }
+    [JsonIgnore] public FinancialAccount? BankAccount { get; init; }
 
     public ChequeStatus Status { get; set; } = ChequeStatus.PENDING;
     public string? Notes { get; set; }
@@ -149,10 +151,10 @@ public sealed class MoneyTransfer
     public DateTimeOffset Date { get; set; }
 
     public required string FromAccountId { get; init; }
-    public FinancialAccount? FromAccount { get; init; }
+    [JsonIgnore] public FinancialAccount? FromAccount { get; init; }
 
     public required string ToAccountId { get; init; }
-    public FinancialAccount? ToAccount { get; init; }
+    [JsonIgnore] public FinancialAccount? ToAccount { get; init; }
 
     public Currency FromCurrency { get; init; }
     public Currency ToCurrency { get; init; }
@@ -181,7 +183,7 @@ public sealed class MoneyTransferAllocation
 {
     public required string Id { get; init; }
     public required string TransferId { get; init; }
-    public MoneyTransfer? Transfer { get; init; }
+    [JsonIgnore] public MoneyTransfer? Transfer { get; init; }
 
     public string? InvoiceId { get; init; }
     public string? InvoiceItemId { get; init; }

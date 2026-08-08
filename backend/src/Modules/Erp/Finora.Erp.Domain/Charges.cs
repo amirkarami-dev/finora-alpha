@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finora.Erp.Domain;
 
 // Costs and income booked against trade documents, and claims raised on them.
@@ -29,7 +31,7 @@ public sealed class ChargeDoc
     /// editing the title later cannot start failing because the document has since converted.
     /// </summary>
     public string? InvoiceId { get; init; }
-    public Invoice? Invoice { get; init; }
+    [JsonIgnore] public Invoice? Invoice { get; init; }
 
     public DateTimeOffset Date { get; set; }
     public string? Description { get; set; }
@@ -49,12 +51,12 @@ public sealed class ChargeLine
 {
     public required string Id { get; init; }
     public required string DocId { get; init; }
-    public ChargeDoc? Doc { get; init; }
+    [JsonIgnore] public ChargeDoc? Doc { get; init; }
 
     /// <summary>Must match the document's direction, and the category's scope must match the
     /// document's kind — a general category cannot be used on an invoice document.</summary>
     public required string CategoryId { get; init; }
-    public ChargeCategory? Category { get; init; }
+    [JsonIgnore] public ChargeCategory? Category { get; init; }
 
     public DateTimeOffset Date { get; set; }
 
@@ -70,7 +72,7 @@ public sealed class ChargeLine
     public decimal AmountUSD { get; set; }
 
     public string? CostCentreId { get; set; }
-    public CostCentre? CostCentre { get; init; }
+    [JsonIgnore] public CostCentre? CostCentre { get; init; }
 
     /// <summary>
     /// Who the money went to or came from. Required when saving, but nullable here: lines
@@ -79,7 +81,7 @@ public sealed class ChargeLine
     /// they are edited — which moves the data forward instead of destroying it.
     /// </summary>
     public string? PersonId { get; set; }
-    public Customer? Person { get; init; }
+    [JsonIgnore] public Customer? Person { get; init; }
 
     public string? Description { get; set; }
 
@@ -99,7 +101,7 @@ public sealed class ChargeAllocation
 {
     public required string Id { get; init; }
     public required string LineId { get; init; }
-    public ChargeLine? Line { get; init; }
+    [JsonIgnore] public ChargeLine? Line { get; init; }
 
     public required string InvoiceItemId { get; init; }
 
@@ -134,12 +136,12 @@ public sealed class Claim
 
     /// <summary>Required and immutable.</summary>
     public required string InvoiceId { get; init; }
-    public Invoice? Invoice { get; init; }
+    [JsonIgnore] public Invoice? Invoice { get; init; }
 
     /// <summary>Taken from the invoice's customer, never supplied — which is what stops a claim
     /// appearing under the wrong person.</summary>
     public required string PartyId { get; init; }
-    public Customer? Party { get; init; }
+    [JsonIgnore] public Customer? Party { get; init; }
 
     public ClaimType ClaimType { get; set; }
     public DateTimeOffset Date { get; set; }
@@ -162,7 +164,7 @@ public sealed class ClaimItem
 {
     public required string Id { get; init; }
     public required string ClaimId { get; init; }
-    public Claim? Claim { get; init; }
+    [JsonIgnore] public Claim? Claim { get; init; }
 
     public required string InvoiceItemId { get; init; }
 

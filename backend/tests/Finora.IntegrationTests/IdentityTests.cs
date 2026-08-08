@@ -9,8 +9,8 @@ namespace Finora.IntegrationTests;
 /// <summary>
 /// Sign-in, the session cookie, and what each role is granted.
 /// </summary>
-[Collection(nameof(IdentityCollection))]
-public sealed class IdentityTests(IdentityFixture fixture)
+[Collection(nameof(ApiCollection))]
+public sealed class IdentityTests(ApiFixture fixture)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -20,7 +20,7 @@ public sealed class IdentityTests(IdentityFixture fixture)
         Guid Id, string Email, string Name, string Role, string AvatarColor,
         string[] Permissions, string Home);
 
-    private static HttpClient NewClient(IdentityFixture fixture) =>
+    private static HttpClient NewClient(ApiFixture fixture) =>
         fixture.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {
             HandleCookies = true,
@@ -191,5 +191,5 @@ public sealed class IdentityTests(IdentityFixture fixture)
     }
 }
 
-[CollectionDefinition(nameof(IdentityCollection))]
-public sealed class IdentityCollection : ICollectionFixture<IdentityFixture>;
+[CollectionDefinition(nameof(ApiCollection))]
+public sealed class ApiCollection : ICollectionFixture<ApiFixture>;

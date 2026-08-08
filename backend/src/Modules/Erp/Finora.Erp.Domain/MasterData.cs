@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finora.Erp.Domain;
 
 // Master data — the reference lists the trading documents point at.
@@ -54,7 +56,9 @@ public sealed class Customer
     /// </summary>
     public bool PortalAccount { get; set; }
 
-    public ICollection<Contract> Contracts { get; init; } = [];
+    // Not serialised: the snapshot carries contracts as a top-level array, exactly as the
+    // client's Db does, and the client's Customer type has no contracts field at all.
+    [JsonIgnore] public ICollection<Contract> Contracts { get; init; } = [];
 }
 
 /// <summary>Where stock is held.</summary>

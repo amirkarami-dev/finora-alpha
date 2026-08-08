@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using Finora.Erp.Infrastructure.Snapshot;
+
 namespace Finora.Erp.Infrastructure;
 
 /// <summary>
@@ -31,6 +33,8 @@ public static class ErpModule
 
             options.UseSnakeCaseNamingConvention();
         });
+
+        builder.Services.AddScoped<SnapshotService>();
 
         return builder;
     }

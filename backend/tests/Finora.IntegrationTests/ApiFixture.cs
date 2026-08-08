@@ -1,3 +1,4 @@
+using Finora.Erp.Infrastructure;
 using Finora.Identity.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -8,7 +9,8 @@ using Testcontainers.PostgreSql;
 namespace Finora.IntegrationTests;
 
 /// <summary>
-/// A real PostgreSQL 17 in a container, migrated and seeded, shared by the identity tests.
+/// A real PostgreSQL 17 in a container, migrated and seeded, hosting the whole API for every
+/// integration test.
 ///
 /// <para>
 /// Not an in-memory provider: schemas, snake_case naming, unique indexes and the migration
@@ -17,7 +19,7 @@ namespace Finora.IntegrationTests;
 /// difference between here and production cannot be blamed on the version.
 /// </para>
 /// </summary>
-public sealed class IdentityFixture : WebApplicationFactory<Program>, IAsyncLifetime
+public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("finora")
@@ -31,8 +33,12 @@ public sealed class IdentityFixture : WebApplicationFactory<Program>, IAsyncLife
         await _postgres.StartAsync();
 
         using var scope = Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-        await db.Database.MigrateAsync();
+
+        // Every module's schema, not just Identity's: the ERP tests write into `erp`, and a
+        // fixture that migrates one context leaves the other's tables simply absent.
+        await scope.ServiceProvider.GetRequiredService<IdentityDbContext>().Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<ErpDbContext>().Database.MigrateAsync();
+
         await scope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync();
     }
 

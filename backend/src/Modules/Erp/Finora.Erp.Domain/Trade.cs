@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Finora.Erp.Domain;
 
 // Contracts, containers, trade documents and warehouse movements.
@@ -12,7 +14,7 @@ public sealed class Contract
 {
     public required string Id { get; init; }
     public required string CustomerId { get; init; }
-    public Customer? Customer { get; init; }
+    [JsonIgnore] public Customer? Customer { get; init; }
 
     public ContractType ContractType { get; init; }
     public DateTimeOffset Date { get; set; }
@@ -32,7 +34,7 @@ public sealed class ContractItem
 {
     public required string Id { get; init; }
     public required string ContractId { get; init; }
-    public Contract? Contract { get; init; }
+    [JsonIgnore] public Contract? Contract { get; init; }
 
     public required string Product { get; set; }
     public decimal QuantityMt { get; set; }
@@ -68,10 +70,10 @@ public sealed class ContractItem
 public sealed class ItemPartner
 {
     public required string ContractItemId { get; init; }
-    public ContractItem? ContractItem { get; init; }
+    [JsonIgnore] public ContractItem? ContractItem { get; init; }
 
     public required string PartnerId { get; init; }
-    public Partner? Partner { get; init; }
+    [JsonIgnore] public Partner? Partner { get; init; }
 
     public decimal Percent { get; set; }
 }
@@ -109,10 +111,10 @@ public sealed class Container
 public sealed class ContainerGood
 {
     public required string ContainerId { get; init; }
-    public Container? Container { get; init; }
+    [JsonIgnore] public Container? Container { get; init; }
 
     public required string ContractItemId { get; init; }
-    public ContractItem? ContractItem { get; init; }
+    [JsonIgnore] public ContractItem? ContractItem { get; init; }
 
     public decimal QuantityMt { get; set; }
 }
@@ -138,11 +140,11 @@ public sealed class Invoice
     public DateTimeOffset InvoiceDate { get; set; }
 
     public required string ContractId { get; init; }
-    public Contract? Contract { get; init; }
+    [JsonIgnore] public Contract? Contract { get; init; }
 
     /// <summary>Taken from the contract at creation; immutable after.</summary>
     public required string CustomerId { get; init; }
-    public Customer? Customer { get; init; }
+    [JsonIgnore] public Customer? Customer { get; init; }
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.DRAFT;
     public Currency Currency { get; set; } = Currency.USD;
@@ -154,7 +156,7 @@ public sealed class Invoice
 
     /// <summary>The document this one was converted FROM.</summary>
     public string? RefInvoiceId { get; set; }
-    public Invoice? RefInvoice { get; init; }
+    [JsonIgnore] public Invoice? RefInvoice { get; init; }
 
     public DateTimeOffset? SentAt { get; set; }
 
@@ -173,10 +175,10 @@ public sealed class InvoiceItem
 {
     public required string Id { get; init; }
     public required string InvoiceId { get; init; }
-    public Invoice? Invoice { get; init; }
+    [JsonIgnore] public Invoice? Invoice { get; init; }
 
     public required string ContractItemId { get; init; }
-    public ContractItem? ContractItem { get; init; }
+    [JsonIgnore] public ContractItem? ContractItem { get; init; }
 
     /// <summary>
     /// Chain-stable identity that survives provisional→final conversion and re-adding a line
@@ -216,7 +218,7 @@ public sealed class InvoiceItem
 
     /// <summary>Which container carried this line. Optional while drafting.</summary>
     public string? ContainerId { get; set; }
-    public Container? Container { get; init; }
+    [JsonIgnore] public Container? Container { get; init; }
 
     public string? Description { get; set; }
 }
@@ -230,11 +232,11 @@ public sealed class InventoryDocument
     public required string DocNumber { get; set; }
 
     public required string WarehouseId { get; init; }
-    public Warehouse? Warehouse { get; init; }
+    [JsonIgnore] public Warehouse? Warehouse { get; init; }
 
     /// <summary>The final invoice that produced this movement.</summary>
     public string? InvoiceId { get; init; }
-    public Invoice? Invoice { get; init; }
+    [JsonIgnore] public Invoice? Invoice { get; init; }
 
     public InventoryDocType Type { get; init; }
     public DateTimeOffset Date { get; set; }
@@ -249,7 +251,7 @@ public sealed class InventoryDocumentItem
 {
     public required string Id { get; init; }
     public required string DocumentId { get; init; }
-    public InventoryDocument? Document { get; init; }
+    [JsonIgnore] public InventoryDocument? Document { get; init; }
 
     /// <summary>The concrete invoice line, when there is one.</summary>
     public string? InvoiceItemId { get; init; }
