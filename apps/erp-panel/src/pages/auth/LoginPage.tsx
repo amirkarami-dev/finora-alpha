@@ -135,7 +135,14 @@ export default function LoginPage() {
             form={form}
             layout="vertical"
             requiredMark={false}
-            initialValues={{ email: 'amir@finora.app', password: 'demo1234', remember: true }}
+            // Prefilled in development so a reload does not cost a retype. In production the
+            // fields start empty — arriving at a public login page with a working password
+            // already in the box defeats having a password at all.
+            initialValues={
+              import.meta.env.DEV
+                ? { email: 'amir@finora.app', password: 'demo1234', remember: true }
+                : { remember: true }
+            }
             onFinish={onFinish}
             style={{ marginTop: 20 }}
             size="large"
@@ -167,6 +174,13 @@ export default function LoginPage() {
             </Button>
           </Form>
 
+          {/* Development only. These are real, working credentials, and the server validates
+              them — printing them on a public login page would hand anyone who visits
+              erp.metal-uae.com a Manager session over the whole trading book. Vite evaluates
+              import.meta.env.DEV at build time, so the production bundle contains neither this
+              markup nor the passwords in USERS. */}
+          {import.meta.env.DEV && (
+          <>
           <Divider plain style={{ color: '#999', fontSize: 12 }}>
             {t('auth.demoAccounts')}
           </Divider>
@@ -197,6 +211,8 @@ export default function LoginPage() {
               </button>
             ))}
           </Space>
+          </>
+          )}
         </div>
       </div>
     </div>

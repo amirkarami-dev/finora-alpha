@@ -7,6 +7,11 @@ graphify-out
 docs
 node_modules
 **/node_modules
+# …except the one Next puts INSIDE its standalone bundle. That directory is the app's runtime —
+# server.js requires `next` from it — not a dependency tree to rebuild. Excluding it produced an
+# image that started and died on "Cannot find module 'next'". Last matching pattern wins.
+!apps/land-web/.next/standalone/node_modules
+!apps/land-web/.next/standalone/**/node_modules
 backend/**/bin
 backend/**/obj
 apps/erp-panel/.tsbuild

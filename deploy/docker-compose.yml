@@ -74,6 +74,10 @@ services:
       # password is supplied from the host environment, never committed.
       ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      # Data-protection keys, which encrypt the session cookie. Without a volume they live in the
+      # container and a redeploy signs every user out.
+      - api-keys:/keys
     networks: [traefik, postgres]
     labels:
       - "traefik.enable=true"
@@ -82,6 +86,21 @@ services:
       - "traefik.http.routers.metal-erp-api.rule=Host(`api.metal-uae.com`)"
       - "traefik.http.routers.metal-erp-api.tls=true"
       - "traefik.http.services.metal-erp-api.loadbalancer.server.port=8080"
+      # The SAME-ORIGIN route, and the one the SPA actually uses. It calls `/api/...` relative,
+      # so in production that resolves to erp.metal-uae.com — and without this router nginx
+      # answers with index.html, which the app reads as a broken API and can never sign in
+      # through. It is also what makes the session work at all: the cookie is HttpOnly, Secure
+      # and SameSite=Strict, so a browser on erp.metal-uae.com would never send a cookie set by
+      # api.metal-uae.com. Same origin means no CORS and no cross-site cookie.
+      #
+      # Priority beats the SPA's Host-only router; Traefik would already rank the longer rule
+      # higher, but leaving that to a tie-break rule is how a site starts serving HTML to its
+      # own API calls.
+      - "traefik.http.routers.metal-erp-api-sameorigin.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp-api-sameorigin.rule=Host(`erp.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp-api-sameorigin.tls=true"
+      - "traefik.http.routers.metal-erp-api-sameorigin.service=metal-erp-api"
+      - "traefik.http.routers.metal-erp-api-sameorigin.priority=100"
 
   # Runs pending migrations and exits. The API waits for it to succeed, so no replica ever
   # serves traffic against a schema it does not match.
@@ -95,7 +114,20 @@ services:
     restart: "no"
     environment:
       ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    # The identity seeder runs here, not in the API, so this is the container that needs the
+    # `Identity__SeedPasswords__<email>` entries — without them every seeded account is created
+    # unusable, deliberately, so a production deploy cannot quietly inherit the published demo
+    # passwords.
+    #
+    # They are NOT set here and NOT in `.env`. Those names carry an @ and a dot, and compose's
+    # dotenv parser rejects both ("unexpected character @ in variable name"), while `${...}`
+    # interpolation only accepts [A-Za-z_][A-Za-z0-9_]*. A YAML `environment:` mapping has no
+    # such restriction, so they live in an uncommitted `docker-compose.override.yml` beside this
+    # file, which compose merges automatically. See deploy/README.md.
     networks: [postgres]
+
+volumes:
+  api-keys:
 
 networks:
   traefik:

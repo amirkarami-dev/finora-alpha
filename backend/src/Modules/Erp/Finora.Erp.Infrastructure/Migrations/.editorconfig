@@ -1,0 +1,9 @@
+[*.cs]
+
+# These files are scaffolded by `dotnet ef migrations add`, not written by hand, and are never
+# edited afterwards — a migration that has run is history. Holding them to style and performance
+# rules means either editing generated output (which the next scaffold overwrites) or a build
+# that fails on code nobody chose to write. CA1861 in particular fires on the `new[] { … }`
+# literals EF emits for every CHECK constraint, and only in Release, so it turned a green Debug
+# build into a broken image build.
+generated_code = true

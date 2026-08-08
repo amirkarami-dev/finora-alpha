@@ -1,5 +1,6 @@
 using Finora.Api.Endpoints;
 using Finora.Api.Infrastructure;
+using Microsoft.AspNetCore.DataProtection;
 using Finora.Erp.Infrastructure;
 using Finora.Identity.Infrastructure;
 using Scalar.AspNetCore;
@@ -13,6 +14,18 @@ builder.AddServiceDefaults();
 // the contract the SPA's error handling is built on. See DomainExceptionHandler.
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
+
+// The session cookie is encrypted with data-protection keys. By default those keys live inside
+// the container, so every redeploy mints a new set and signs every user out — and a container
+// that restarts under load would do it mid-session. Pointing them at a mounted directory keeps
+// them across deploys. Unset in development, where the default is exactly right.
+var keyPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+{
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+        .SetApplicationName("Finora");
+}
 
 builder.AddFinoraAuthentication();
 builder.AddIdentityModule();

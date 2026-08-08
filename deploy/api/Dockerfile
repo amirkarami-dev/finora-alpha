@@ -27,9 +27,14 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS api
 WORKDIR /app
 # Never run as root: this container is reachable from the internet through traefik.
 RUN adduser -D -u 64198 finora && chown -R finora /app
+# Created here, owned by the app user, so the named volume compose mounts over it inherits that
+# ownership. A volume mounted onto a path that does not exist in the image arrives root-owned,
+# and a non-root process cannot write its data-protection keys into it.
+RUN mkdir -p /keys && chown finora /keys
 USER finora
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    DOTNET_gcServer=1
+    DOTNET_gcServer=1 \
+    DataProtection__KeyPath=/keys
 COPY --from=build --chown=finora /app/api ./
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Finora.Api.dll"]
