@@ -1,6 +1,6 @@
 import { db, applySnapshot, onPersist, persistDb, resetDb, type Db } from '@/mock/data';
 import { buildSampleData } from '@/mock/sampleData';
-import { ApiError } from '@/services/identity';
+import { request } from '@/services/http';
 
 /**
  * The whole ERP dataset, moved between the browser and the server in one piece.
@@ -12,27 +12,6 @@ import { ApiError } from '@/services/identity';
  * running over it; writes then move feature by feature, and this file disappears when the last
  * read is server-side.</p>
  */
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
-
-  if (!response.ok) {
-    let code = `http-${response.status}`;
-    try {
-      const problem = (await response.json()) as { code?: string };
-      if (typeof problem.code === 'string') code = problem.code;
-    } catch {
-      /* a non-JSON body leaves the http-<status> code */
-    }
-    throw new ApiError(code, response.status);
-  }
-
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
-}
 
 /**
  * Fills the store from the server.

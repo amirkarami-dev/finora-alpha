@@ -286,13 +286,20 @@ function loadDb(): typeof seed {
 
 export const db = loadDb();
 
-/** Serialize the current db to localStorage. Called after every mutation. */
-export function persistDb(): void {
+/**
+ * Serialize the current db to localStorage. Called after every mutation.
+ *
+ * `alreadySynced` marks a change the server has already applied — a write that went through its
+ * own endpoint. Those still belong in localStorage (it is the offline copy) but must not wake the
+ * whole-dataset push, which would answer a small confirmed write by rewriting every table.
+ */
+export function persistDb(options?: { alreadySynced?: boolean }): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch {
     /* quota exceeded / serialization issue — ignore in the mock layer */
   }
+  if (options?.alreadySynced) return;
   for (const listener of persistListeners) listener();
 }
 

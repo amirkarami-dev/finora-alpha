@@ -60,6 +60,8 @@ import type {
 } from '@/types';
 import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
 import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
+import { masterData, type MasterDataResult } from '@/services/masterData';
+import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
@@ -88,6 +90,34 @@ function reindex() {
 // A snapshot refill swaps every array wholesale, so the indexes built above would otherwise
 // still point at the previous dataset — with no error, just stale answers.
 onSnapshotApplied(reindex);
+
+/**
+ * A master-data write: the server when it is reachable, the local implementation when it is not.
+ *
+ * <p>The local half is not dead weight. Hydration deliberately degrades to localStorage when the
+ * backend is down, and a build where contracts still save but adding a warehouse throws would be
+ * worse than either whole behaviour. It is also the only implementation these rules had until
+ * now, so keeping it reachable keeps the two honest about agreeing.</p>
+ *
+ * <p>On the server path the whole collection is replaced rather than the one record patched in:
+ * granting the portal account clears it from every other customer, so a one-record update would
+ * leave the browser's copy of the rest wrong. The persist is marked as already synced — the
+ * server has this change, and the whole-dataset push exists for writes it does not.</p>
+ */
+async function masterWrite<T>(
+  send: () => Promise<MasterDataResult<T>>,
+  collection: T[],
+  local: () => Promise<T>,
+): Promise<T> {
+  if (!isServerBacked()) return local();
+
+  const { entity, all } = await send();
+  collection.length = 0;
+  collection.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
 
 /* ----------------------------- Customers ---------------------------- */
 
@@ -1191,6 +1221,15 @@ function assignPortalAccount(customers: Customer[], keepId: string, next: boolea
 }
 
 export async function createCustomer(input: CustomerInput): Promise<Customer> {
+  return masterWrite(
+    () => masterData.create<Customer>('customers', input),
+    db.customers,
+    () => createCustomerLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createCustomerLocal(input: CustomerInput): Promise<Customer> {
   await delay(200);
   const code = input.code.trim().toUpperCase();
   const id = `cust-${code.toLowerCase()}`;
@@ -1219,6 +1258,15 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
 }
 
 export async function updateCustomer(id: string, input: CustomerInput): Promise<Customer> {
+  return masterWrite(
+    () => masterData.update<Customer>('customers', id, input),
+    db.customers,
+    () => updateCustomerLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateCustomerLocal(id: string, input: CustomerInput): Promise<Customer> {
   await delay(200);
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
@@ -1240,6 +1288,15 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
 }
 
 export async function setCustomerActive(id: string, active: boolean): Promise<Customer> {
+  return masterWrite(
+    () => masterData.setActive<Customer>('customers', id, active),
+    db.customers,
+    () => setCustomerActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setCustomerActiveLocal(id: string, active: boolean): Promise<Customer> {
   await delay(160);
   const customer = db.customers.find((c) => c.id === id);
   if (!customer) throw new Error(`Customer ${id} not found`);
@@ -1258,6 +1315,15 @@ export interface PartnerInput {
 }
 
 export async function createPartner(input: PartnerInput): Promise<Partner> {
+  return masterWrite(
+    () => masterData.create<Partner>('partners', input),
+    db.partners,
+    () => createPartnerLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createPartnerLocal(input: PartnerInput): Promise<Partner> {
   await delay(180);
   const code = input.code.trim().toUpperCase();
   const id = `ptnr-${code.toLowerCase()}`;
@@ -1269,6 +1335,15 @@ export async function createPartner(input: PartnerInput): Promise<Partner> {
 }
 
 export async function updatePartner(id: string, input: PartnerInput): Promise<Partner> {
+  return masterWrite(
+    () => masterData.update<Partner>('partners', id, input),
+    db.partners,
+    () => updatePartnerLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updatePartnerLocal(id: string, input: PartnerInput): Promise<Partner> {
   await delay(160);
   const partner = db.partners.find((p) => p.id === id);
   if (!partner) throw new Error(`Partner ${id} not found`);
@@ -1278,6 +1353,15 @@ export async function updatePartner(id: string, input: PartnerInput): Promise<Pa
 }
 
 export async function setPartnerActive(id: string, active: boolean): Promise<Partner> {
+  return masterWrite(
+    () => masterData.setActive<Partner>('partners', id, active),
+    db.partners,
+    () => setPartnerActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setPartnerActiveLocal(id: string, active: boolean): Promise<Partner> {
   await delay(140);
   const partner = db.partners.find((p) => p.id === id);
   if (!partner) throw new Error(`Partner ${id} not found`);
@@ -2643,6 +2727,15 @@ export interface WarehouseInput {
 }
 
 export async function createWarehouse(input: WarehouseInput): Promise<Warehouse> {
+  return masterWrite(
+    () => masterData.create<Warehouse>('warehouses', input),
+    db.warehouses,
+    () => createWarehouseLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createWarehouseLocal(input: WarehouseInput): Promise<Warehouse> {
   await delay(180);
   const code = input.code.trim().toUpperCase();
   const id = `wh-${code.toLowerCase()}`;
@@ -2660,6 +2753,15 @@ export async function createWarehouse(input: WarehouseInput): Promise<Warehouse>
 }
 
 export async function updateWarehouse(id: string, input: WarehouseInput): Promise<Warehouse> {
+  return masterWrite(
+    () => masterData.update<Warehouse>('warehouses', id, input),
+    db.warehouses,
+    () => updateWarehouseLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateWarehouseLocal(id: string, input: WarehouseInput): Promise<Warehouse> {
   await delay(160);
   const warehouse = db.warehouses.find((w) => w.id === id);
   if (!warehouse) throw new Error(`Warehouse ${id} not found`);
@@ -2670,6 +2772,15 @@ export async function updateWarehouse(id: string, input: WarehouseInput): Promis
 }
 
 export async function setWarehouseActive(id: string, active: boolean): Promise<Warehouse> {
+  return masterWrite(
+    () => masterData.setActive<Warehouse>('warehouses', id, active),
+    db.warehouses,
+    () => setWarehouseActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setWarehouseActiveLocal(id: string, active: boolean): Promise<Warehouse> {
   await delay(140);
   const warehouse = db.warehouses.find((w) => w.id === id);
   if (!warehouse) throw new Error(`Warehouse ${id} not found`);
@@ -2706,6 +2817,15 @@ export async function getCostCentres(): Promise<CostCentre[]> {
 }
 
 export async function createCostCentre(input: CostCentreInput): Promise<CostCentre> {
+  return masterWrite(
+    () => masterData.create<CostCentre>('cost-centres', input),
+    db.costCentres,
+    () => createCostCentreLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createCostCentreLocal(input: CostCentreInput): Promise<CostCentre> {
   await delay(180);
   const code = input.code.trim().toUpperCase();
   if (db.costCentres.some((cc) => cc.code === code)) throw new Error('duplicate-code');
@@ -2722,6 +2842,15 @@ export async function createCostCentre(input: CostCentreInput): Promise<CostCent
 }
 
 export async function updateCostCentre(id: string, input: CostCentreInput): Promise<CostCentre> {
+  return masterWrite(
+    () => masterData.update<CostCentre>('cost-centres', id, input),
+    db.costCentres,
+    () => updateCostCentreLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateCostCentreLocal(id: string, input: CostCentreInput): Promise<CostCentre> {
   await delay(160);
   const costCentre = db.costCentres.find((cc) => cc.id === id);
   if (!costCentre) throw new Error(`Cost centre ${id} not found`);
@@ -2732,6 +2861,15 @@ export async function updateCostCentre(id: string, input: CostCentreInput): Prom
 }
 
 export async function setCostCentreActive(id: string, active: boolean): Promise<CostCentre> {
+  return masterWrite(
+    () => masterData.setActive<CostCentre>('cost-centres', id, active),
+    db.costCentres,
+    () => setCostCentreActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setCostCentreActiveLocal(id: string, active: boolean): Promise<CostCentre> {
   await delay(140);
   const costCentre = db.costCentres.find((cc) => cc.id === id);
   if (!costCentre) throw new Error(`Cost centre ${id} not found`);
@@ -2777,6 +2915,15 @@ export async function getGoods(): Promise<Good[]> {
  *  Name is checked too, not just code: the whole point of this list is one spelling per
  *  product, and `Item.product` matches on the NAME, so two goods named the same defeat it. */
 export async function createGood(input: GoodInput): Promise<Good> {
+  return masterWrite(
+    () => masterData.create<Good>('goods', input),
+    db.goods,
+    () => createGoodLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createGoodLocal(input: GoodInput): Promise<Good> {
   await delay(180);
   const name = input.name.trim();
   if (!name) throw new Error('name-required');
@@ -2805,6 +2952,15 @@ export async function createGood(input: GoodInput): Promise<Good> {
 /** Guards IN ORDER: not-found → `name-required` → `duplicate-name` (excluding itself).
  *  `code` is immutable after create, matching `updateCostCentre`/`updateChargeCategory`. */
 export async function updateGood(id: string, input: GoodInput): Promise<Good> {
+  return masterWrite(
+    () => masterData.update<Good>('goods', id, input),
+    db.goods,
+    () => updateGoodLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateGoodLocal(id: string, input: GoodInput): Promise<Good> {
   await delay(160);
   const good = db.goods.find((g) => g.id === id);
   if (!good) throw new Error(`Good ${id} not found`);
@@ -2824,6 +2980,15 @@ export async function updateGood(id: string, input: GoodInput): Promise<Good> {
 }
 
 export async function setGoodActive(id: string, active: boolean): Promise<Good> {
+  return masterWrite(
+    () => masterData.setActive<Good>('goods', id, active),
+    db.goods,
+    () => setGoodActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setGoodActiveLocal(id: string, active: boolean): Promise<Good> {
   await delay(140);
   const good = db.goods.find((g) => g.id === id);
   if (!good) throw new Error(`Good ${id} not found`);
@@ -2913,6 +3078,15 @@ function normalizeFinancialAccount(
 }
 
 export async function createFinancialAccount(input: FinancialAccountInput): Promise<FinancialAccount> {
+  return masterWrite(
+    () => masterData.create<FinancialAccount>('financial-accounts', input),
+    db.financialAccounts,
+    () => createFinancialAccountLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createFinancialAccountLocal(input: FinancialAccountInput): Promise<FinancialAccount> {
   await delay(180);
   const account: FinancialAccount = {
     id: nextFinancialAccountId(),
@@ -2930,6 +3104,18 @@ export async function createFinancialAccount(input: FinancialAccountInput): Prom
  * changing it would silently reinterpret every transfer already booked against it.
  */
 export async function updateFinancialAccount(
+  id: string,
+  input: FinancialAccountInput,
+): Promise<FinancialAccount> {
+  return masterWrite(
+    () => masterData.update<FinancialAccount>('financial-accounts', id, input),
+    db.financialAccounts,
+    () => updateFinancialAccountLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateFinancialAccountLocal(
   id: string,
   input: FinancialAccountInput,
 ): Promise<FinancialAccount> {
@@ -2954,6 +3140,15 @@ export async function updateFinancialAccount(
 }
 
 export async function setFinancialAccountActive(id: string, active: boolean): Promise<FinancialAccount> {
+  return masterWrite(
+    () => masterData.setActive<FinancialAccount>('financial-accounts', id, active),
+    db.financialAccounts,
+    () => setFinancialAccountActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setFinancialAccountActiveLocal(id: string, active: boolean): Promise<FinancialAccount> {
   await delay(140);
   const account = db.financialAccounts.find((a) => a.id === id);
   if (!account) throw new Error(`Financial account ${id} not found`);
@@ -3003,6 +3198,15 @@ export async function getChargeCategories(
  *  and without them a blank code stores `code: ''` and the NEXT blank one reports `duplicate-code`
  *  ("this code is already in use") against an empty field. */
 export async function createChargeCategory(input: ChargeCategoryInput): Promise<ChargeCategory> {
+  return masterWrite(
+    () => masterData.create<ChargeCategory>('charge-categories', input),
+    db.chargeCategories,
+    () => createChargeCategoryLocal(input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function createChargeCategoryLocal(input: ChargeCategoryInput): Promise<ChargeCategory> {
   await delay(180);
   const name = input.name.trim();
   if (!name) throw new Error('name-required');
@@ -3029,6 +3233,15 @@ export async function createChargeCategory(input: ChargeCategoryInput): Promise<
  *  on edit and therefore ignored, but a blank one still rejects the whole payload rather than
  *  half-applying it — same reasoning as `createChargeCategory` above. */
 export async function updateChargeCategory(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
+  return masterWrite(
+    () => masterData.update<ChargeCategory>('charge-categories', id, input),
+    db.chargeCategories,
+    () => updateChargeCategoryLocal(id, input),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function updateChargeCategoryLocal(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
   await delay(160);
   const category = db.chargeCategories.find((c) => c.id === id);
   if (!category) throw new Error(`Charge category ${id} not found`);
@@ -3042,6 +3255,15 @@ export async function updateChargeCategory(id: string, input: ChargeCategoryInpu
 }
 
 export async function setChargeCategoryActive(id: string, active: boolean): Promise<ChargeCategory> {
+  return masterWrite(
+    () => masterData.setActive<ChargeCategory>('charge-categories', id, active),
+    db.chargeCategories,
+    () => setChargeCategoryActiveLocal(id, active),
+  );
+}
+
+/** The in-browser implementation, kept as the offline path — see `masterWrite`. */
+async function setChargeCategoryActiveLocal(id: string, active: boolean): Promise<ChargeCategory> {
   await delay(140);
   const category = db.chargeCategories.find((c) => c.id === id);
   if (!category) throw new Error(`Charge category ${id} not found`);

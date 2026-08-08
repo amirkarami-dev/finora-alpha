@@ -19,6 +19,20 @@ public sealed class ErrorCodeContractTests
     [
         // Authentication did not exist while the app ran on mock data.
         "invalid-credentials",
+
+        // Master data reached by id that is no longer there. The mock threw a sentence for these
+        // ("Warehouse wh-x not found") rather than a code, because in one browser the id could
+        // not go stale. On a server it can, so each gets a real code. The other four lists reuse
+        // codes api.ts already throws — person-not-found, cost-centre-not-found,
+        // category-not-found, bank-account-not-found — and only these three had none.
+        //
+        // Deliberately untranslated: nothing here is ever deleted, only deactivated, so a user
+        // can only reach one of these by holding a screen open across a database replacement. The
+        // master-data modals show their generic failure message for any code they do not name,
+        // which is the right thing to say about a record that has vanished.
+        "good-not-found",
+        "partner-not-found",
+        "warehouse-not-found",
     ];
 
     [Fact]

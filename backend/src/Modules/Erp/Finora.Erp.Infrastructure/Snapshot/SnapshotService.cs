@@ -21,13 +21,18 @@ public sealed class SnapshotService(ErpDbContext db)
 
         return new ErpSnapshot
         {
-            Customers = await db.Customers.AsNoTracking().ToListAsync(cancellationToken),
-            Partners = await db.Partners.AsNoTracking().ToListAsync(cancellationToken),
-            Warehouses = await db.Warehouses.AsNoTracking().ToListAsync(cancellationToken),
-            CostCentres = await db.CostCentres.AsNoTracking().ToListAsync(cancellationToken),
-            FinancialAccounts = await db.FinancialAccounts.AsNoTracking().ToListAsync(cancellationToken),
-            Goods = await db.Goods.AsNoTracking().ToListAsync(cancellationToken),
-            ChargeCategories = await db.ChargeCategories.AsNoTracking().ToListAsync(cancellationToken),
+            // The master-data lists are ordered because the BaseInfo tables render them in array
+            // order, with no sorter of their own. PostgreSQL puts an updated row wherever the new
+            // tuple landed in the heap, so without this an edited good jumps to the bottom of the
+            // list on the next load — and the master-data write endpoints, which return the whole
+            // list back, would disagree with the snapshot about where it belongs.
+            Customers = await db.Customers.AsNoTracking().OrderBy(c => c.Id).ToListAsync(cancellationToken),
+            Partners = await db.Partners.AsNoTracking().OrderBy(p => p.Id).ToListAsync(cancellationToken),
+            Warehouses = await db.Warehouses.AsNoTracking().OrderBy(w => w.Id).ToListAsync(cancellationToken),
+            CostCentres = await db.CostCentres.AsNoTracking().OrderBy(c => c.Id).ToListAsync(cancellationToken),
+            FinancialAccounts = await db.FinancialAccounts.AsNoTracking().OrderBy(a => a.Id).ToListAsync(cancellationToken),
+            Goods = await db.Goods.AsNoTracking().OrderBy(g => g.Id).ToListAsync(cancellationToken),
+            ChargeCategories = await db.ChargeCategories.AsNoTracking().OrderBy(c => c.Id).ToListAsync(cancellationToken),
             Cheques = await db.Cheques.AsNoTracking().ToListAsync(cancellationToken),
             ExchangeGainLosses = await db.ExchangeGainLosses.AsNoTracking().ToListAsync(cancellationToken),
 

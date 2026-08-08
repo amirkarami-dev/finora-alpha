@@ -35,6 +35,7 @@ app.MapScalarApiReference(options => options.WithTitle("Finora API"));
 app.MapMetaEndpoints();
 app.MapIdentityEndpoints();
 app.MapErpEndpoints();
+app.MapMasterDataEndpoints();
 
 // Off unless a test switches it on. See DiagnosticEndpoints for why the seam exists at all.
 if (app.Configuration.GetValue<bool>("Api:EnableDiagnosticEndpoints"))
