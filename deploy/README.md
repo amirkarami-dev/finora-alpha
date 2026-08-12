@@ -93,3 +93,37 @@ docker compose run --rm migrator
 - **`Identity:AllowDemoPasswords` is off**, so the four published demo passwords do not work.
 - **The login page does not list any accounts.** That block, and the prefilled credentials, are
   behind `import.meta.env.DEV` and are absent from the production bundle.
+
+## Backups
+
+`deploy/backup/pg-backup.sh` lives on the server at `/data/backups/pg-backup.sh` and runs from
+cron at 02:15 UTC nightly:
+
+```
+15 2 * * * /data/backups/pg-backup.sh >/dev/null 2>&1
+```
+
+It dumps `finora` and `finora2` with `pg_dump -Fc` into `/data/backups/postgres/`, keeps 30 days,
+and appends a line per database to `backup.log`. It runs from the host and reaches into the
+`postgres` container, so it needs no client installed and survives the container being recreated.
+The password is read from the stack's `.env` at run time and appears nowhere in the script.
+
+Two things it does that a one-line `pg_dump` in cron does not. Each dump is written to `.part`
+and renamed only on success, so an interrupted run cannot leave a plausible-looking file that
+becomes the newest "backup". And each finished dump is read back with `pg_restore --list` — a
+truncated or empty file is caught that night rather than on the night it is needed.
+
+**Restoring:**
+
+```bash
+docker exec -e PGPASSWORD="$PGPW" postgres createdb -U postgres finora_restored
+cat /data/backups/postgres/finora-YYYYMMDD-HHMMSS.dump   | docker exec -i -e PGPASSWORD="$PGPW" postgres pg_restore -U postgres -d finora_restored --no-owner
+```
+
+Restore into a new database first and compare it against the live one; point the stack at it only
+once you are satisfied. This was exercised end to end when the script was installed — the restored
+copy matched the live database on every table count.
+
+**What this does not protect against.** The dumps sit on the same disk as the database they came
+from. That covers a dropped table, a bad migration or a mistaken delete; it does not cover losing
+the volume or the machine. An off-box copy is the missing half.
