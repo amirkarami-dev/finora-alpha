@@ -163,14 +163,21 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      # Same-origin only. There is no `api2.metal-uae.com`: the second company's API is reachable
-      # exclusively through its own front end, which is one fewer public surface than the first
-      # instance has.
+      # Mirrors the first instance exactly, with a 2 on every name: a public host for reaching the
+      # API directly, and the same-origin route the SPA actually uses.
       - "traefik.http.routers.metal-erp2-api.entrypoints=websecure"
-      - "traefik.http.routers.metal-erp2-api.rule=Host(`erp2.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp2-api.rule=Host(`api2.metal-uae.com`)"
       - "traefik.http.routers.metal-erp2-api.tls=true"
-      - "traefik.http.routers.metal-erp2-api.priority=100"
       - "traefik.http.services.metal-erp2-api.loadbalancer.server.port=8080"
+      # The route the second company's front end uses. Without it, nginx answers erp2's own
+      # `/api` calls with index.html and nobody can sign in — and it is what keeps the session
+      # working, since the cookie is host-scoped and one set by api2.metal-uae.com would never
+      # be sent by a browser sitting on erp2.metal-uae.com.
+      - "traefik.http.routers.metal-erp2-api-sameorigin.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.rule=Host(`erp2.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.tls=true"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.service=metal-erp2-api"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.priority=100"
 
   migrator2:
     image: metal-erp-migrator:latest

@@ -7,7 +7,7 @@ One compose stack at `/data/apps/metal-erp` on 185.206.94.116 serves all three d
 | `web` | `metal-erp-web` — nginx + the built SPA | erp.metal-uae.com **and** erp2.metal-uae.com | — |
 | `land` | `metal-uae-web` — Next standalone | metal-uae.com (+ www → 301) | — |
 | `api` | `metal-erp-api` — .NET 10 | api.metal-uae.com, erp.metal-uae.com/api | `finora` |
-| `api2` | same image | erp2.metal-uae.com/api | `finora2` |
+| `api2` | same image | api2.metal-uae.com, erp2.metal-uae.com/api | `finora2` |
 | `migrator` / `migrator2` | run once, then exit | — | one each |
 
 ## Two companies, one application
@@ -21,6 +21,11 @@ What was deliberately **not** done: one API choosing a database from the `Host` 
 real code — tenant resolution, per-request connections, per-tenant migrations and seeding — and it
 fails silently: one bug and one company's balances render under the other's name. The separate
 process costs about 90 MB, which is what the first API actually uses.
+
+Everything the second instance owns carries a `2`: database `finora2`, services `api2` and
+`migrator2`, containers `metal-erp2-*`, volume `api2-keys`, routers `metal-erp2-*`, and the hosts
+`erp2.metal-uae.com` and `api2.metal-uae.com`. The two service blocks are otherwise identical, so
+a difference between them is always a decision rather than a leftover.
 
 Sessions cannot cross: the session cookie is host-scoped, so signing in to `erp` grants nothing on
 `erp2`. Each database seeds its own four accounts with their own passwords.
