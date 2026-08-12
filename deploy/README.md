@@ -2,12 +2,31 @@
 
 One compose stack at `/data/apps/metal-erp` on 185.206.94.116 serves all three deployables:
 
-| Service | Image | Host |
-|---|---|---|
-| `web` | `metal-erp-web` — nginx + the built SPA | erp.metal-uae.com |
-| `land` | `metal-uae-web` — Next standalone | metal-uae.com (+ www → 301) |
-| `api` | `metal-erp-api` — .NET 10 | api.metal-uae.com |
-| `migrator` | `metal-erp-migrator` — runs once, then exits | — |
+| Service | Image | Host | Database |
+|---|---|---|---|
+| `web` | `metal-erp-web` — nginx + the built SPA | erp.metal-uae.com **and** erp2.metal-uae.com | — |
+| `land` | `metal-uae-web` — Next standalone | metal-uae.com (+ www → 301) | — |
+| `api` | `metal-erp-api` — .NET 10 | api.metal-uae.com, erp.metal-uae.com/api | `finora` |
+| `api2` | same image | erp2.metal-uae.com/api | `finora2` |
+| `migrator` / `migrator2` | run once, then exit | — | one each |
+
+## Two companies, one application
+
+The two instances share the front-end container. The bundle asks for `/api/...` relative, so it
+does not know which host it is on and needs no build of its own — Traefik sends each host's `/api`
+to a different API process, and each process has its own database. One image to keep current, and
+the two front ends cannot drift apart.
+
+What was deliberately **not** done: one API choosing a database from the `Host` header. That is
+real code — tenant resolution, per-request connections, per-tenant migrations and seeding — and it
+fails silently: one bug and one company's balances render under the other's name. The separate
+process costs about 90 MB, which is what the first API actually uses.
+
+Sessions cannot cross: the session cookie is host-scoped, so signing in to `erp` grants nothing on
+`erp2`. Each database seeds its own four accounts with their own passwords.
+
+**Both instances run the same image tag on purpose.** They are two production tenants; a version
+skew between them would be an accident, never a decision. `docker compose up -d` updates both.
 
 Traefik uses `tls=true`, not the `myresolver` ACME resolver: that resolver runs DNS-01 against
 ArvanCloud, which is not authoritative for these Cloudflare-hosted zones.

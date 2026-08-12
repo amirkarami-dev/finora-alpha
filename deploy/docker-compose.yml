@@ -29,6 +29,14 @@ services:
       - "traefik.http.routers.metal-erp.rule=Host(`erp.metal-uae.com`)"
       - "traefik.http.routers.metal-erp.tls=true"
       - "traefik.http.services.metal-erp.loadbalancer.server.port=80"
+      # The second company's front end is the SAME container. The bundle asks for `/api/...`
+      # relative, so it has no idea which host it is on and needs no build of its own — the two
+      # instances differ only in which API answers that path, below. One container, one image to
+      # keep current, and no chance of the two front ends drifting apart.
+      - "traefik.http.routers.metal-erp2.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2.rule=Host(`erp2.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp2.tls=true"
+      - "traefik.http.routers.metal-erp2.service=metal-erp"
 
   # ── Corporate site — metal-uae.com ───────────────────────────────────────────────
   land:
@@ -126,8 +134,56 @@ services:
     # file, which compose merges automatically. See deploy/README.md.
     networks: [postgres]
 
+  # ── Second company — erp2.metal-uae.com ─────────────────────────────────────────
+  #
+  # A separate API process against a separate database, not one process choosing a database per
+  # request. Picking the tenant from the Host header would be real code — resolution, per-request
+  # connections, per-tenant migrations and seeding — and its failure mode is silent: one bug and
+  # one company's balances render under the other's name. On a ledger that is the worst thing
+  # that can happen. This costs about 90 MB of memory instead, which is what the first API
+  # actually uses.
+  #
+  # Both instances deliberately share the compose file and therefore the image tag: they are two
+  # production tenants, and a version skew between them would be an accident, never a decision.
+  api2:
+    image: metal-erp-api:latest
+    container_name: metal-erp2-api
+    restart: unless-stopped
+    depends_on:
+      migrator2:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora2;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      # Its own keys. Sessions cannot cross anyway — the cookie is host-scoped — but two tenants
+      # sharing a signing key is a coupling with no upside.
+      - api2-keys:/keys
+    networks: [traefik, postgres]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Same-origin only. There is no `api2.metal-uae.com`: the second company's API is reachable
+      # exclusively through its own front end, which is one fewer public surface than the first
+      # instance has.
+      - "traefik.http.routers.metal-erp2-api.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2-api.rule=Host(`erp2.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp2-api.tls=true"
+      - "traefik.http.routers.metal-erp2-api.priority=100"
+      - "traefik.http.services.metal-erp2-api.loadbalancer.server.port=8080"
+
+  migrator2:
+    image: metal-erp-migrator:latest
+    container_name: metal-erp2-migrator
+    restart: "no"
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora2;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    # Its own seeded accounts, with their own passwords, in the same uncommitted override file.
+    networks: [postgres]
+
 volumes:
   api-keys:
+  api2-keys:
 
 networks:
   traefik:
