@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BuildingBlocks\Finora.BuildingBlocks.Domain\Finora.BuildingBlocks.Domain.csproj" />
     <ProjectReference Include="..\..\src\Modules\Erp\Finora.Erp.Domain\Finora.Erp.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Erp\Finora.Erp.Infrastructure\Finora.Erp.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

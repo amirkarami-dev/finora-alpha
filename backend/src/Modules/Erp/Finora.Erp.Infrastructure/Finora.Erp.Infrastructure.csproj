@@ -9,7 +9,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   </ItemGroup>
 
-  <PropertyGroup>
-  </PropertyGroup>
+  <ItemGroup>
+    <!-- The money arithmetic is internal because nothing outside this module should call it, but
+         its rules are exactly the ones worth testing in isolation, with a hand-built list and no
+         database in the way. -->
+    <InternalsVisibleTo Include="Finora.UnitTests" />
+  </ItemGroup>
 
 </Project>
