@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using Finora.Erp.Infrastructure.MasterData;
+using Finora.Erp.Infrastructure.Trade;
 using Finora.Erp.Infrastructure.Snapshot;
 
 namespace Finora.Erp.Infrastructure;
@@ -37,6 +38,7 @@ public static class ErpModule
 
         builder.Services.AddScoped<SnapshotService>();
         builder.Services.AddScoped<MasterDataService>();
+        builder.Services.AddScoped<ContractService>();
 
         return builder;
     }

@@ -61,6 +61,7 @@ import type {
 import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
 import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { masterData, type MasterDataResult } from '@/services/masterData';
+import { contractsApi, type ContractResult } from '@/services/contracts';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -114,6 +115,27 @@ async function masterWrite<T>(
   const { entity, all } = await send();
   collection.length = 0;
   collection.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
+/**
+ * A contract write. Always the server — there is no local path.
+ *
+ * <p>Master data keeps an offline fallback because a warehouse invented in one browser is a
+ * nuisance. A contract invented in one browser is the bug this replaces, so when the API cannot be
+ * reached the save fails where the user can see it rather than succeeding somewhere only that
+ * machine can read.</p>
+ *
+ * <p>The whole contract list comes back and replaces the store: a new line changes its contract's
+ * totals and the pages derive their rows from the set, so patching in one record would leave the
+ * browser computing from a mixture of old and new.</p>
+ */
+async function contractWrite(send: () => Promise<ContractResult>): Promise<Contract> {
+  const { entity, all } = await send();
+  db.contracts.length = 0;
+  db.contracts.push(...all);
   reindex();
   persistDb({ alreadySynced: true });
   return entity;
@@ -997,65 +1019,49 @@ export async function getProductNames(): Promise<string[]> {
   return [...byLower.values()].sort((a, b) => a.localeCompare(b));
 }
 
-function nextContractId(customerCode: string, dateIso: string): string {
-  const base = `${customerCode}-P-${dayjs(dateIso).format('YYMMDD')}`;
-  const taken = new Set(db.contracts.map((c) => c.id));
-  for (let n = 100; n <= 999; n++) {
-    const candidate = `${base}${n}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${base}${db.contracts.length + 1}`;
-}
 
 export async function createContract(input: ContractInput): Promise<ContractRow> {
-  await delay(180);
-  const customer = customerById.get(input.customerId);
-  const contract: Contract = {
-    id: nextContractId(customer?.code ?? 'XX', input.date),
-    customerId: input.customerId,
-    contractType: input.contractType ?? 'SELL',
-    date: input.date,
-    destination: input.destination,
-    status: input.status,
-    notes: input.notes ?? '',
-    items: [],
-  };
-  db.contracts.push(contract);
-  reindex();
-  persistDb();
+  const contract = await contractWrite(() =>
+    contractsApi.create({
+      customerId: input.customerId,
+      date: input.date,
+      destination: input.destination,
+      status: input.status,
+      notes: input.notes,
+      contractType: input.contractType,
+    }),
+  );
   return buildContractRows().find((c) => c.id === contract.id)!;
 }
 
 export async function updateContract(id: string, input: ContractInput): Promise<ContractRow> {
-  await delay(180);
-  const contract = db.contracts.find((c) => c.id === id);
-  if (!contract) throw new Error(`Contract ${id} not found`);
-  contract.customerId = input.customerId;
-  contract.date = input.date;
-  contract.destination = input.destination;
-  contract.status = input.status;
-  contract.notes = input.notes ?? '';
-  reindex();
-  persistDb();
+  // The server keeps `customerId` and `contractType` as they were: an invoice copies its customer
+  // from the contract when it is raised, so moving the contract would orphan every document
+  // against it. Both are still sent, because the form posts the whole record back.
+  await contractWrite(() =>
+    contractsApi.update(id, {
+      customerId: input.customerId,
+      date: input.date,
+      destination: input.destination,
+      status: input.status,
+      notes: input.notes,
+      contractType: input.contractType,
+    }),
+  );
   return buildContractRows().find((c) => c.id === id)!;
 }
 
-function nextItemId(contract: Contract): string {
-  let max = 0;
-  for (const item of contract.items) {
-    const match = /-I(\d+)$/.exec(item.id);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `${contract.id}-I${max + 1}`;
-}
 
 export async function createItem(contractId: string, input: ItemInput): Promise<Item> {
-  await delay(180);
-  const contract = db.contracts.find((c) => c.id === contractId);
-  if (!contract) throw new Error(`Contract ${contractId} not found`);
-  const item: Item = {
-    id: nextItemId(contract),
-    contractId,
+  const contract = await contractWrite(() => contractsApi.addItem(contractId, toItemPayload(input)));
+  // The server mints the id, so the new line is the one this contract did not have before.
+  return contract.items[contract.items.length - 1];
+}
+
+/** The wire shape for a goods line. `partners` is the whole truth about who shares it, never a
+ *  patch — the server replaces the set with whatever arrives. */
+function toItemPayload(input: ItemInput) {
+  return {
     product: input.product,
     quantityMt: input.quantityMt,
     lmePercent: input.lmePercent,
@@ -1064,44 +1070,22 @@ export async function createItem(contractId: string, input: ItemInput): Promise<
     premium: input.premium,
     incoterm: input.incoterm,
     status: input.status,
-    notes: input.notes ?? '',
-    // A brand-new line has shipped nothing yet.
-    remainingMt: input.quantityMt,
-    partners: input.partners ?? [],
+    notes: input.notes,
+    partners: input.partners,
   };
-  contract.items.push(item);
-  reindex();
-  persistDb();
-  return item;
 }
 
 export async function updateItem(itemId: string, input: ItemInput): Promise<Item> {
-  await delay(180);
-  let target: Item | undefined;
-  for (const contract of db.contracts) {
-    const found = contract.items.find((i) => i.id === itemId);
-    if (found) {
-      target = found;
-      break;
-    }
-  }
-  if (!target) throw new Error(`Item ${itemId} not found`);
-  target.product = input.product;
-  target.quantityMt = input.quantityMt;
-  target.lmePercent = input.lmePercent;
-  target.lmeFixed = input.lmeFixed;
-  target.fixedLmePrice = input.fixedLmePrice;
-  target.premium = input.premium;
-  target.incoterm = input.incoterm;
-  target.status = input.status;
-  target.notes = input.notes ?? '';
-  target.partners = input.partners ?? target.partners ?? [];
-  // Remaining respects MT already invoiced against this item (spec §5) — NOT containers,
-  // which carry no shipped-quantity meaning since the schema-v3 logistics reshape.
-  target.remainingMt = Math.round(Math.max(input.quantityMt - shippedMtForItem(itemId), 0) * 1000) / 1000;
-  reindex();
-  persistDb();
-  return target;
+  // The caller knows only the line, but the route is nested under its contract — the id carries
+  // the parent (`AM-P-261115100-I2`), yet deriving it by string surgery would break the moment a
+  // customer code contains the separator, so it is looked up instead.
+  const owner = db.contracts.find((c) => c.items.some((i) => i.id === itemId));
+  if (!owner) throw new Error(`Item ${itemId} not found`);
+
+  const contract = await contractWrite(() =>
+    contractsApi.updateItem(owner.id, itemId, toItemPayload(input)),
+  );
+  return contract.items.find((i) => i.id === itemId)!;
 }
 
 /* ----------------------------- Containers (mutations) --------------- *

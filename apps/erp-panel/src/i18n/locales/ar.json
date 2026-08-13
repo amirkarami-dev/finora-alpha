@@ -263,7 +263,14 @@
     "created": "تم إنشاء العقد",
     "updated": "تم تحديث العقد",
     "selectCustomer": "اختر عميلاً",
-    "destinationPlaceholder": "مثال: نينغبو"
+    "destinationPlaceholder": "مثال: نينغبو",
+    "errors": {
+      "contract-not-found": "لم يعد هذا العقد موجودًا",
+      "contract-item-not-found": "لم يعد بند البضاعة هذا موجودًا",
+      "invalid-status": "هذه الحالة غير صالحة",
+      "invalid-contract-type": "نوع العقد هذا غير صالح",
+      "invalid-incoterm": "شرط التسليم هذا غير صالح"
+    }
   },
   "items": {
     "title": "البضائع",

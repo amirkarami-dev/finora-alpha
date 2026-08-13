@@ -263,7 +263,14 @@
     "created": "قرارداد ایجاد شد",
     "updated": "قرارداد به‌روزرسانی شد",
     "selectCustomer": "یک مشتری انتخاب کنید",
-    "destinationPlaceholder": "مثال: نینگبو"
+    "destinationPlaceholder": "مثال: نینگبو",
+    "errors": {
+      "contract-not-found": "این قرارداد دیگر وجود ندارد",
+      "contract-item-not-found": "این ردیف کالا دیگر وجود ندارد",
+      "invalid-status": "این وضعیت معتبر نیست",
+      "invalid-contract-type": "این نوع قرارداد معتبر نیست",
+      "invalid-incoterm": "این شرط تحویل معتبر نیست"
+    }
   },
   "items": {
     "title": "کالاها",

@@ -263,7 +263,14 @@
     "created": "Contract created",
     "updated": "Contract updated",
     "selectCustomer": "Select a customer",
-    "destinationPlaceholder": "e.g. NINGBO"
+    "destinationPlaceholder": "e.g. NINGBO",
+    "errors": {
+      "contract-not-found": "That contract no longer exists",
+      "contract-item-not-found": "That goods line no longer exists",
+      "invalid-status": "That status is not valid",
+      "invalid-contract-type": "That contract type is not valid",
+      "invalid-incoterm": "That incoterm is not valid"
+    }
   },
   "items": {
     "title": "Goods",

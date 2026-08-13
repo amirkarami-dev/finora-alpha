@@ -46,6 +46,16 @@ public sealed class ErrorCodeContractTests
         "current-password-incorrect",
         "cannot-deactivate-self",
         "cannot-change-own-role",
+
+        // Contracts. The browser threw sentences here ("Contract X not found") rather than codes,
+        // because in one tab an id could not go stale and an enum could not be anything but one
+        // of its own values. Over HTTP both can, so each gets a code the form can act on.
+        // Translated under `contracts.errors.*` in all three locale files.
+        "contract-not-found",
+        "contract-item-not-found",
+        "invalid-status",
+        "invalid-contract-type",
+        "invalid-incoterm",
     ];
 
     [Fact]
