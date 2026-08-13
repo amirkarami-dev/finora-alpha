@@ -36,7 +36,11 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.Currency).HasEnumColumn();
         builder.Property(p => p.Method).HasEnumColumn();
         builder.Property(p => p.Direction).HasEnumColumn();
-        builder.Property(p => p.Type).HasEnumColumn();
+        // Through the PROPERTY, not the backing field. `Type` derives itself from `InvoiceId`
+        // when nobody set it, and EF's default field access reads the null backing field straight
+        // past that getter — writing the enum's zero value, INVOICE, and inverting the rule for
+        // every payment that arrives without a type.
+        builder.Property(p => p.Type).HasEnumColumn().UsePropertyAccessMode(PropertyAccessMode.Property);
         builder.Property(p => p.Status).HasEnumColumn();
         builder.Property(p => p.FxRate).HasRateColumn();
         builder.Property(p => p.Reference).HasMaxLength(200);

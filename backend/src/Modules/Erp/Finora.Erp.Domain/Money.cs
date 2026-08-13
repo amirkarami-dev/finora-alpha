@@ -46,8 +46,39 @@ public sealed class Payment
     /// </summary>
     public MoneyDirection Direction { get; set; } = MoneyDirection.IN;
 
-    public PaymentType Type { get; init; } = PaymentType.INVOICE;
-    public PaymentStatus Status { get; set; } = PaymentStatus.DRAFT;
+    private PaymentType? _type;
+
+    /// <summary>
+    /// Whether this settles a document or is money on account.
+    ///
+    /// <para>
+    /// Derived when the caller does not say, exactly as <c>api.ts</c> derives it:
+    /// <c>p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL')</c>. A fixed default of INVOICE reads
+    /// harmless and flips a validation branch — money on account would start demanding a document
+    /// on every line (<c>invoice-required</c>) when the rule is that it must refuse one
+    /// (<c>invoice-not-allowed</c>).
+    /// </para>
+    /// </summary>
+    public PaymentType Type
+    {
+        get => _type ?? (InvoiceId is null ? PaymentType.GENERAL : PaymentType.INVOICE);
+        set => _type = value;
+    }
+
+    /// <summary>
+    /// CONFIRMED unless someone says otherwise, because that is what a payment carrying no status
+    /// means.
+    ///
+    /// <para>
+    /// The single-shot flow writes no status at all — <c>status: input.type ? 'DRAFT' : undefined</c>
+    /// — and <c>api.ts</c> reads the absence as CONFIRMED. DRAFT is both this enum's zero value and
+    /// the obvious-looking initializer, so a key the browser never wrote lands there twice over,
+    /// and a DRAFT payment is skipped by every balance in the application. The row survives; the
+    /// money leaves the customer's balance, the ageing buckets, the account movement report and
+    /// the portal, without an error anywhere.
+    /// </para>
+    /// </summary>
+    public PaymentStatus Status { get; set; } = PaymentStatus.CONFIRMED;
 
     public ICollection<PaymentItem> Items { get; init; } = [];
 }
