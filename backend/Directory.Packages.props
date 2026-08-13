@@ -53,6 +53,11 @@
     <!-- Enforces the module boundaries: a rule that is only written down is a rule that drifts. -->
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <!-- Pinned above what Testcontainers 4.13.0 drags in. Its SSH.NET 2025.1.0 carries a high
+         severity advisory (GHSA-q939-rpr3-3284) and there is no newer Testcontainers to take,
+         so the transitive dependency is lifted to a patched version here. Only the integration
+         tests reference it; nothing shipped touches SSH. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
   </ItemGroup>
 </Project>
