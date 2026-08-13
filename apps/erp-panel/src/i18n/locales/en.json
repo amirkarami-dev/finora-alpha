@@ -1383,5 +1383,11 @@
     "tabStatus": "Build status",
     "tabDocs": "Documentation",
     "openInTab": "Open in new tab"
+  },
+  "sync": {
+    "refusedTitle": "Some changes are not being saved to the server",
+    "refusedBody": "Payments, cheques, expenses, revenues, claims, transfers and warehouse documents do not yet save on this server. Anything you enter for them stays on this device only, and will be lost if you clear your browser data. Customers, contracts and invoices are saved normally.",
+    "failingTitle": "Could not reach the server",
+    "failingBody": "Your recent changes are saved on this device but have not reached the server yet. They will be sent again automatically. Do not clear your browser data until this message disappears."
   }
 }

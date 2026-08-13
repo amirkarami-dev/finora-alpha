@@ -3,6 +3,7 @@ import { Drawer, Grid, Layout, theme } from 'antd';
 import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarNav } from './SidebarNav';
 import { AppHeader } from './AppHeader';
+import { SyncAlert } from './SyncAlert';
 import { useUiStore } from '@/store/useUiStore';
 
 const { Sider, Content } = Layout;
@@ -80,6 +81,7 @@ export function AppLayout() {
             margin: '0 auto',
           }}
         >
+          <SyncAlert />
           <Outlet />
         </Content>
       </Layout>

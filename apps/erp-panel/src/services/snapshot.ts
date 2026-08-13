@@ -1,6 +1,6 @@
 import { db, applySnapshot, onPersist, persistDb, resetDb, type Db } from '@/mock/data';
 import { buildSampleData } from '@/mock/sampleData';
-import { request } from '@/services/http';
+import { ApiError, request } from '@/services/http';
 
 /**
  * The whole ERP dataset, moved between the browser and the server in one piece.
@@ -49,11 +49,48 @@ export function schedulePush(): void {
   if (!serverBacked) return;
   clearTimeout(pending);
   pending = setTimeout(() => {
-    void pushSnapshot().catch(() => {
-      // Nothing useful to do here: the edit is already in localStorage, and the next successful
-      // push carries it. Surfacing a toast per failed background sync would be noise.
-    });
+    void pushSnapshot()
+      .then(() => setSyncState({ kind: 'ok' }))
+      .catch((error: unknown) => {
+        const code = error instanceof ApiError ? error.message : 'network';
+        // A 403 is not a hiccup. `PUT /api/erp/snapshot` is gated on `Erp:AllowDestructiveAdmin`,
+        // which production leaves off, so retrying changes nothing and the edit will NEVER
+        // reach the database from here — it needs its own endpoint. Anything else may pass.
+        const status = error instanceof ApiError ? error.status : 0;
+        setSyncState({ kind: status === 403 ? 'refused' : 'failing', code });
+      });
   }, 800);
+}
+
+/**
+ * Whether the writes that still have no endpoint of their own are reaching the server.
+ *
+ * <p>`refused` is the honest and permanent one: the whole-dataset push is disabled on this
+ * environment, so those edits live in this browser's localStorage and nowhere else.</p>
+ */
+export type SyncState =
+  | { kind: 'ok' }
+  | { kind: 'failing'; code: string }
+  | { kind: 'refused'; code: string };
+
+let syncState: SyncState = { kind: 'ok' };
+const syncListeners = new Set<(state: SyncState) => void>();
+
+function setSyncState(next: SyncState): void {
+  // Only on a real change: this fires from a debounced background task, and re-rendering the
+  // whole shell on every successful push would be a needless render per edit.
+  if (next.kind === syncState.kind) return;
+  syncState = next;
+  for (const listener of syncListeners) listener(next);
+}
+
+export function getSyncState(): SyncState {
+  return syncState;
+}
+
+export function onSyncStateChange(listener: (state: SyncState) => void): () => void {
+  syncListeners.add(listener);
+  return () => syncListeners.delete(listener);
 }
 
 /** True once the server has answered — the app only pushes to a backend it actually reached. */
