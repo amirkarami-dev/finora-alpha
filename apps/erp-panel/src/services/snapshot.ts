@@ -80,6 +80,21 @@ export async function loadSampleData(): Promise<void> {
   window.location.reload();
 }
 
+/**
+ * Empties the store without telling the server.
+ *
+ * <p>Used when a session ends. The previous user's dataset must not survive into the next one:
+ * the server decides how much of it each role may see — a portal customer receives only their own
+ * affairs — and a full dataset left behind in memory and localStorage would hand the next person
+ * to sign in on this browser everything the last one could read.</p>
+ */
+export function clearHydratedData(): void {
+  serverBacked = false;
+  applySnapshot(EMPTY);
+  // Marked as already synced: this is a local clear, not an instruction to empty the database.
+  persistDb({ alreadySynced: true });
+}
+
 /** Wipes everything — the app starts empty again. */
 export async function resetData(): Promise<void> {
   if (isServerBacked()) {

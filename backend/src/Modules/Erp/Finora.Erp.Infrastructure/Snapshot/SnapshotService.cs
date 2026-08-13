@@ -73,6 +73,80 @@ public sealed class SnapshotService(ErpDbContext db)
     }
 
     /// <summary>
+    /// The same snapshot, cut down to one customer's own affairs.
+    ///
+    /// <para>
+    /// What a customer signing in to the portal is allowed to load. The full read above returns
+    /// every contract, invoice and payment on the desk, and until this existed the portal was
+    /// handed all of it and filtered client-side — which is no filter at all, since the response
+    /// had already crossed the wire.
+    /// </para>
+    ///
+    /// <para>
+    /// Everything absent here is absent on purpose. Cost-share partners would disclose who the
+    /// company splits its margin with; charge documents, claims, cheques, transfers and exchange
+    /// entries are what the desk earns and spends on the deal, which is precisely what the other
+    /// side of it should not see. Master data is left out because the portal renders none of it.
+    /// </para>
+    /// </summary>
+    public async Task<ErpSnapshot> ReadForCustomerAsync(
+        string customerId, CancellationToken cancellationToken = default)
+    {
+        var fxRate = await FxRateAsync(cancellationToken);
+
+        var contracts = await db.Contracts.AsNoTracking()
+            .Where(c => c.CustomerId == customerId)
+            .Include(c => c.Items)          // deliberately NOT .ThenInclude(i => i.Partners)
+            .OrderBy(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        var itemIds = contracts.SelectMany(c => c.Items).Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
+
+        var containers = await db.Containers.AsNoTracking()
+            .Where(c => c.Goods.Any(g => itemIds.Contains(g.ContractItemId)))
+            .Include(c => c.Goods)
+            .OrderBy(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        return new ErpSnapshot
+        {
+            Customers = await db.Customers.AsNoTracking()
+                .Where(c => c.Id == customerId)
+                .ToListAsync(cancellationToken),
+
+            Contracts = contracts,
+            Containers = containers,
+
+            Invoices = await db.Invoices.AsNoTracking()
+                .Where(i => i.CustomerId == customerId)
+                .Include(i => i.Items)
+                .OrderBy(i => i.Id)
+                .ToListAsync(cancellationToken),
+
+            Payments = await db.Payments.AsNoTracking()
+                .Where(p => p.CustomerId == customerId)
+                .Include(p => p.Items).ThenInclude(i => i.Allocations)
+                .OrderBy(p => p.Id)
+                .ToListAsync(cancellationToken),
+
+            FxRate = fxRate,
+        };
+    }
+
+    private async Task<decimal> FxRateAsync(CancellationToken cancellationToken)
+    {
+        var stored = await db.Settings
+            .AsNoTracking()
+            .Where(s => s.Key == FxRateKey)
+            .Select(s => s.Value)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return stored is null
+            ? 3.6725m
+            : decimal.Parse(stored, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// Replaces everything with the given dataset, in one transaction.
     ///
     /// <para>

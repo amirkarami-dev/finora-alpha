@@ -3,6 +3,7 @@ import type { Role } from '@/types';
 import type { RouteKey } from '@/config/roles';
 import { normalizeRole } from '@/config/roles';
 import { identityApi, type SessionUser } from '@/services/identity';
+import { clearHydratedData, hydrateFromServer, setServerBacked } from '@/services/snapshot';
 
 export interface AuthUser {
   id: string;
@@ -59,6 +60,18 @@ export const useAuthStore = create<AuthState>()((set) => ({
       isAuthenticated: true,
       ready: true,
     });
+
+    // Load the data for THIS session, now that there is one.
+    //
+    // The app also hydrates on mount, but on a device where nobody is signed in yet that request
+    // is answered 401 and the store stays empty — so without this line, signing in showed an
+    // empty app until the page was reloaded by hand. Worse, `serverBacked` stayed false, so
+    // anything entered on that device went to the browser alone and never reached the server:
+    // two devices quietly disagreeing, each convinced it was right.
+    //
+    // It also replaces whatever the previous session left behind, which matters because the
+    // server tailors the snapshot to the role asking for it.
+    setServerBacked(await hydrateFromServer());
     return user;
   },
 
@@ -69,6 +82,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
       // Clear locally even if the call failed: the user asked to be signed out, and leaving
       // them looking signed in because the network blipped is the wrong way to be wrong.
       set({ user: null, permissions: [], home: '/app', isAuthenticated: false, ready: true });
+      // The business data goes too. Ending the session but leaving the dataset would let the
+      // next person to sign in on this browser read what the last one could.
+      clearHydratedData();
     }
   },
 
