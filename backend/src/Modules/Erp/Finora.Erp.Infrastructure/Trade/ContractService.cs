@@ -100,14 +100,14 @@ public sealed class ContractService(ErpDbContext db)
             Id = NextItemId(contract),
             ContractId = contract.Id,
             Product = input.Product.Trim(),
-            // A line that has shipped nothing has all of itself remaining. Once invoices move
-            // server-side this becomes quantity minus what the chain leaves claim.
+            // Filled by the sweep below, from what the documents actually claim.
             RemainingMt = input.QuantityMt,
         };
 
         Apply(item, input);
         contract.Items.Add(item);
         await db.SaveChangesAsync(cancellationToken);
+        await InvoiceService.RecomputeAllRemainingAsync(db, cancellationToken);
 
         return await SingleAsync(contract.Id, cancellationToken);
     }
@@ -116,11 +116,9 @@ public sealed class ContractService(ErpDbContext db)
     /// Edits a goods line.
     ///
     /// <para>
-    /// The browser refuses nothing here — it will happily shrink a line below the quantity already
-    /// invoiced against it and floor the remainder at zero, over-committing the contract in
-    /// silence. That guard is not reproduced here because it cannot yet be evaluated: invoices are
-    /// still browser-side, so this server has nothing to measure "already invoiced" against. It
-    /// belongs with the invoice work, where the number is knowable.
+    /// Shrinking below what documents have already claimed is refused. The browser allows it and
+    /// floors the remainder at zero, which over-commits the contract in silence — the guard reads
+    /// healthy while more tonnes are invoiced than the line holds.
     /// </para>
     /// </summary>
     public async Task<Contract> UpdateItemAsync(
@@ -135,11 +133,19 @@ public sealed class ContractService(ErpDbContext db)
 
         await RequirePartnersExistAsync(input.Partners, cancellationToken);
 
+        var claimed = await ClaimedMtAsync(item.Id, cancellationToken);
+        if (Rounding.Quantity(input.QuantityMt) < claimed)
+        {
+            throw new DomainException(Codes.BelowInvoiced, new Dictionary<string, object?>
+            {
+                ["product"] = item.Product,
+                ["requestedMt"] = Rounding.Quantity(input.QuantityMt),
+                ["invoicedMt"] = claimed,
+            });
+        }
+
         item.Product = input.Product.Trim();
         Apply(item, input);
-
-        // Nothing on this server consumes contract quantity yet, so the whole line is remaining.
-        item.RemainingMt = input.QuantityMt;
 
         db.ItemPartners.RemoveRange(item.Partners);
         item.Partners.Clear();
@@ -149,7 +155,20 @@ public sealed class ContractService(ErpDbContext db)
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await InvoiceService.RecomputeAllRemainingAsync(db, cancellationToken);
         return await SingleAsync(contract.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// How much of a goods line the trade documents have committed.
+    ///
+    /// <para>The same figure the line's own <c>RemainingMt</c> is derived from, asked directly so
+    /// an edit can refuse to shrink beneath it.</para>
+    /// </summary>
+    private async Task<decimal> ClaimedMtAsync(string contractItemId, CancellationToken cancellationToken)
+    {
+        var all = await db.Invoices.AsNoTracking().Include(i => i.Items).ToListAsync(cancellationToken);
+        return Rounding.Quantity(InvoiceMath.ShippedMtForItem(all, contractItemId));
     }
 
     /* ---------------------------------- Shared ---------------------------------- */
@@ -163,6 +182,7 @@ public sealed class ContractService(ErpDbContext db)
         public const string InvalidStatus = "invalid-status";
         public const string InvalidContractType = "invalid-contract-type";
         public const string InvalidIncoterm = "invalid-incoterm";
+        public const string BelowInvoiced = "quantity-below-invoiced";
     }
 
     private static void Apply(ContractItem item, ContractItemInput input)

@@ -58,10 +58,11 @@ import type {
   TransferStatus,
   Warehouse,
 } from '@/types';
-import { contractValue, invoiceItemAmount, invoiceItemUnitPrice, splitEqually } from '@/utils/calc';
+import { contractValue, splitEqually } from '@/utils/calc';
 import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { masterData, type MasterDataResult } from '@/services/masterData';
 import { contractsApi, type ContractResult } from '@/services/contracts';
+import { invoicesApi, type InvoiceResult } from '@/services/invoices';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -136,6 +137,26 @@ async function contractWrite(send: () => Promise<ContractResult>): Promise<Contr
   const { entity, all } = await send();
   db.contracts.length = 0;
   db.contracts.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
+/**
+ * A trade-document write. Like a contract's, always the server.
+ *
+ * <p>Both collections come back, and both are replaced. A line on a document consumes contract
+ * quantity, so any write here moves `remainingMt` on a contract line the caller never named:
+ * replacing invoices alone would leave the contracts page showing goods that have just been
+ * sold. The server recomputes that figure from the documents and sends the result, rather than
+ * the browser inferring which contract to adjust.</p>
+ */
+async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice> {
+  const { entity, invoices, contracts } = await send();
+  db.invoices.length = 0;
+  db.invoices.push(...invoices);
+  db.contracts.length = 0;
+  db.contracts.push(...contracts);
   reindex();
   persistDb({ alreadySynced: true });
   return entity;
@@ -1513,23 +1534,6 @@ function findInvoiceOrThrow(id: string): Invoice {
   return invoice;
 }
 
-/** Recompute and persist an invoice's totals from its current items (spec §3). */
-function recomputeInvoiceTotals(invoice: Invoice): void {
-  invoice.totalAmount = round(invoice.items.reduce((s, it) => s + it.amount, 0));
-  invoice.totalDiscount = round(
-    invoice.items.reduce((s, it) => {
-      const gross = round((invoiceItemUnitPrice(it) ?? 0) * it.quantityMt);
-      return s + (gross - it.amount);
-    }, 0),
-  );
-  invoice.totalWeightMt = round(invoice.items.reduce((s, it) => s + it.quantityMt, 0));
-}
-
-/** Recompute one item's `amount` from its current pricing fields (spec §3). */
-function recomputeItemAmount(item: InvoiceItem): void {
-  item.amount = round(invoiceItemAmount(item));
-}
-
 const INVOICE_NUMBER_PREFIX: Record<InvoiceType, string> = {
   PURCHASE_ORDER: 'PO',
   PURCHASE_PROVISIONAL: 'PP',
@@ -1537,15 +1541,6 @@ const INVOICE_NUMBER_PREFIX: Record<InvoiceType, string> = {
   SALE_ORDER: 'SO',
   SALE_PROVISIONAL: 'SP',
   SALE_INVOICE: 'SI',
-};
-
-const INVOICE_ID_PREFIX: Record<InvoiceType, string> = {
-  PURCHASE_ORDER: 'po',
-  PURCHASE_PROVISIONAL: 'pp',
-  PURCHASE_INVOICE: 'pi',
-  SALE_ORDER: 'so',
-  SALE_PROVISIONAL: 'sp',
-  SALE_INVOICE: 'si',
 };
 
 /** `<PFX>-<YYYY>-<NNNN>`, scan-until-unused against existing numbers of that type (spec §4). */
@@ -1566,41 +1561,6 @@ function nextInvoiceNumber(type: InvoiceType): string {
 export async function previewInvoiceNumber(type: InvoiceType): Promise<string> {
   await delay(80);
   return nextInvoiceNumber(type);
-}
-
-function nextInvoiceId(type: InvoiceType): string {
-  const prefix = `inv-${INVOICE_ID_PREFIX[type]}-`;
-  let max = 0;
-  for (const inv of db.invoices) {
-    if (inv.id.startsWith(prefix)) {
-      const n = Number(inv.id.slice(prefix.length));
-      if (Number.isFinite(n)) max = Math.max(max, n);
-    }
-  }
-  return `${prefix}${String(max + 1).padStart(4, '0')}`;
-}
-
-let invoiceItemSeq = db.invoices.reduce(
-  (max, inv) =>
-    inv.items.reduce((m, it) => {
-      const match = /^invitem-(\d+)$/.exec(it.id);
-      return match ? Math.max(m, Number(match[1])) : m;
-    }, max),
-  0,
-);
-function nextInvoiceItemId(): string {
-  invoiceItemSeq += 1;
-  return `invitem-${invoiceItemSeq}`;
-}
-
-/** RFC 4122 v4; falls back to getRandomValues on non-secure origins. Runtime only — never in the seed. */
-function newGuid(): string {
-  const c = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  const b = new Uint8Array(16); c.getRandomValues(b);
-  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
 
 function nextInventoryDocId(): string {
@@ -1675,28 +1635,6 @@ function invoiceChain(invoice: Invoice): Invoice[] {
 }
 
 /**
- * Closes the convert bypass (spec §3): re-adding a contract item to a converted DRAFT (one
- * with a `refInvoiceId`) must reuse the SAME `referenceDocumentItemId` an earlier chain
- * document already assigned that contract item — otherwise the same goods could be received
- * twice under two different ids. Returns `undefined` (mint a fresh id) when the invoice has no
- * chain ancestor, or no chain document has a line for this contract item yet.
- */
-function chainReferenceDocumentItemId(invoice: Invoice, contractItemId: string): string | undefined {
-  if (!invoice.refInvoiceId) return undefined;
-  // A second line for the same good on this document is genuinely additional goods (spec §3
-  // explicitly allows multiple lines per contract item on one document) → mint a fresh id so
-  // the ledger doesn't bucket two distinct lines under one referenceDocumentItemId. The reuse
-  // below only applies to close the delete+re-add bypass, which requires this document to have
-  // NO line for the item yet.
-  if (invoice.items.some((it) => it.contractItemId === contractItemId)) return undefined;
-  for (const inv of invoiceChain(invoice)) {
-    const match = inv.items.find((it) => it.contractItemId === contractItemId);
-    if (match) return match.referenceDocumentItemId;
-  }
-  return undefined;
-}
-
-/**
  * Chain-leaf docs of `side`: leaf (no non-cancelled successor), excluding CANCELLED.
  * `includeDraft` counts DRAFT leaves too (default: CONFIRMED-only); `excludeInvoiceId` drops
  * one invoice's own claim. Provisional/invoice/order documents only — orders are unpriced but
@@ -1758,33 +1696,6 @@ function confirmedClaimsByItem(side: InvoiceSide, excludeInvoiceId?: string): Ma
     }
   }
   return claimed;
-}
-
-/** Σ `InvoiceItem.quantityMt` for `contractItemId` across BOTH sides' chain-leaf, non-cancelled,
- *  draft-or-confirmed priced documents (spec §5 — "shipped" = chain-once, draft+confirmed). */
-function shippedMtForItem(contractItemId: string): number {
-  const leaves = [
-    ...chainLeafDocs('PURCHASE', { includeDraft: true }),
-    ...chainLeafDocs('SALE', { includeDraft: true }),
-  ].filter((inv) => isPricedType(inv.invoiceType));
-  return leaves.reduce(
-    (s, inv) =>
-      s +
-      inv.items
-        .filter((it) => it.contractItemId === contractItemId)
-        .reduce((s2, it) => s2 + it.quantityMt, 0),
-    0,
-  );
-}
-
-/** Recompute every contract item's `remainingMt` from `shippedMtForItem` (spec §5). Call after
- *  any invoice mutation that changes item quantities/status/conversion. */
-function recomputeAllRemaining(): void {
-  for (const contract of db.contracts) {
-    for (const item of contract.items) {
-      item.remainingMt = Math.round(Math.max(item.quantityMt - shippedMtForItem(item.id), 0) * 1000) / 1000;
-    }
-  }
 }
 
 /* ------------------------------- Selectors ---------------------------- */
@@ -1957,37 +1868,7 @@ export interface InvoiceInput {
 }
 
 export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
-  await delay(180);
-  const contract = contractById.get(input.contractId);
-  if (!contract) throw new Error(`Contract ${input.contractId} not found`);
-  const trimmedNumber = input.invoiceNumber?.trim();
-  if (trimmedNumber) {
-    const collides = db.invoices.some(
-      (inv) => inv.invoiceType === input.invoiceType && inv.invoiceNumber === trimmedNumber,
-    );
-    if (collides) throw new Error('duplicate-number');
-  }
-  const invoice: Invoice = {
-    id: nextInvoiceId(input.invoiceType),
-    invoiceNumber: trimmedNumber || nextInvoiceNumber(input.invoiceType),
-    invoiceType: input.invoiceType,
-    invoiceDate: input.invoiceDate,
-    contractId: input.contractId,
-    customerId: contract.customerId,
-    status: 'DRAFT',
-    currency: input.currency ?? 'USD',
-    // `!== 'USD'`, not `=== 'AED'` — USD is the base, so every other currency carries a rate.
-    exchangeRate: input.currency !== 'USD' ? (input.exchangeRate ?? db.fxRate) : 1,
-    description: input.description?.trim() || undefined,
-    totalAmount: 0,
-    totalDiscount: 0,
-    totalWeightMt: 0,
-    createdAt: dayjs().toISOString(),
-    items: [],
-  };
-  db.invoices.push(invoice);
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.create(input));
 }
 
 export interface InvoiceHeaderPatch {
@@ -2000,27 +1881,7 @@ export interface InvoiceHeaderPatch {
 
 /** DRAFT only. Throws `'duplicate-number'` when the number collides within the same type. */
 export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch): Promise<Invoice> {
-  await delay(160);
-  const invoice = findInvoiceOrThrow(id);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-  if (patch.invoiceNumber !== undefined) {
-    const number = patch.invoiceNumber.trim();
-    const collides = db.invoices.some(
-      (inv) => inv.id !== id && inv.invoiceType === invoice.invoiceType && inv.invoiceNumber === number,
-    );
-    if (collides) throw new Error('duplicate-number');
-    invoice.invoiceNumber = number;
-  }
-  if (patch.invoiceDate !== undefined) invoice.invoiceDate = patch.invoiceDate;
-  if (patch.currency !== undefined) {
-    invoice.currency = patch.currency;
-    invoice.exchangeRate = patch.currency !== 'USD' ? (patch.exchangeRate ?? db.fxRate) : 1;
-  } else if (patch.exchangeRate !== undefined) {
-    invoice.exchangeRate = patch.exchangeRate;
-  }
-  if (patch.description !== undefined) invoice.description = patch.description.trim() || undefined;
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.updateHeader(id, patch));
 }
 
 export interface InvoiceItemInput {
@@ -2029,10 +1890,6 @@ export interface InvoiceItemInput {
   /** Container this line's goods were shipped in (optional while drafting; spec §7). */
   containerId?: string;
   description?: string;
-}
-
-function findContractItem(contract: Contract, contractItemId: string): Item | undefined {
-  return contract.items.find((i) => i.id === contractItemId);
 }
 
 /** Full breakdown behind a contract-quantity guard (spec §3.1/§3.2): what's contracted, what's
@@ -2051,143 +1908,12 @@ export interface ContractQtyCheck {
   exceeds: boolean;
 }
 
-interface CheckContractQtyArgs {
-  contract: Contract;
-  contractItemId: string;
-  side: InvoiceSide;
-  invoiceId: string;
-  requestedMt: number;
-  /** Line(s) already reflected in `requestedMt`, so they don't count against themselves in
-   *  `onThisDocMt` — a single line id when editing/adding one line, or a whole group's ids when
-   *  `requestedMt` is already a group sum (confirmInvoice's per-contract-item total, spec §3.3). */
-  excludeInvoiceItemId?: string | string[];
-  /** Entries staged earlier in the same multi-entry call (addInvoiceItems), not yet pushed onto
-   *  the document, so they must still count against the ceiling (spec §3.3). */
-  extraOnDocMt?: number;
-}
-
-/**
- * Single source of truth for the contract-quantity guard (spec §3.1), replacing the ad-hoc math
- * that used to live at each of the three call sites (two of which were wrong — see design doc
- * "Hole A"/"Hole B"). `alreadyInvoicedMt` is CONFIRMED-only, one count per OTHER chain via
- * `confirmedClaimsByItem` (see its docstring) — a DRAFT never reserves contract quantity (spec §1
- * user decision; do not change that), but a CONFIRMED claim stays counted even after its document
- * is converted to a DRAFT successor (FIX — previously it vanished the instant conversion
- * happened, via the raw chain-leaf notion; `confirmedClaimsByItem` walks each chain once and
- * takes its deepest CONFIRMED member instead).
- */
-function checkContractQty(args: CheckContractQtyArgs): ContractQtyCheck {
-  const { contract, contractItemId, side, invoiceId, requestedMt, excludeInvoiceItemId, extraOnDocMt = 0 } = args;
-  const contractItem = findContractItem(contract, contractItemId);
-  const contractQuantityMt = contractItem?.quantityMt ?? 0;
-
-  const claimed = confirmedClaimsByItem(side, invoiceId);
-  const alreadyInvoicedMt = round3(claimed.get(contractItemId) ?? 0);
-
-  const excludeIds = new Set(
-    excludeInvoiceItemId === undefined
-      ? []
-      : Array.isArray(excludeInvoiceItemId)
-        ? excludeInvoiceItemId
-        : [excludeInvoiceItemId],
-  );
-  const invoice = findInvoice(invoiceId);
-  const onThisDocOwnMt = invoice
-    ? invoice.items
-        .filter((it) => it.contractItemId === contractItemId && !excludeIds.has(it.id))
-        .reduce((s, it) => s + it.quantityMt, 0)
-    : 0;
-  const onThisDocMt = round3(onThisDocOwnMt + extraOnDocMt);
-
-  const remainingMt = round3(Math.max(contractQuantityMt - alreadyInvoicedMt - onThisDocMt, 0));
-  const requested = round3(requestedMt);
-
-  return {
-    contractQuantityMt,
-    alreadyInvoicedMt,
-    onThisDocMt,
-    remainingMt,
-    requestedMt: requested,
-    exceeds: requested > remainingMt + 1e-9,
-  };
-}
-
-/** Throws `'qty-exceeds-remaining'` with the full breakdown attached (spec §3.2); `available` is
- *  kept as an alias of `remainingMt` so any pre-existing `.available` reader keeps working. */
-function throwQtyExceeds(check: ContractQtyCheck, product: string): never {
-  const err = new Error('qty-exceeds-remaining') as Error &
-    ContractQtyCheck & { product: string; available: number };
-  Object.assign(err, check, { product, available: check.remainingMt });
-  throw err;
-}
-
 /** Copies the pricing snapshot from the contract item and validates remaining qty (spec §2/§5). */
 export async function addInvoiceItems(
   invoiceId: string,
   items: InvoiceItemInput[],
 ): Promise<Invoice> {
-  await delay(200);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-  const contract = contractById.get(invoice.contractId);
-  if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
-  const side = invoiceSide(invoice.invoiceType);
-
-  // Round once at the boundary (FIX — the guard validated round3(requestedMt) but both call sites
-  // used to STORE the caller's raw value, so up to +0.0005 MT per line the guard never saw could
-  // accumulate across lines). `roundedQty[i]` is the single value both validated AND stored.
-  const roundedQty = items.map((input) => round3(input.quantityMt));
-
-  // Pass 1: validate EVERY entry before mutating the draft at all (atomicity fix — a multi-entry
-  // call that would fail partway used to leave the earlier entries pushed). `extraByItem`
-  // accumulates entries staged earlier in this same call so they still count against later
-  // entries for the same contract item.
-  const extraByItem = new Map<string, number>();
-  items.forEach((input, i) => {
-    const contractItem = findContractItem(contract, input.contractItemId);
-    if (!contractItem) throw new Error(`Contract item ${input.contractItemId} not found`);
-    const q = roundedQty[i];
-    const check = checkContractQty({
-      contract,
-      contractItemId: contractItem.id,
-      side,
-      invoiceId: invoice.id,
-      requestedMt: q,
-      extraOnDocMt: extraByItem.get(contractItem.id) ?? 0,
-    });
-    if (check.exceeds) throwQtyExceeds(check, contractItem.product);
-    extraByItem.set(contractItem.id, round3((extraByItem.get(contractItem.id) ?? 0) + q));
-  });
-
-  // Pass 2: every entry is now known-valid — build and push lines in order. This mirrors the
-  // original per-line loop so `chainReferenceDocumentItemId` (which reads `invoice.items` as it
-  // fills in) still sees each entry pushed before the next is evaluated.
-  items.forEach((input, i) => {
-    const contractItem = findContractItem(contract, input.contractItemId)!;
-    const newItem: InvoiceItem = {
-      id: nextInvoiceItemId(),
-      invoiceId: invoice.id,
-      contractItemId: contractItem.id,
-      // Reuse the chain's existing id on a converted draft (closes the delete+re-add bypass,
-      // spec §3); mint a fresh one only when this contract item has no prior chain line.
-      referenceDocumentItemId: chainReferenceDocumentItemId(invoice, contractItem.id) ?? newGuid(),
-      product: contractItem.product,
-      quantityMt: roundedQty[i],
-      lmePercent: contractItem.lmePercent,
-      lmeFixed: contractItem.lmeFixed,
-      fixedPrice: contractItem.fixedLmePrice,
-      premium: contractItem.premium,
-      containerId: input.containerId,
-      description: input.description?.trim() || undefined,
-      amount: 0,
-    };
-    recomputeItemAmount(newItem);
-    invoice.items.push(newItem);
-  });
-  recomputeInvoiceTotals(invoice);
-  recomputeAllRemaining();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.addItems(invoiceId, items));
 }
 
 export interface InvoiceItemPatch {
@@ -2202,61 +1928,11 @@ export async function updateInvoiceItem(
   itemId: string,
   patch: InvoiceItemPatch,
 ): Promise<Invoice> {
-  await delay(180);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-  const item = invoice.items.find((it) => it.id === itemId);
-  if (!item) throw new Error(`Invoice item ${itemId} not found`);
-
-  if (patch.quantityMt !== undefined) {
-    // Round once at the boundary (FIX 6 — see addInvoiceItems) so the stored value is exactly
-    // what the guard validated, never +0.0005 MT more.
-    const q = round3(patch.quantityMt);
-    // Only guard genuine INCREASES (FIX 3): EditLineModal always resubmits quantityMt alongside
-    // container/discount/description, so guarding every patch rejected a container-only edit the
-    // instant a rival document shrank the ceiling below this line's unchanged quantity — and
-    // because the throw happened before any field was applied, the container/discount/
-    // description patch was silently discarded too. A non-increasing edit cannot worsen an
-    // overshoot (confirmInvoice's group check remains the backstop), so it's always allowed.
-    if (q > item.quantityMt + 1e-9) {
-      const side = invoiceSide(invoice.invoiceType);
-      const contract = contractById.get(invoice.contractId);
-      if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
-      // excludeInvoiceItemId: item.id — this line's own current quantity must NOT count against
-      // itself (Hole A: the old formula added it back even though chainLeafDocs, CONFIRMED-only,
-      // never subtracted it as a draft in the first place, inflating the ceiling).
-      const check = checkContractQty({
-        contract,
-        contractItemId: item.contractItemId,
-        side,
-        invoiceId: invoice.id,
-        requestedMt: q,
-        excludeInvoiceItemId: item.id,
-      });
-      if (check.exceeds) throwQtyExceeds(check, item.product);
-    }
-    item.quantityMt = q;
-  }
-  if (patch.containerId !== undefined) item.containerId = patch.containerId || undefined;
-  if (patch.description !== undefined) item.description = patch.description.trim() || undefined;
-  if (patch.discountPercent !== undefined) item.discountPercent = patch.discountPercent;
-
-  recomputeItemAmount(item);
-  recomputeInvoiceTotals(invoice);
-  recomputeAllRemaining();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.updateItem(invoiceId, itemId, patch));
 }
 
 export async function removeInvoiceItem(invoiceId: string, itemId: string): Promise<Invoice> {
-  await delay(160);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-  invoice.items = invoice.items.filter((it) => it.id !== itemId);
-  recomputeInvoiceTotals(invoice);
-  recomputeAllRemaining();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.removeItem(invoiceId, itemId));
 }
 
 export interface ApplyLmePriceInput {
@@ -2270,18 +1946,7 @@ export interface ApplyLmePriceInput {
  * items only; `discountPercent`, when provided, overwrites ALL items.
  */
 export async function applyLmePrice(invoiceId: string, input: ApplyLmePriceInput): Promise<Invoice> {
-  await delay(180);
-  const invoice = findInvoiceOrThrow(invoiceId);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-  for (const item of invoice.items) {
-    item.lmeDate = input.lmeDate;
-    if (!item.lmeFixed) item.lmePrice = input.lmePrice;
-    if (input.discountPercent !== undefined) item.discountPercent = input.discountPercent;
-    recomputeItemAmount(item);
-  }
-  recomputeInvoiceTotals(invoice);
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.applyLmePrice(invoiceId, input));
 }
 
 function isPricedType(type: InvoiceType): boolean {
@@ -2297,61 +1962,7 @@ function isPricedType(type: InvoiceType): boolean {
  * via `createInventoryDocument` against a chain-leaf CONFIRMED invoice (warehouse spec §6.1).
  */
 export async function confirmInvoice(id: string): Promise<Invoice> {
-  await delay(200);
-  const invoice = findInvoiceOrThrow(id);
-  if (invoice.status !== 'DRAFT') throw new Error('not-draft');
-
-  if (invoice.items.length === 0) throw new Error('no-items');
-
-  if (isPricedType(invoice.invoiceType)) {
-    const missing = invoice.items.some((it) => !it.lmeFixed && it.lmePrice === undefined);
-    if (missing) throw new Error('missing-lme-price');
-  }
-
-  if (isPricedType(invoice.invoiceType)) {
-    const noContainer = invoice.items.filter((it) => !it.containerId);
-    if (noContainer.length > 0) {
-      const err = new Error('missing-container') as Error & { products?: string[] };
-      err.products = noContainer.map((i) => i.product);
-      throw err;
-    }
-  }
-
-  // Re-validate remaining contract quantity at confirm time (spec §5 invariant 3): two
-  // DRAFTs can each pass edit-time checks; the second one to confirm must fail here. GROUP this
-  // document's items by contractItemId and compare each group's SUM once (Hole B fix — the old
-  // loop tested each line independently, so three lines each individually under the ceiling
-  // could together blow past it undetected).
-  const side = invoiceSide(invoice.invoiceType);
-  const contract = contractById.get(invoice.contractId);
-  if (!contract) throw new Error(`Contract ${invoice.contractId} not found`);
-  const groups = new Map<string, { quantityMt: number; itemIds: string[] }>();
-  for (const item of invoice.items) {
-    const group = groups.get(item.contractItemId) ?? { quantityMt: 0, itemIds: [] };
-    group.quantityMt = round3(group.quantityMt + item.quantityMt);
-    group.itemIds.push(item.id);
-    groups.set(item.contractItemId, group);
-  }
-  for (const [contractItemId, group] of groups) {
-    const contractItem = findContractItem(contract, contractItemId);
-    if (!contractItem) continue;
-    const check = checkContractQty({
-      contract,
-      contractItemId,
-      side,
-      invoiceId: invoice.id,
-      requestedMt: group.quantityMt,
-      // The whole group is already folded into `requestedMt` above, so every line in it must be
-      // excluded from `onThisDocMt` — otherwise the group's own lines would be double-counted.
-      excludeInvoiceItemId: group.itemIds,
-    });
-    if (check.exceeds) throwQtyExceeds(check, contractItem.product);
-  }
-
-  invoice.status = 'CONFIRMED';
-  recomputeAllRemaining();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.confirm(id));
 }
 
 /**
@@ -2366,21 +1977,7 @@ export async function confirmInvoice(id: string): Promise<Invoice> {
  * same physical goods a second time.
  */
 export async function cancelInvoice(id: string): Promise<Invoice> {
-  await delay(180);
-  const invoice = findInvoiceOrThrow(id);
-  if (invoice.status === 'CANCELLED') return invoice;
-
-  if (findSuccessor(invoice.id)) {
-    throw new Error('cancel-blocked-successor');
-  }
-  if (db.inventoryDocs.some((d) => d.invoiceId === invoice.id && d.status !== 'CANCELLED')) {
-    throw new Error('cancel-blocked-inventory-doc');
-  }
-
-  invoice.status = 'CANCELLED';
-  recomputeAllRemaining();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.cancel(id));
 }
 
 /* ------------------------- Warehouse documents ------------------------ */
@@ -2630,76 +2227,19 @@ export async function cancelInventoryDocument(id: string): Promise<InventoryDocu
   return doc;
 }
 
-const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {
-  PURCHASE_ORDER: ['PURCHASE_PROVISIONAL', 'PURCHASE_INVOICE'],
-  PURCHASE_PROVISIONAL: ['PURCHASE_INVOICE'],
-  PURCHASE_INVOICE: [],
-  SALE_ORDER: ['SALE_PROVISIONAL', 'SALE_INVOICE'],
-  SALE_PROVISIONAL: ['SALE_INVOICE'],
-  SALE_INVOICE: [],
-};
-
 /**
  * Creates a new DRAFT of `targetType` copying header + items from `id` (spec §5).
  * Throws `'has-successor'` when a non-cancelled successor already exists.
  * PP→PI / SP→SI carry lmePrice/lmeDate/discount; PO/SO→* never carry (orders are unpriced).
  */
 export async function convertInvoice(id: string, targetType: InvoiceType): Promise<Invoice> {
-  await delay(200);
-  const source = findInvoiceOrThrow(id);
-  if (source.status !== 'CONFIRMED') throw new Error('not-confirmed');
-  if (findSuccessor(source.id)) throw new Error('has-successor');
-  if (!CONVERT_TARGETS[source.invoiceType].includes(targetType)) throw new Error('invalid-target');
-
-  const carryPrices = source.invoiceType === 'PURCHASE_PROVISIONAL' || source.invoiceType === 'SALE_PROVISIONAL';
-
-  const newId = nextInvoiceId(targetType);
-  // The `...it` spread is what carries `referenceDocumentItemId` (and every other unlisted
-  // field) from the source line to the new draft's line, unchanged — that is what makes the
-  // ref id survive provisional→final conversion (spec §3 requirement 5). Replacing this spread
-  // with an explicit field list would silently drop it: no type error, just a fresh id minted
-  // wherever a line is next created against the same contract item, breaking warehouse dedupe.
-  const newItems: InvoiceItem[] = source.items.map((it) => ({
-    ...it,
-    id: nextInvoiceItemId(),
-    invoiceId: newId,
-    lmePrice: carryPrices ? it.lmePrice : undefined,
-    lmeDate: carryPrices ? it.lmeDate : undefined,
-    discountPercent: carryPrices ? it.discountPercent : undefined,
-  }));
-  newItems.forEach((it) => recomputeItemAmount(it));
-
-  const draft: Invoice = {
-    id: newId,
-    invoiceNumber: nextInvoiceNumber(targetType),
-    invoiceType: targetType,
-    invoiceDate: TODAY.toISOString(),
-    contractId: source.contractId,
-    customerId: source.customerId,
-    status: 'DRAFT',
-    currency: source.currency,
-    exchangeRate: source.exchangeRate,
-    description: source.description,
-    refInvoiceId: source.id,
-    totalAmount: 0,
-    totalDiscount: 0,
-    totalWeightMt: 0,
-    createdAt: dayjs().toISOString(),
-    items: newItems,
-  };
-  recomputeInvoiceTotals(draft);
-  db.invoices.push(draft);
-  recomputeAllRemaining();
-  persistDb();
-  return draft;
+  return invoiceWrite(() => invoicesApi.convert(id, targetType));
 }
 
+/** Stamps `sentAt`. Throws `'invoice-cancelled'` — a cancelled document that claims to have
+ *  been sent is a statement about the outside world that is simply untrue. */
 export async function markInvoiceSent(id: string): Promise<Invoice> {
-  await delay(140);
-  const invoice = findInvoiceOrThrow(id);
-  invoice.sentAt = dayjs().toISOString();
-  persistDb();
-  return invoice;
+  return invoiceWrite(() => invoicesApi.markSent(id));
 }
 
 /* -------------------------- Warehouse mutations ------------------------ */

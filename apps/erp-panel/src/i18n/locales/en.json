@@ -299,7 +299,8 @@
     "ownShare": "Own share: {{percent}}%",
     "partnerTag": "{{name}} {{percent}}%",
     "partnerSumError": "Partner shares total {{sum}}% — must not exceed 100%",
-    "partnerDupError": "Each partner can be added only once"
+    "partnerDupError": "Each partner can be added only once",
+    "quantityBelowInvoiced": "Quantity cannot be less than the {{invoiced}} MT already invoiced against this line."
   },
   "containers": {
     "title": "Containers",
@@ -456,7 +457,9 @@
     "overpaidBy": "Overpaid by {{amount}}",
     "emptyTab": "No documents in this tab yet",
     "typeLabel": "Type",
-    "convertHint": "A new draft document is created from this one. Assign containers per line on the new document afterwards."
+    "convertHint": "A new draft document is created from this one. Assign containers per line on the new document afterwards.",
+    "lineInUse": "This line cannot be removed: a warehouse document, cost, claim or payment already refers to it. Remove that record first.",
+    "invalidDiscount": "Discount must be between 0 and 100 percent."
   },
   "warehouse": {
     "title": "Warehouse",

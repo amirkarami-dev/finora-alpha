@@ -143,8 +143,11 @@ export default function InvoiceDetailPage() {
     try {
       await removeItemMut.mutateAsync({ invoiceId: invoice.id, itemId });
       message.success(t('tradeInvoices.itemRemoved'));
-    } catch {
-      message.error(t('common.saveFailed'));
+    } catch (err) {
+      // A line that a warehouse receipt, a cost, a claim or a payment already points at cannot
+      // just disappear — those records are keyed on its chain identity and would be orphaned.
+      const code = err instanceof Error ? err.message : '';
+      message.error(code === 'line-in-use' ? t('tradeInvoices.lineInUse') : t('common.saveFailed'));
     }
   };
 
@@ -163,8 +166,11 @@ export default function InvoiceDetailPage() {
         },
       });
       message.success(t('tradeInvoices.priceApplied'));
-    } catch {
-      message.error(t('common.saveFailed'));
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      message.error(
+        code === 'invalid-discount' ? t('tradeInvoices.invalidDiscount') : t('common.saveFailed'),
+      );
     }
   };
 

@@ -56,14 +56,80 @@ public sealed class ErrorCodeContractTests
         "invalid-status",
         "invalid-contract-type",
         "invalid-incoterm",
+
+        // Trade documents. Three of these guard things a single browser could not get wrong and a
+        // database can: a line another record already points at, a discount outside the range its
+        // column CHECKs, and a contract line shrunk below what has been invoiced off it. Each is
+        // reachable from a form somebody is filling in, so each is translated —
+        // `tradeInvoices.lineInUse`, `tradeInvoices.invalidDiscount`,
+        // `items.quantityBelowInvoiced` — in all three locale files.
+        "line-in-use",
+        "invalid-discount",
+        "quantity-below-invoiced",
+
+        // Untranslated, deliberately. A stale line id needs the generic failure message, exactly
+        // as the master-data not-founds above do. `invoice-cancelled` guards `markInvoiceSent`,
+        // which no screen calls today — it exists so the endpoint cannot be used to claim a
+        // cancelled document was sent, and it gets a translation when a screen calls it.
+        "invoice-item-not-found",
+        "invoice-cancelled",
+
+        // State guards no screen names because no screen can reach them: the edit controls are
+        // hidden unless the document is a draft, Convert appears only on a confirmed one, and the
+        // target menu is built from the allowed targets. They are enforced anyway — the endpoint
+        // is reachable without the screen — and a caller who bypasses the UI gets the generic
+        // message, which is the honest thing to say to a request the UI would not have made.
+        "not-draft",
+        "not-confirmed",
+        "invalid-target",
     ];
 
+    /// <summary>
+    /// Every code a screen branches on.
+    ///
+    /// <para>
+    /// Throws alone were enough while <c>api.ts</c> was the whole business layer. Each write it
+    /// hands to the server is one throw fewer, and the code does not disappear with it — the
+    /// screen still names it, it is just caught now instead of raised. Reading only the throws
+    /// would report every ported code as unknown to the client and push it into the allowlist,
+    /// which is how an allowlist stops meaning anything.
+    /// </para>
+    ///
+    /// <para>
+    /// Matched loosely, on purpose: a false positive here can only excuse a code from the
+    /// <c>extra</c> check, and <c>missing</c> — the direction that catches a real bug — does not
+    /// read this set at all.
+    /// </para>
+    /// </summary>
+    private static HashSet<string> CodesTheClientHandles(string repoRoot)
+    {
+        var source = Path.Combine(repoRoot, "apps", "erp-panel", "src");
+        var handled = new HashSet<string>(StringComparer.Ordinal);
+
+        // `code === 'x'` / `code !== 'x'`, which is how every screen branches on one, plus the
+        // array-of-codes form two of the modals use.
+        foreach (var file in Directory.EnumerateFiles(source, "*.ts*", SearchOption.AllDirectories))
+        {
+            foreach (var match in System.Text.RegularExpressions.Regex
+                         .Matches(File.ReadAllText(file),
+                             @"(?:===|!==|\[|,)\s*'([a-z][a-z0-9]*(?:-[a-z0-9]+)+)'").AsEnumerable())
+            {
+                handled.Add(match.Groups[1].Value);
+            }
+        }
+
+        return handled;
+    }
+
     [Fact]
-    public void The_contract_holds_every_code_the_front_end_throws()
+    public void The_contract_holds_every_code_the_front_end_uses()
     {
         var repoRoot = FindRepoRoot();
         var apiTs = File.ReadAllText(Path.Combine(repoRoot, "apps", "erp-panel", "src", "services", "api.ts"));
 
+        // A throw is unambiguously a code, so it is the only thing trusted to prove the backend is
+        // MISSING one. This set shrinks toward empty as writes move to the server; what replaces
+        // it is the integration tests, which exercise each guard over real HTTP.
         var thrown = System.Text.RegularExpressions.Regex
             .Matches(apiTs, @"throw new Error\('([^']+)'\)")
             .Select(m => m.Groups[1].Value)
@@ -72,6 +138,7 @@ public sealed class ErrorCodeContractTests
         var missing = thrown.Except(ErrorCodes.All, StringComparer.Ordinal).Order().ToList();
         var extra = ErrorCodes.All
             .Except(thrown, StringComparer.Ordinal)
+            .Except(CodesTheClientHandles(repoRoot), StringComparer.Ordinal)
             .Except(BackendOnlyCodes, StringComparer.Ordinal)
             .Order()
             .ToList();
@@ -79,8 +146,9 @@ public sealed class ErrorCodeContractTests
         Assert.True(missing.Count == 0,
             $"api.ts throws codes the backend contract does not list: {string.Join(", ", missing)}");
         Assert.True(extra.Count == 0,
-            $"The backend contract lists codes api.ts never throws: {string.Join(", ", extra)}. " +
-            "Remove them, add the matching guard on the server, or list them in BackendOnlyCodes.");
+            "The backend contract lists codes the client neither throws nor handles: " +
+            $"{string.Join(", ", extra)}. Remove them, add the matching guard on the server, " +
+            "or list them in BackendOnlyCodes.");
     }
 
     [Fact]

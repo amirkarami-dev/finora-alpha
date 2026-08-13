@@ -28,7 +28,20 @@ internal static class PermissionAuthorization
 {
     /// <summary>Policy names are derived, not spelled out, so a permission code and its policy
     /// cannot drift apart.</summary>
-    public static string PolicyFor(string permission) => $"perm:{permission}";
+    public static string PolicyFor(params string[] permissions) =>
+        $"perm:{string.Join('|', permissions.Order(StringComparer.Ordinal))}";
+
+    /// <summary>
+    /// Permission pairs that are checked as any-of, because one route serves two screens.
+    ///
+    /// <para>Listed rather than composed on demand: the set is tiny, and registering them at
+    /// startup means a typo fails the application rather than silently creating a policy nobody
+    /// holds — which would read as "everyone is forbidden" and be blamed on the data.</para>
+    /// </summary>
+    private static readonly string[][] AnyOfPolicies =
+    [
+        ["purchase", "sale"],   // trade documents: one route, both sides
+    ];
 
     /// <summary>
     /// Registers one policy per known permission code.
@@ -50,6 +63,12 @@ internal static class PermissionAuthorization
                 policy.AddRequirements(new PermissionRequirement(permission)));
         }
 
+        foreach (var pair in AnyOfPolicies)
+        {
+            options.AddPolicy(PolicyFor(pair), policy =>
+                policy.AddRequirements(new PermissionRequirement(pair)));
+        }
+
         return options;
     }
 
@@ -58,11 +77,18 @@ internal static class PermissionAuthorization
     public static TBuilder RequirePermission<TBuilder>(this TBuilder builder, string permission)
         where TBuilder : IEndpointConventionBuilder =>
         builder.RequireAuthorization(PolicyFor(permission));
+
+    /// <summary>Requires ANY of the given permissions. The combination must appear in
+    /// <c>AnyOfPolicies</c>, so an unregistered pair fails at startup, not at the first request.</summary>
+    public static TBuilder RequireAnyPermission<TBuilder>(this TBuilder builder, params string[] permissions)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.RequireAuthorization(PolicyFor(permissions));
 }
 
-internal sealed class PermissionRequirement(string permission) : IAuthorizationRequirement
+/// <summary>Holds one permission, or a set any of which will do.</summary>
+internal sealed class PermissionRequirement(params string[] permissions) : IAuthorizationRequirement
 {
-    public string Permission { get; } = permission;
+    public IReadOnlyCollection<string> Permissions { get; } = permissions;
 }
 
 /// <summary>
@@ -87,10 +113,11 @@ internal sealed class PermissionHandler(IdentityDbContext db)
 
         // `Active` is part of the query, not a separate check: deactivating an account has to
         // revoke it immediately, and the cookie it was issued outlives the decision by a week.
+        var wanted = requirement.Permissions;
         var held = await db.Users
             .Where(u => u.Id == userId && u.Active)
             .SelectMany(u => u.Roles.SelectMany(r => r.Role!.Permissions.Select(p => p.Permission!.Code)))
-            .AnyAsync(code => code == requirement.Permission);
+            .AnyAsync(code => wanted.Contains(code));
 
         if (held)
         {
