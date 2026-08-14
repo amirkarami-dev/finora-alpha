@@ -90,6 +90,7 @@
   "payment-confirmed",
   "payment-item-not-found",
   "payment-not-found",
+  "payment-total-mismatch",
   "person-not-found",
   "person-required",
   "quantity-below-invoiced",

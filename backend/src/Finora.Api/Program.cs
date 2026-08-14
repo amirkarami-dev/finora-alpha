@@ -52,6 +52,7 @@ app.MapErpEndpoints();
 app.MapMasterDataEndpoints();
 app.MapContractEndpoints();
 app.MapInvoiceEndpoints();
+app.MapPaymentEndpoints();
 
 // Off unless a test switches it on. See DiagnosticEndpoints for why the seam exists at all.
 if (app.Configuration.GetValue<bool>("Api:EnableDiagnosticEndpoints"))

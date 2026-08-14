@@ -18,7 +18,9 @@ public sealed class Payment
 {
     public required string Id { get; init; }
 
-    public required string CustomerId { get; init; }
+    /// <summary>Settable, unlike a contract's: nothing copies a payment's person at creation, so
+    /// moving one to the right person on a header edit orphans nothing.</summary>
+    public required string CustomerId { get; set; }
     [JsonIgnore] public Customer? Customer { get; init; }
 
     public DateTimeOffset Date { get; set; }
