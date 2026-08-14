@@ -65,6 +65,7 @@ import { warehouseDocsApi, type InventoryDocResult } from '@/services/warehouseD
 import { chargesApi, type ChargeResult } from '@/services/charges';
 import { claimsApi, type ClaimResult } from '@/services/claims';
 import { transfersApi, type TransferResult } from '@/services/transfers';
+import { exchangeGainLossApi, type GainLossResult } from '@/services/exchangeGainLoss';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -172,6 +173,20 @@ async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice
  * record to the register that nobody named. Replacing payments alone would leave the cheques tab
  * missing it until the next reload.</p>
  */
+/** A gain/loss write. */
+async function gainLossWrite(send: () => Promise<GainLossResult>): Promise<ExchangeGainLoss> {
+  const { entity, all } = await send();
+  applyGainLosses(all);
+  return entity;
+}
+
+function applyGainLosses(all: ExchangeGainLoss[]): void {
+  db.exchangeGainLosses.length = 0;
+  db.exchangeGainLosses.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+}
+
 /** A transfer write. */
 async function transferWrite(send: () => Promise<TransferResult>): Promise<MoneyTransfer> {
   const { entity, all } = await send();
@@ -3693,60 +3708,20 @@ export interface ExchangeGainLossInput {
   notes?: string;
 }
 
-function nextGainLossId(): string {
-  let max = 0;
-  for (const g of db.exchangeGainLosses) {
-    const m = /^egl-(\d+)$/.exec(g.id);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `egl-${String(max + 1).padStart(4, '0')}`;
-}
-
-/** Guards IN ORDER: `date-required` → `invalid-amount` (must be a finite non-zero number). */
-function validateGainLoss(input: ExchangeGainLossInput): number {
-  if (!input.date) throw new Error('date-required');
-  // Zero is rejected as well as NaN: a gain of nothing is not a record, it is a blank row.
-  if (!Number.isFinite(input.amount) || input.amount === 0) throw new Error('invalid-amount');
-  return round(input.amount);
-}
-
 export async function getExchangeGainLosses(): Promise<ExchangeGainLoss[]> {
   await delay(160);
   return [...db.exchangeGainLosses].sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
 }
 
 export async function createExchangeGainLoss(input: ExchangeGainLossInput): Promise<ExchangeGainLoss> {
-  await delay(180);
-  const amount = validateGainLoss(input);
-  const id = nextGainLossId();
-  const record: ExchangeGainLoss = {
-    id,
-    number: `EGL-${id.slice(4)}`,
-    date: input.date,
-    type: amount >= 0 ? 'GAIN' : 'LOSS',
-    amount,
-    notes: input.notes?.trim() || undefined,
-    createdAt: dayjs().toISOString(),
-  };
-  db.exchangeGainLosses.push(record);
-  persistDb();
-  return record;
+  return gainLossWrite(() => exchangeGainLossApi.create(input));
 }
 
 export async function updateExchangeGainLoss(
   id: string,
   input: ExchangeGainLossInput,
 ): Promise<ExchangeGainLoss> {
-  await delay(180);
-  const record = db.exchangeGainLosses.find((g) => g.id === id);
-  if (!record) throw new Error('gain-loss-not-found');
-  const amount = validateGainLoss(input);
-  record.date = input.date;
-  record.amount = amount;
-  record.type = amount >= 0 ? 'GAIN' : 'LOSS';
-  record.notes = input.notes?.trim() || undefined;
-  persistDb();
-  return record;
+  return gainLossWrite(() => exchangeGainLossApi.update(id, input));
 }
 
 /**
@@ -3757,11 +3732,7 @@ export async function updateExchangeGainLoss(
  * struck-through rows behind would be clutter with no integrity argument behind it.
  */
 export async function deleteExchangeGainLoss(id: string): Promise<void> {
-  await delay(160);
-  const idx = db.exchangeGainLosses.findIndex((g) => g.id === id);
-  if (idx < 0) throw new Error('gain-loss-not-found');
-  db.exchangeGainLosses.splice(idx, 1);
-  persistDb();
+  applyGainLosses(await exchangeGainLossApi.remove(id));
 }
 
 export interface GainLossTotals {

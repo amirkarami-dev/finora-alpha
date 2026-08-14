@@ -46,6 +46,7 @@ public static class ErpModule
         builder.Services.AddScoped<Money.ChargeService>();
         builder.Services.AddScoped<ClaimService>();
         builder.Services.AddScoped<Money.MoneyTransferService>();
+        builder.Services.AddScoped<Money.ExchangeGainLossService>();
 
         return builder;
     }

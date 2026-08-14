@@ -107,6 +107,10 @@ public sealed class ErrorCodeContractTests
         // names that one, because editing a confirmed transfer is a thing a person tries.
         "transfer-not-found",
         "transfer-cancelled",
+
+        // A gain/loss record that has already been deleted — the only thing in the module that
+        // really deletes, so the only place a stale row can be reached by two people at once.
+        "gain-loss-not-found",
     ];
 
     /// <summary>
