@@ -35,7 +35,6 @@ import type {
   Incoterm,
   Invoice,
   InventoryDocument,
-  InventoryDocumentItem,
   InventoryDocType,
   InvoiceItem,
   InvoiceSide,
@@ -65,6 +64,7 @@ import { contractsApi, type ContractResult } from '@/services/contracts';
 import { invoicesApi, type InvoiceResult } from '@/services/invoices';
 import { paymentsApi, type ChequeResult, type PaymentResult } from '@/services/payments';
 import { containersApi, type ContainerResult } from '@/services/containers';
+import { warehouseDocsApi, type InventoryDocResult } from '@/services/warehouseDocs';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -172,6 +172,16 @@ async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice
  * record to the register that nobody named. Replacing payments alone would leave the cheques tab
  * missing it until the next reload.</p>
  */
+/** A warehouse write. The whole list comes back, because stock is folded from all of it. */
+async function warehouseWrite(send: () => Promise<InventoryDocResult>): Promise<InventoryDocument> {
+  const { entity, all } = await send();
+  db.inventoryDocs.length = 0;
+  db.inventoryDocs.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
 /** A container write. The whole list comes back — the page derives its rows from the set. */
 async function containerWrite(send: () => Promise<ContainerResult>): Promise<Container> {
   const { entity, all } = await send();
@@ -1547,47 +1557,6 @@ export async function previewInvoiceNumber(type: InvoiceType): Promise<string> {
   return nextInvoiceNumber(type);
 }
 
-function nextInventoryDocId(): string {
-  let max = 0;
-  for (const doc of db.inventoryDocs) {
-    const match = /^idoc-(\d+)$/.exec(doc.id);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `idoc-${String(max + 1).padStart(4, '0')}`;
-}
-
-/** `<GRN|GDN>-<YYYY>-<NNNN>`; the year comes from the document's own `date` (the user picks
- *  it), NOT `TODAY` — a receipt/issue backdated into a prior year must number into that year.
- *  Falls back to today's year when `date` is missing/invalid, so a bad date can't produce a
- *  literal "Invalid Date" inside the document number. */
-function nextInventoryDocNumber(type: InventoryDocType, date: string): string {
-  const prefix = type === 'IN' ? 'GRN' : 'GDN';
-  const parsed = dayjs(date);
-  const year = (parsed.isValid() ? parsed : dayjs()).format('YYYY');
-  const taken = new Set(db.inventoryDocs.map((d) => d.docNumber));
-  for (let n = 1; n <= 9999; n++) {
-    const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${prefix}-${year}-${db.inventoryDocs.length + 1}`;
-}
-
-let inventoryDocItemSeq = db.inventoryDocs.reduce(
-  (max, doc) =>
-    doc.items.reduce((m, it) => {
-      const match = /^idocitem-(\d+)$/.exec(it.id);
-      return match ? Math.max(m, Number(match[1])) : m;
-    }, max),
-  0,
-);
-/** Monotonic max-scanning counter (mirrors `nextInvoiceItemId`) — NOT length-derived, so it
- *  can't repeat an id after a cancel/create interleave the way
- *  `` `idocitem-${db.inventoryDocs.length + 1}-${idx + 1}` `` would. */
-function nextInventoryDocItemId(): string {
-  inventoryDocItemSeq += 1;
-  return `idocitem-${inventoryDocItemSeq}`;
-}
-
 /* --------------------------- Chain helpers --------------------------- */
 
 /** Non-cancelled document whose `refInvoiceId` points at `id` (at most one, spec §5 invariant 1). */
@@ -1831,12 +1800,6 @@ export async function getStockLevels(): Promise<StockLevelRow[]> {
     }
   }
   return [...rows.values()];
-}
-
-/** Current stock of `product` (normalized) at `warehouseId`, in MT. */
-function stockOf(warehouseId: string, product: string, levels: StockLevelRow[]): number {
-  const key = product.trim().toLowerCase();
-  return levels.find((r) => r.warehouseId === warehouseId && r.productKey === key)?.mt ?? 0;
 }
 
 /* -------------------------- Invoice mutations ------------------------- */
@@ -2099,81 +2062,7 @@ export async function getInvoiceOptions(): Promise<InvoiceOptionRow[]> {
  * caught — a fresh per-line snapshot read would let them both through.
  */
 export async function createInventoryDocument(input: InventoryDocInput): Promise<InventoryDocument> {
-  await delay(220);
-  if (input.items.length === 0) throw new Error('no-items');
-
-  const warehouse = db.warehouses.find((w) => w.id === input.warehouseId && w.active);
-  if (!warehouse) throw new Error('warehouse-required');
-
-  const invoice = findInvoiceOrThrow(input.invoiceId);
-  const side: InvoiceSide = input.type === 'IN' ? 'PURCHASE' : 'SALE';
-  if (!isSide(invoice.invoiceType, side)) throw new Error('invoice-side-mismatch');
-  const isChainLeafConfirmed =
-    isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice.id);
-  if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
-
-  const lineByRefId = new Map(invoice.items.map((it) => [it.referenceDocumentItemId, it]));
-  const used = usedQtyByReferenceDocumentItemId();
-  const levels = input.type === 'OUT' ? await getStockLevels() : undefined;
-  const stockByKey = new Map<string, number>();
-
-  const docId = nextInventoryDocId();
-  const items: InventoryDocumentItem[] = [];
-  for (const line of input.items) {
-    const invoiceItem = lineByRefId.get(line.referenceDocumentItemId);
-    if (!invoiceItem) throw new Error('line-not-on-invoice');
-    if (!Number.isFinite(line.quantityMt) || line.quantityMt <= 0) throw new Error('invalid-quantity');
-
-    const usedMt = used.get(line.referenceDocumentItemId) ?? 0;
-    const remainingMt = round3(Math.max(invoiceItem.quantityMt - usedMt, 0));
-    if (line.quantityMt > remainingMt + 1e-9) {
-      const err = new Error('exceeds-remaining') as Error & { product?: string; remaining?: number };
-      err.product = invoiceItem.product;
-      err.remaining = remainingMt;
-      throw err;
-    }
-    // Accumulate into the running ledger (mirrors the OUT stock guard's stockByKey below) so
-    // two input lines sharing one referenceDocumentItemId are checked jointly, not each against
-    // a stale pre-loop snapshot.
-    used.set(line.referenceDocumentItemId, usedMt + line.quantityMt);
-
-    if (levels) {
-      const productKey = invoiceItem.product.trim().toLowerCase();
-      if (!stockByKey.has(productKey)) stockByKey.set(productKey, stockOf(warehouse.id, invoiceItem.product, levels));
-      const available = stockByKey.get(productKey) ?? 0;
-      if (line.quantityMt > available + 1e-9) {
-        const err = new Error('insufficient-stock') as Error & { product?: string; available?: number };
-        err.product = invoiceItem.product;
-        err.available = round(Math.max(available, 0));
-        throw err;
-      }
-      stockByKey.set(productKey, round(available - line.quantityMt));
-    }
-
-    items.push({
-      id: nextInventoryDocItemId(),
-      documentId: docId,
-      invoiceItemId: invoiceItem.id,
-      referenceDocumentItemId: line.referenceDocumentItemId,
-      product: invoiceItem.product,
-      quantityMt: line.quantityMt,
-    });
-  }
-
-  const doc: InventoryDocument = {
-    id: docId,
-    docNumber: nextInventoryDocNumber(input.type, input.date),
-    warehouseId: warehouse.id,
-    invoiceId: invoice.id,
-    type: input.type,
-    date: input.date,
-    status: 'CONFIRMED',
-    notes: input.notes?.trim() || undefined,
-    items,
-  };
-  db.inventoryDocs.push(doc);
-  persistDb();
-  return doc;
+  return warehouseWrite(() => warehouseDocsApi.create(input));
 }
 
 /**
@@ -2185,30 +2074,7 @@ export async function createInventoryDocument(input: InventoryDocInput): Promise
  * the same product within this one doc can't each pass against a stale snapshot.
  */
 export async function cancelInventoryDocument(id: string): Promise<InventoryDocument> {
-  await delay(180);
-  const doc = db.inventoryDocs.find((d) => d.id === id);
-  if (!doc) throw new Error(`Inventory document ${id} not found`);
-  if (doc.status === 'CANCELLED') return doc;
-
-  if (doc.type === 'IN') {
-    const levels = await getStockLevels();
-    const stockByKey = new Map<string, number>();
-    for (const item of doc.items) {
-      const productKey = item.product.trim().toLowerCase();
-      if (!stockByKey.has(productKey)) stockByKey.set(productKey, stockOf(doc.warehouseId, item.product, levels));
-      const current = stockByKey.get(productKey) ?? 0;
-      if (current - item.quantityMt < -1e-9) {
-        const err = new Error('cancel-blocked-stock') as Error & { product?: string };
-        err.product = item.product;
-        throw err;
-      }
-      stockByKey.set(productKey, round(current - item.quantityMt));
-    }
-  }
-
-  doc.status = 'CANCELLED';
-  persistDb();
-  return doc;
+  return warehouseWrite(() => warehouseDocsApi.cancel(id));
 }
 
 /**

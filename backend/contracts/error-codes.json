@@ -64,6 +64,7 @@
   "invalid-rate",
   "invalid-status",
   "invalid-target",
+  "inventory-doc-not-found",
   "invoice-cancelled",
   "invoice-immutable",
   "invoice-item-not-found",

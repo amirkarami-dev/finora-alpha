@@ -91,6 +91,10 @@ public sealed class ErrorCodeContractTests
         // about a record that has vanished or a field the form would not have let through.
         "container-not-found",
         "reference-required",
+
+        // Same for a stale warehouse-document id: the browser threw a sentence, and the generic
+        // failure message is the right thing to say about a document that has gone.
+        "inventory-doc-not-found",
     ];
 
     /// <summary>
