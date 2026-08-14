@@ -1,11 +1,9 @@
 import dayjs from 'dayjs';
 import { db, persistDb, onSnapshotApplied } from '@/mock/data';
 import type {
-  ChargeAllocation,
   ChargeCategory,
   ChargeDirection,
   ChargeDoc,
-  ChargeLine,
   ChargeScope,
   Cheque,
   ChequeStatus,
@@ -57,7 +55,7 @@ import type {
   TransferStatus,
   Warehouse,
 } from '@/types';
-import { contractValue, splitEqually } from '@/utils/calc';
+import { contractValue } from '@/utils/calc';
 import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { masterData, type MasterDataResult } from '@/services/masterData';
 import { contractsApi, type ContractResult } from '@/services/contracts';
@@ -65,6 +63,7 @@ import { invoicesApi, type InvoiceResult } from '@/services/invoices';
 import { paymentsApi, type ChequeResult, type PaymentResult } from '@/services/payments';
 import { containersApi, type ContainerResult } from '@/services/containers';
 import { warehouseDocsApi, type InventoryDocResult } from '@/services/warehouseDocs';
+import { chargesApi, type ChargeResult } from '@/services/charges';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -172,6 +171,16 @@ async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice
  * record to the register that nobody named. Replacing payments alone would leave the cheques tab
  * missing it until the next reload.</p>
  */
+/** An expense or revenue write. */
+async function chargeWrite(send: () => Promise<ChargeResult>): Promise<ChargeDoc> {
+  const { entity, all } = await send();
+  db.chargeDocs.length = 0;
+  db.chargeDocs.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
 /** A warehouse write. The whole list comes back, because stock is folded from all of it. */
 async function warehouseWrite(send: () => Promise<InventoryDocResult>): Promise<InventoryDocument> {
   const { entity, all } = await send();
@@ -2757,48 +2766,8 @@ export async function getChargeDoc(id: string): Promise<ChargeDocDetail | null> 
   };
 }
 
-function nextChargeDocId(): string {
-  let max = 0;
-  for (const d of db.chargeDocs) {
-    const match = /^chg-(\d+)$/.exec(d.id);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `chg-${String(max + 1).padStart(4, '0')}`;
-}
-
 /** Monotonic max-scanning counter (mirrors `nextInvoiceItemId`) — NOT length-derived, so a
  *  create/remove interleave across two docs can't mint a duplicate line id. */
-let chargeLineSeq = db.chargeDocs.reduce(
-  (max, doc) =>
-    doc.lines.reduce((m, line) => {
-      const match = /^chgline-(\d+)$/.exec(line.id);
-      return match ? Math.max(m, Number(match[1])) : m;
-    }, max),
-  0,
-);
-function nextChargeLineId(): string {
-  chargeLineSeq += 1;
-  return `chgline-${chargeLineSeq}`;
-}
-
-/** Same idiom, one level deeper: allocations are inline on lines which are inline on docs. */
-let chargeAllocationSeq = db.chargeDocs.reduce(
-  (max, doc) =>
-    doc.lines.reduce(
-      (m, line) =>
-        line.allocations.reduce((mm, alloc) => {
-          const match = /^chgalloc-(\d+)$/.exec(alloc.id);
-          return match ? Math.max(mm, Number(match[1])) : mm;
-        }, m),
-      max,
-    ),
-  0,
-);
-function nextChargeAllocationId(): string {
-  chargeAllocationSeq += 1;
-  return `chgalloc-${chargeAllocationSeq}`;
-}
-
 export interface ChargeDocInput {
   direction: ChargeDirection;
   kind: ChargeScope;
@@ -2816,39 +2785,7 @@ export interface ChargeDocInput {
  * kind and invoiceId travel together for the document's whole lifetime (spec §2).
  */
 export async function createChargeDoc(input: ChargeDocInput): Promise<ChargeDoc> {
-  await delay(200);
-  const title = input.title.trim();
-  if (!title) throw new Error('title-required');
-  if (!input.date) throw new Error('date-required');
-
-  let invoiceId: string | undefined;
-  if (input.kind === 'INVOICE') {
-    if (!input.invoiceId) throw new Error('invoice-required');
-    const invoice = findInvoice(input.invoiceId);
-    if (!invoice) throw new Error('invoice-not-found');
-    const side = invoiceSide(invoice.invoiceType);
-    const isChainLeafConfirmed =
-      isPricedType(invoice.invoiceType) && chainLeafDocs(side).some((inv) => inv.id === invoice.id);
-    if (!isChainLeafConfirmed) throw new Error('invoice-not-confirmed');
-    invoiceId = invoice.id;
-  }
-
-  const doc: ChargeDoc = {
-    id: nextChargeDocId(),
-    direction: input.direction,
-    kind: input.kind,
-    title,
-    invoiceId,
-    date: input.date,
-    description: input.description?.trim() || undefined,
-    status: 'ACTIVE',
-    createdAt: dayjs().toISOString(),
-    lines: [],
-    totalUSD: 0,
-  };
-  db.chargeDocs.push(doc);
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.create(input));
 }
 
 /**
@@ -2859,34 +2796,13 @@ export async function createChargeDoc(input: ChargeDocInput): Promise<ChargeDoc>
  * final must never throw, unlike the old `validateAndNormalizeExpense` escape hatch it replaces.
  */
 export async function updateChargeDoc(id: string, input: ChargeDocInput): Promise<ChargeDoc> {
-  await delay(180);
-  const doc = db.chargeDocs.find((d) => d.id === id);
-  if (!doc) throw new Error(`Charge document ${id} not found`);
-  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
-  const title = input.title.trim();
-  if (!title) throw new Error('title-required');
-  if (!input.date) throw new Error('date-required');
-  if ((input.invoiceId ?? undefined) !== doc.invoiceId) throw new Error('invoice-immutable');
-  if (input.kind !== doc.kind) throw new Error('kind-immutable');
-  if (input.direction !== doc.direction) throw new Error('direction-immutable');
-
-  doc.title = title;
-  doc.date = input.date;
-  doc.description = input.description?.trim() || undefined;
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.update(id, input));
 }
 
 /** Sets `status = 'CANCELLED'`. No hard delete (spec §4) — cancelled docs are excluded from
  *  every total/listing that matters via each reader's own filter, not by disappearing here. */
 export async function cancelChargeDoc(id: string): Promise<ChargeDoc> {
-  await delay(160);
-  const doc = db.chargeDocs.find((d) => d.id === id);
-  if (!doc) throw new Error(`Charge document ${id} not found`);
-  if (doc.status === 'CANCELLED') return doc;
-  doc.status = 'CANCELLED';
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.cancel(id));
 }
 
 /* -------------------------- Charge line recompute (spec §3) -------------------------- *
@@ -2898,36 +2814,6 @@ export async function cancelChargeDoc(id: string): Promise<ChargeDoc> {
  * Called at the end of every line mutation below; never exported, never callable from the
  * client.
  * ------------------------------------------------------------------ */
-
-/** allocation.amountUSD = round(allocation.amount / line.fxRate) — the leaf conversion. */
-function recomputeAllocationUSD(alloc: ChargeAllocation, line: ChargeLine): void {
-  alloc.amountUSD = round(alloc.amount / line.fxRate);
-}
-
-/**
- * Rolls a line's allocations up into its totals, or converts `amount` directly for GENERAL
- * lines. Branches on `allocations.length` rather than taking a separate `kind` parameter:
- * GENERAL lines always carry `allocations: []`, INVOICE lines always carry ≥1 (the
- * `goods-required`/`last-allocation` guard below), so the array itself is the reliable signal.
- */
-function recomputeLineTotals(line: ChargeLine): void {
-  if (line.allocations.length > 0) {
-    for (const alloc of line.allocations) recomputeAllocationUSD(alloc, line);
-    line.amount = round(line.allocations.reduce((s, a) => s + a.amount, 0));
-    line.amountUSD = round(line.allocations.reduce((s, a) => s + a.amountUSD, 0));
-    line.quantityBasisMt = round3(line.allocations.reduce((s, a) => s + a.quantityMt, 0));
-    line.unitPriceUSD = line.quantityBasisMt > 0 ? round(line.amountUSD / line.quantityBasisMt) : undefined;
-  } else {
-    line.amountUSD = round(line.amount / line.fxRate);
-    line.quantityBasisMt = undefined;
-    line.unitPriceUSD = undefined;
-  }
-}
-
-/** doc.totalUSD = round(Σ lines[].amountUSD). */
-function recomputeDocTotals(doc: ChargeDoc): void {
-  doc.totalUSD = round(doc.lines.reduce((s, l) => s + l.amountUSD, 0));
-}
 
 export interface ChargeGoodInput {
   invoiceItemId: string;
@@ -2949,156 +2835,10 @@ export interface ChargeLineInput {
   goods?: ChargeGoodInput[];
 }
 
-/**
- * Shared guard + build pipeline for `addChargeLine`/`updateChargeLine` (spec §4) — one atomic
- * mutation replaces the WHOLE allocation set rather than granular per-good calls, matching the
- * Phase 4b modal's UX and making two-pass validation trivial. This builds a brand-new
- * `ChargeLine` in a local variable and only ever throws before it is attached to `doc.lines` —
- * the two exported functions below attach it (push / index-replace) after this returns
- * successfully, which is what keeps a failed edit from leaving `doc.lines` half-mutated (the
- * `addInvoiceItems` atomicity idiom).
- *
- * `existing` is the line being replaced (undefined when creating) — consulted ONLY for the
- * `category-inactive` "only when the id changes" union idiom: an already-saved line pointing at
- * a category that has since been deactivated must survive an unrelated edit (e.g. just the
- * date), so the inactive check is skipped unless this call is actually switching categories.
- *
- * Guards IN ORDER: `category-required` → `category-not-found` → `category-inactive` (only when
- * the category id changes) → `category-mismatch` (`category.direction !== doc.direction ||
- * category.scope !== doc.kind`) → `date-required` → `invalid-amount` → `invalid-fx` (USD forces
- * fxRate = 1 server-side, skipping the check entirely) → `person-required` → `person-not-found`
- * → `cost-centre-not-found` (when supplied) → GENERAL: `goods-not-allowed` if goods supplied →
- * INVOICE PASS 1 (validate ALL
- * before building anything): resolve the goods set (supplied, else default = every item of the
- * booked invoice) → `goods-required` if empty (the `last-allocation` invariant: an INVOICE line
- * must keep ≥1 good, on create AND on update) → per good, in order: `good-not-on-invoice` →
- * `duplicate-good` (same `referenceDocumentItemId` twice) → `invalid-good-amount` (supplied and
- * < 0) → PASS 2: build allocations deriving `referenceDocumentItemId`/`product`/`quantityMt`
- * from the invoice line — NEVER the client (the `createInventoryDocument` precedent).
- */
-function buildChargeLine(doc: ChargeDoc, input: ChargeLineInput, existing?: ChargeLine): ChargeLine {
-  if (!input.categoryId) throw new Error('category-required');
-  const category = db.chargeCategories.find((c) => c.id === input.categoryId);
-  if (!category) throw new Error('category-not-found');
-  const categoryChanged = !existing || existing.categoryId !== category.id;
-  if (categoryChanged && !category.active) throw new Error('category-inactive');
-  if (category.direction !== doc.direction || category.scope !== doc.kind) {
-    throw new Error('category-mismatch');
-  }
-  if (!input.date) throw new Error('date-required');
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('invalid-amount');
-
-  const currency = input.currency;
-  // USD FORCES fxRate = 1 server-side regardless of what the client sent — only a non-USD
-  // line's fxRate is actually validated (spec §4).
-  let fxRate = 1;
-  if (currency !== 'USD') {
-    if (!Number.isFinite(input.fxRate) || input.fxRate <= 0) throw new Error('invalid-fx');
-    fxRate = input.fxRate;
-  }
-
-  // Person is REQUIRED on every charge line, expense and revenue alike. Applied to both rather
-  // than expenses only: the two directions are one mirrored implementation, and "who was this
-  // revenue from" is as meaningful as "who was this expense to" — a rule on one side only would
-  // fork the module. Existence is checked, active is NOT: deactivating a person must not make
-  // their historical lines unsaveable.
-  if (!input.personId) throw new Error('person-required');
-  if (!db.customers.some((c) => c.id === input.personId)) throw new Error('person-not-found');
-
-  if (input.costCentreId && !db.costCentres.some((cc) => cc.id === input.costCentreId)) {
-    throw new Error('cost-centre-not-found');
-  }
-
-  const lineId = existing?.id ?? nextChargeLineId();
-  const line: ChargeLine = {
-    id: lineId,
-    docId: doc.id,
-    categoryId: category.id,
-    date: input.date,
-    amount: round(input.amount),
-    currency,
-    fxRate,
-    amountUSD: 0,
-    personId: input.personId,
-    costCentreId: input.costCentreId || undefined,
-    description: input.description?.trim() || undefined,
-    quantityBasisMt: undefined,
-    unitPriceUSD: undefined,
-    allocations: [],
-  };
-
-  if (doc.kind === 'GENERAL') {
-    if (input.goods !== undefined) throw new Error('goods-not-allowed');
-    recomputeLineTotals(line);
-    return line;
-  }
-
-  // INVOICE kind: `doc.invoiceId` is guaranteed set here — validated at createChargeDoc and
-  // immutable ever after (updateChargeDoc's whole point, spec §2) — guarded anyway rather than
-  // trusting the invariant blindly.
-  const invoice = doc.invoiceId ? findInvoice(doc.invoiceId) : undefined;
-  if (!invoice) throw new Error(`Charge document ${doc.id} has no booked invoice`);
-
-  // PASS 1 (addInvoiceItems atomicity idiom): resolve + validate the ENTIRE goods set before
-  // building anything. Omitted goods → every item of the booked invoice (spec §4).
-  const goodsInputs: ChargeGoodInput[] =
-    input.goods !== undefined ? input.goods : invoice.items.map((it) => ({ invoiceItemId: it.id }));
-  if (goodsInputs.length === 0) throw new Error('goods-required');
-
-  const seenRef = new Set<string>();
-  const resolved: Array<{ invoiceItem: InvoiceItem; amount?: number }> = [];
-  for (const g of goodsInputs) {
-    const invoiceItem = invoice.items.find((it) => it.id === g.invoiceItemId);
-    if (!invoiceItem) throw new Error('good-not-on-invoice');
-    if (seenRef.has(invoiceItem.referenceDocumentItemId)) throw new Error('duplicate-good');
-    seenRef.add(invoiceItem.referenceDocumentItemId);
-    // `Number.isFinite` FIRST, matching every sibling guard in this file (`invalid-amount`,
-    // `invalid-fx`, `invalid-item-amount`): a bare `< 0` lets NaN/Infinity/"abc"/{} through, and
-    // a non-finite per-good amount propagates through recomputeLineTotals → recomputeDocTotals
-    // into `doc.totalUSD`, which `persistDb()` then serialises to JSON `null` — unrecoverable.
-    if (g.amount !== undefined && (!Number.isFinite(g.amount) || g.amount < 0)) {
-      throw new Error('invalid-good-amount');
-    }
-    resolved.push({ invoiceItem, amount: g.amount });
-  }
-
-  // PASS 2: every entry is now known-valid. An explicit amount on EVERY good is used as-is; a
-  // missing amount on ANY good forces a full `splitEqually` across all of them, seeded from
-  // `input.amount` — this mirrors the re-split table (spec §3): adding/removing a good re-splits
-  // the WHOLE line, discarding any prior manual per-good edits, not just the touched row's.
-  const allExplicit = resolved.every((r) => r.amount !== undefined);
-  const amounts = allExplicit
-    ? resolved.map((r) => round(r.amount!))
-    : splitEqually(input.amount, resolved.length);
-
-  line.allocations = resolved.map((r, i) => ({
-    id: nextChargeAllocationId(),
-    lineId,
-    invoiceItemId: r.invoiceItem.id,
-    // Derived from the invoice line, NEVER the client (createInventoryDocument precedent).
-    referenceDocumentItemId: r.invoiceItem.referenceDocumentItemId,
-    product: r.invoiceItem.product,
-    quantityMt: r.invoiceItem.quantityMt,
-    amount: amounts[i],
-    amountUSD: 0,
-  }));
-
-  recomputeLineTotals(line);
-  return line;
-}
-
 /** Guards IN ORDER: doc not-found → `doc-cancelled` → the `buildChargeLine` pipeline above.
  *  Recomputes doc totals and persists on success; a thrown guard never touches `doc.lines`. */
 export async function addChargeLine(docId: string, input: ChargeLineInput): Promise<ChargeDoc> {
-  await delay(200);
-  const doc = db.chargeDocs.find((d) => d.id === docId);
-  if (!doc) throw new Error(`Charge document ${docId} not found`);
-  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
-  const line = buildChargeLine(doc, input);
-  doc.lines.push(line);
-  recomputeDocTotals(doc);
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.addLine(docId, input));
 }
 
 /** Full replace of one line (incl. its whole allocation set) — see `buildChargeLine`'s header
@@ -3108,32 +2848,13 @@ export async function updateChargeLine(
   lineId: string,
   input: ChargeLineInput,
 ): Promise<ChargeDoc> {
-  await delay(200);
-  const doc = db.chargeDocs.find((d) => d.id === docId);
-  if (!doc) throw new Error(`Charge document ${docId} not found`);
-  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
-  const index = doc.lines.findIndex((l) => l.id === lineId);
-  if (index === -1) throw new Error(`Charge line ${lineId} not found`);
-  const line = buildChargeLine(doc, input, doc.lines[index]);
-  doc.lines[index] = line;
-  recomputeDocTotals(doc);
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.updateLine(docId, lineId, input));
 }
 
 /** Hard remove — only headers soft-cancel (spec §4); a removed line has no independent
  *  lifecycle to preserve, unlike a cancelled doc which must stay visible (struck through). */
 export async function removeChargeLine(docId: string, lineId: string): Promise<ChargeDoc> {
-  await delay(180);
-  const doc = db.chargeDocs.find((d) => d.id === docId);
-  if (!doc) throw new Error(`Charge document ${docId} not found`);
-  if (doc.status === 'CANCELLED') throw new Error('doc-cancelled');
-  const exists = doc.lines.some((l) => l.id === lineId);
-  if (!exists) throw new Error(`Charge line ${lineId} not found`);
-  doc.lines = doc.lines.filter((l) => l.id !== lineId);
-  recomputeDocTotals(doc);
-  persistDb();
-  return doc;
+  return chargeWrite(() => chargesApi.removeLine(docId, lineId));
 }
 
 /* ------------------------------ Claims ---------------------------------- *

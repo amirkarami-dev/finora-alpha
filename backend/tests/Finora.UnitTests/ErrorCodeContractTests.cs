@@ -95,6 +95,11 @@ public sealed class ErrorCodeContractTests
         // Same for a stale warehouse-document id: the browser threw a sentence, and the generic
         // failure message is the right thing to say about a document that has gone.
         "inventory-doc-not-found",
+
+        // And for an expense or revenue document, and one of its lines. Same reason, same
+        // sentence-not-code history.
+        "charge-doc-not-found",
+        "charge-line-not-found",
     ];
 
     /// <summary>

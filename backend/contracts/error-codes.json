@@ -17,6 +17,8 @@
   "category-mismatch",
   "category-not-found",
   "category-required",
+  "charge-doc-not-found",
+  "charge-line-not-found",
   "cheque-not-found",
   "cheque-not-pending",
   "cheque-required",

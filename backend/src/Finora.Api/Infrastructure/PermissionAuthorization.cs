@@ -40,7 +40,8 @@ internal static class PermissionAuthorization
     /// </summary>
     private static readonly string[][] AnyOfPolicies =
     [
-        ["purchase", "sale"],   // trade documents: one route, both sides
+        ["purchase", "sale"],         // trade documents: one route, both sides
+        ["expenses", "revenues"],     // charges: one mirrored implementation, two screens
     ];
 
     /// <summary>
