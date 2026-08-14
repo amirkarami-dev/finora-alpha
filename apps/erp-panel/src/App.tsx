@@ -5,24 +5,15 @@ import enUS from 'antd/locale/en_US';
 import arEG from 'antd/locale/ar_EG';
 import faIR from 'antd/locale/fa_IR';
 import type { Locale as AntdLocale } from 'antd/es/locale';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes';
 import { getThemeConfig } from '@/theme/tokens';
 import { useUiStore } from '@/store/useUiStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { hydrateFromServer, setServerBacked } from '@/services/snapshot';
+import { queryClient } from '@/services/queryClient';
 import { useLocaleEffect } from '@/hooks/useLocaleEffect';
 import { LOCALES } from '@/config/constants';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 const ANTD_LOCALES: Record<string, AntdLocale> = {
   en: enUS,

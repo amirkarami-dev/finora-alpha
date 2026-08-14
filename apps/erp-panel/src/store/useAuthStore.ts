@@ -4,6 +4,7 @@ import type { RouteKey } from '@/config/roles';
 import { normalizeRole } from '@/config/roles';
 import { identityApi, type SessionUser } from '@/services/identity';
 import { clearHydratedData, hydrateFromServer, setServerBacked } from '@/services/snapshot';
+import { clearQueryCache } from '@/services/queryClient';
 
 export interface AuthUser {
   id: string;
@@ -71,6 +72,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
     //
     // It also replaces whatever the previous session left behind, which matters because the
     // server tailors the snapshot to the role asking for it.
+    // The cached answers belong to whoever was here before. Emptied BEFORE the new data
+    // arrives, so nothing can be read between the two.
+    clearQueryCache();
     setServerBacked(await hydrateFromServer());
     return user;
   },
@@ -83,8 +87,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
       // them looking signed in because the network blipped is the wrong way to be wrong.
       set({ user: null, permissions: [], home: '/app', isAuthenticated: false, ready: true });
       // The business data goes too. Ending the session but leaving the dataset would let the
-      // next person to sign in on this browser read what the last one could.
+      // next person to sign in on this browser read what the last one could. That means the
+      // store AND the query cache: the store is where the numbers are derived from today, and
+      // the cache is where they will come from once the reads move to the server.
       clearHydratedData();
+      clearQueryCache();
     }
   },
 
