@@ -48,24 +48,38 @@ public sealed class Payment
     /// </summary>
     public MoneyDirection Direction { get; set; } = MoneyDirection.IN;
 
-    private PaymentType? _type;
-
     /// <summary>
-    /// Whether this settles a document or is money on account.
+    /// Whether this settles a document or is money on account, AS STORED — null when the caller
+    /// never said, which is the legacy single-shot shape.
     ///
     /// <para>
-    /// Derived when the caller does not say, exactly as <c>api.ts</c> derives it:
-    /// <c>p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL')</c>. A fixed default of INVOICE reads
-    /// harmless and flips a validation branch — money on account would start demanding a document
-    /// on every line (<c>invoice-required</c>) when the rule is that it must refuse one
-    /// (<c>invoice-not-allowed</c>).
+    /// This is the discriminator for <see cref="Items"/>, and it is this rather than
+    /// <see cref="Status"/> because it is written once, at creation, and never again. A status is
+    /// written every time somebody confirms or reopens a payment; keying the shape on it means
+    /// the first reopen of a single-shot payment destroys the one bit that said it has no lines,
+    /// and the payment can then never be confirmed again — its money leaving every balance while
+    /// it sits in a draft nobody can clear.
     /// </para>
+    ///
+    /// <para>Sent as <c>type</c> and omitted when null, so the SPA reads it exactly as it wrote
+    /// it and derives the meaning itself.</para>
     /// </summary>
-    public PaymentType Type
-    {
-        get => _type ?? (InvoiceId is null ? PaymentType.GENERAL : PaymentType.INVOICE);
-        set => _type = value;
-    }
+    [JsonPropertyName("type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PaymentType? RawType { get; set; }
+
+    /// <summary>
+    /// What the type MEANS, derived the way <c>api.ts</c> derives it:
+    /// <c>p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL')</c>.
+    ///
+    /// <para>A fixed default of INVOICE reads harmless and flips a validation branch — money on
+    /// account would start demanding a document on every line (<c>invoice-required</c>) when the
+    /// rule is that it must refuse one (<c>invoice-not-allowed</c>).</para>
+    /// </summary>
+    [JsonIgnore]
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public PaymentType Type =>
+        RawType ?? (InvoiceId is null ? PaymentType.GENERAL : PaymentType.INVOICE);
 
     /// <summary>
     /// Null means the header IS the settlement — the legacy single-shot shape.
@@ -80,9 +94,6 @@ public sealed class Payment
     /// </para>
     ///
     /// <para>
-    /// It also carries the one bit the row would otherwise lose: absent status, absent type and
-    /// absent items are written together and only together, so null here is what tells
-    /// <see cref="Items"/> apart from an empty list.
     /// </para>
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -100,6 +111,9 @@ public sealed class Payment
     /// skips the empty-lines and header-versus-lines checks entirely, because there is nothing to
     /// check against. An empty list is "lines flow here, none entered yet", which must refuse to
     /// confirm. Collapsing the two makes every legacy payment unconfirmable.
+    ///
+    /// <para>Which of the two a stored row is comes from <see cref="RawType"/>, not from the
+    /// status — see there.</para>
     /// </para>
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

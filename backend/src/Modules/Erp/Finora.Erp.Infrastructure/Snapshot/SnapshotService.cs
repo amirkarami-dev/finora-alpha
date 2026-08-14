@@ -315,7 +315,7 @@ public sealed class SnapshotService(ErpDbContext db)
     /// </summary>
     private static List<Payment> LegacyShape(List<Payment> payments)
     {
-        foreach (var payment in payments.Where(p => p.Status is null))
+        foreach (var payment in payments.Where(p => p.RawType is null))
         {
             payment.Items = null;
         }

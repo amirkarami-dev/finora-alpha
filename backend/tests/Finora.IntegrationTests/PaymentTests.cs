@@ -97,18 +97,21 @@ public sealed class PaymentTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task A_payment_with_no_invoice_and_no_type_is_money_on_account()
+    public async Task A_payment_that_names_no_type_comes_back_naming_none()
     {
         using var client = await AsManagerAsync(fixture);
 
         var snapshot = await RoundTripAsync(client, LegacyPaymentSnapshot);
         var payment = snapshot.GetProperty("payments")[0];
 
-        // `p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL')` — derived from whether a document is
-        // named, not fixed. Defaulted to INVOICE, this payment demands an invoice on every line
-        // it ever gets (`invoice-required`) when the spec says it must refuse one
-        // (`invoice-not-allowed`). The branch flips entirely.
-        Assert.Equal("GENERAL", payment.GetProperty("type").GetString());
+        // It comes back naming no type, exactly as it arrived, and the SPA derives the meaning
+        // the same way the server does: `p.type ?? (p.invoiceId ? 'INVOICE' : 'GENERAL')`.
+        //
+        // Answering with a concrete derived value would read correctly and destroy the one bit
+        // that says this payment has no lines and never will — after which confirming it once
+        // strands it in a draft it can never leave.
+        Assert.False(payment.TryGetProperty("type", out _),
+            "a payment that named no type must come back naming none");
     }
 
     [Fact]
@@ -124,6 +127,9 @@ public sealed class PaymentTests(ApiFixture fixture)
         var snapshot = await RoundTripAsync(client, withInvoice);
         var payment = snapshot.GetProperty("payments")[0];
 
-        Assert.Equal("INVOICE", payment.GetProperty("type").GetString());
+        // Same on the other side of the derivation: absent, because that is what was sent. The
+        // invoice it names is what makes it an INVOICE payment, on both sides of the wire.
+        Assert.False(payment.TryGetProperty("type", out _));
+        Assert.Equal("inv-pi-0001", payment.GetProperty("invoiceId").GetString());
     }
 }

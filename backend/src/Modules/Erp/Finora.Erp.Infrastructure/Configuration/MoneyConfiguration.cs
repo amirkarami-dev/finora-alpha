@@ -36,11 +36,11 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.Currency).HasEnumColumn();
         builder.Property(p => p.Method).HasEnumColumn();
         builder.Property(p => p.Direction).HasEnumColumn();
-        // Through the PROPERTY, not the backing field. `Type` derives itself from `InvoiceId`
-        // when nobody set it, and EF's default field access reads the null backing field straight
-        // past that getter — writing the enum's zero value, INVOICE, and inverting the rule for
-        // every payment that arrives without a type.
-        builder.Property(p => p.Type).HasEnumColumn().UsePropertyAccessMode(PropertyAccessMode.Property);
+        // The STORED type, which is nullable: null is the legacy single-shot shape and is what
+        // tells an absent line collection apart from an empty one. The derived `Type` is not
+        // mapped — storing it would write the enum's zero value for a row that named none, and
+        // invert the rule for every payment that arrives without one.
+        builder.Property(p => p.RawType).HasEnumColumn().HasColumnName("type").IsRequired(false);
         // Nullable, and the null is meaningful: a payment that names no status is the legacy
         // single-shot shape, where the header itself is the settlement. It is also the only thing
         // that tells an absent line collection apart from an empty one — see Payment.Items.

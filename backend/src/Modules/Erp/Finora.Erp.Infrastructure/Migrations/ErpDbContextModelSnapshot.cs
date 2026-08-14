@@ -1694,6 +1694,12 @@ namespace Finora.Erp.Infrastructure.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("notes");
 
+                    b.Property<string>("RawType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("type")
+                        .HasJsonPropertyName("type");
+
                     b.Property<string>("Reference")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -1703,12 +1709,6 @@ namespace Finora.Erp.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("type");
 
                     b.HasKey("Id")
                         .HasName("pk_payments");

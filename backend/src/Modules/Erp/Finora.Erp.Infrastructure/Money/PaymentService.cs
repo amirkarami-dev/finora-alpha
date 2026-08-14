@@ -85,7 +85,7 @@ public sealed class PaymentService(ErpDbContext db)
     /// </summary>
     private static Payment Shape(Payment payment)
     {
-        if (payment.Status is null)
+        if (payment.RawType is null)
         {
             payment.Items = null;
         }
@@ -145,7 +145,7 @@ public sealed class PaymentService(ErpDbContext db)
             // Naming a type opts into the header-and-lines flow. Omitting it is the single-shot
             // flow, whose header IS the settlement: no status, no lines, and both absences are
             // read back as "already recorded" rather than as a draft with nothing on it.
-            Type = input.Type ?? (input.InvoiceId is null ? PaymentType.GENERAL : PaymentType.INVOICE),
+            RawType = input.Type,
             Status = input.Type is null ? null : PaymentStatus.DRAFT,
             Items = input.Type is null ? null : [],
         };

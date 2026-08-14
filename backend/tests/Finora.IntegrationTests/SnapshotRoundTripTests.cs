@@ -305,7 +305,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
             {
                 Id = "NIZ001", CustomerId = "cust-am", Date = When, Currency = Currency.USD,
                 Amount = 100m, FxRate = 1m, AmountUSD = 100m, Method = PaymentMethod.TT,
-                Direction = MoneyDirection.OUT, Type = PaymentType.INVOICE,
+                Direction = MoneyDirection.OUT, RawType = PaymentType.INVOICE,
                 Status = PaymentStatus.CONFIRMED,
                 Items =
                 [

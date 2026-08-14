@@ -143,6 +143,29 @@ public sealed class PaymentEndpointTests(ApiFixture fixture)
         Assert.Equal("CONFIRMED", confirmed.GetProperty("entity").GetProperty("status").GetString());
     }
 
+    [Fact]
+    public async Task Confirming_a_single_shot_payment_does_not_strand_it()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var id = Id(await PostAsync(c, "/api/erp/payments", new
+        {
+            customerId = "cust-am", date = Date, amount = 500m, currency = "USD", fxRate = 1m,
+            method = "Cash", direction = "IN",
+        }));
+
+        // Confirm, reopen, confirm again — the ordinary way a mistake gets corrected.
+        await PostAsync(c, $"/api/erp/payments/{id}/status", new { status = "CONFIRMED" });
+        await PostAsync(c, $"/api/erp/payments/{id}/status", new { status = "DRAFT" });
+        var again = await PostAsync(c, $"/api/erp/payments/{id}/status", new { status = "CONFIRMED" });
+
+        // If the status write destroys the shape, this payment is stranded in DRAFT forever and
+        // its money leaves every balance — the exact failure the third state exists to prevent,
+        // arriving one layer further in.
+        Assert.Equal("CONFIRMED", again.GetProperty("entity").GetProperty("status").GetString());
+    }
+
     /* ------------------------------ Confirming -------------------------------- */
 
     [Fact]
