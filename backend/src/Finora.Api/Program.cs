@@ -56,6 +56,7 @@ app.MapPaymentEndpoints();
 app.MapContainerEndpoints();
 app.MapWarehouseDocumentEndpoints();
 app.MapChargeEndpoints();
+app.MapClaimEndpoints();
 
 // Off unless a test switches it on. See DiagnosticEndpoints for why the seam exists at all.
 if (app.Configuration.GetValue<bool>("Api:EnableDiagnosticEndpoints"))

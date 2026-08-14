@@ -23,6 +23,7 @@
   "cheque-not-pending",
   "cheque-required",
   "claim-cancelled",
+  "claim-not-found",
   "claim-type-required",
   "code-required",
   "container-not-found",

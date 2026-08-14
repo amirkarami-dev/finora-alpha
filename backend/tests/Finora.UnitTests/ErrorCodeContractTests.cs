@@ -100,6 +100,7 @@ public sealed class ErrorCodeContractTests
         // sentence-not-code history.
         "charge-doc-not-found",
         "charge-line-not-found",
+        "claim-not-found",
     ];
 
     /// <summary>
