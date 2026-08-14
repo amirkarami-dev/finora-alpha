@@ -101,6 +101,12 @@ public sealed class ErrorCodeContractTests
         "charge-doc-not-found",
         "charge-line-not-found",
         "claim-not-found",
+
+        // Transfers. A stale id, and a cancelled transfer being brought back — the screen offers
+        // neither, and both get the generic message. `transfer-not-draft` is NOT here: the form
+        // names that one, because editing a confirmed transfer is a thing a person tries.
+        "transfer-not-found",
+        "transfer-cancelled",
     ];
 
     /// <summary>

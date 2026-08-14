@@ -214,18 +214,20 @@ public sealed class Cheque
 /// </summary>
 public sealed class MoneyTransfer
 {
+    // The accounts and their currencies are settable: a DRAFT transfer can be pointed at
+    // different accounts, and confirming is what fixes it. Only a draft is editable at all.
     public required string Id { get; init; }
     public required string Number { get; set; }
     public DateTimeOffset Date { get; set; }
 
-    public required string FromAccountId { get; init; }
+    public required string FromAccountId { get; set; }
     [JsonIgnore] public FinancialAccount? FromAccount { get; init; }
 
-    public required string ToAccountId { get; init; }
+    public required string ToAccountId { get; set; }
     [JsonIgnore] public FinancialAccount? ToAccount { get; init; }
 
-    public Currency FromCurrency { get; init; }
-    public Currency ToCurrency { get; init; }
+    public Currency FromCurrency { get; set; }
+    public Currency ToCurrency { get; set; }
     public decimal FromAmount { get; set; }
     public decimal ToAmount { get; set; }
 

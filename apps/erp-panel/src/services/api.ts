@@ -64,6 +64,7 @@ import { containersApi, type ContainerResult } from '@/services/containers';
 import { warehouseDocsApi, type InventoryDocResult } from '@/services/warehouseDocs';
 import { chargesApi, type ChargeResult } from '@/services/charges';
 import { claimsApi, type ClaimResult } from '@/services/claims';
+import { transfersApi, type TransferResult } from '@/services/transfers';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -171,6 +172,16 @@ async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice
  * record to the register that nobody named. Replacing payments alone would leave the cheques tab
  * missing it until the next reload.</p>
  */
+/** A transfer write. */
+async function transferWrite(send: () => Promise<TransferResult>): Promise<MoneyTransfer> {
+  const { entity, all } = await send();
+  db.moneyTransfers.length = 0;
+  db.moneyTransfers.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
 /** A claim write. */
 async function claimWrite(send: () => Promise<ClaimResult>): Promise<Claim> {
   const { entity, all } = await send();
@@ -3173,30 +3184,6 @@ export interface PaymentInput {
  * is the base currency (spec §17).
  * -------------------------------------------------------------------------- */
 
-/** Value of `amount` in the base currency. `rate` is units-per-USD, so USD passes through. */
-function toBaseUSD(amount: number, currency: Currency, rate: number): number {
-  return currency === 'USD' ? round(amount) : round(amount / rate);
-}
-
-function nextTransferId(): string {
-  let max = 0;
-  for (const tr of db.moneyTransfers) {
-    const m = /^tr-(\d+)$/.exec(tr.id);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `tr-${String(max + 1).padStart(4, '0')}`;
-}
-
-let transferAllocSeq = 0;
-function seedTransferChildCounters(): void {
-  if (transferAllocSeq) return;
-  for (const tr of db.moneyTransfers) {
-    for (const a of tr.allocations) {
-      const m = /^tralloc-(\d+)$/.exec(a.id);
-      if (m) transferAllocSeq = Math.max(transferAllocSeq, Number(m[1]));
-    }
-  }
-}
 
 /**
  * One movement of money into or out of a company account.
@@ -3381,119 +3368,17 @@ export interface MoneyTransferInput {
   allocations?: Array<{ invoiceId?: string; invoiceItemId?: string; amount: number }>;
 }
 
-/**
- * Guards IN ORDER: `date-required` → `from-account-required` / `from-account-not-found` →
- * `to-account-required` / `to-account-not-found` → `same-account` → `account-inactive` →
- * `invalid-amount` → `invalid-rate` → per allocation `invalid-allocation-amount` →
- * `invoice-not-found` → `over-allocated` (allocations may not exceed the transfer).
- *
- * Allocations are entirely OPTIONAL and may cover part of the transfer — spec §12 requires the
- * unallocated remainder to stay valid, so there is deliberately no "must equal" check here.
- */
-function buildTransfer(input: MoneyTransferInput, existing?: MoneyTransfer): MoneyTransfer {
-  if (!input.date) throw new Error('date-required');
-  if (!input.fromAccountId) throw new Error('from-account-required');
-  const from = db.financialAccounts.find((a) => a.id === input.fromAccountId);
-  if (!from) throw new Error('from-account-not-found');
-  if (!input.toAccountId) throw new Error('to-account-required');
-  const to = db.financialAccounts.find((a) => a.id === input.toAccountId);
-  if (!to) throw new Error('to-account-not-found');
-  if (from.id === to.id) throw new Error('same-account');
-  if (!from.active || !to.active) throw new Error('account-inactive');
-  if (!Number.isFinite(input.fromAmount) || input.fromAmount <= 0) throw new Error('invalid-amount');
-  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) throw new Error('invalid-rate');
-  // Same currency can only ever be 1:1 — a rate here would silently create or destroy money.
-  if (from.currency === to.currency && Math.abs(input.exchangeRate - 1) > 0.000001) {
-    throw new Error('same-currency-rate');
-  }
-
-  const fromAmount = round(input.fromAmount);
-  const toAmount = round(fromAmount * input.exchangeRate);
-  // The sending side defines what left the company, so the base value is measured there. For a
-  // USD source that is the amount itself; when the money LANDS in USD the destination already
-  // states it exactly; otherwise it converts at the source account's book rate.
-  //
-  // The old fallback fed `input.exchangeRate` — destination units per source unit — into
-  // `toBaseUSD`, which divides by foreign-units-per-USD. On the first AED → USD transfer from a
-  // fresh account that valued 3,672.50 AED at $13,486 instead of $1,000.
-  const fromBook = computeAccountBalance(from.id).bookRate;
-  const baseAmount =
-    from.currency === 'USD'
-      ? fromAmount
-      : to.currency === 'USD'
-        ? toAmount
-        : toBaseUSD(fromAmount, from.currency, fromBook ?? 1);
-
-  seedTransferChildCounters();
-  const id = existing?.id ?? nextTransferId();
-  const allocations = (input.allocations ?? []).map((a) => {
-    if (!Number.isFinite(a.amount) || a.amount <= 0) throw new Error('invalid-allocation-amount');
-    if (a.invoiceId && !findInvoice(a.invoiceId)) throw new Error('invoice-not-found');
-    transferAllocSeq += 1;
-    return {
-      id: `tralloc-${transferAllocSeq}`,
-      transferId: id,
-      invoiceId: a.invoiceId,
-      invoiceItemId: a.invoiceItemId,
-      amount: round(a.amount),
-      currency: from.currency,
-      baseAmount: toBaseUSD(a.amount, from.currency, fromBook ?? input.exchangeRate),
-      baseCurrency: 'USD' as Currency,
-    };
-  });
-  const allocTotal = round(allocations.reduce((s, a) => s + a.amount, 0));
-  if (allocTotal > fromAmount + 0.005) throw new Error('over-allocated');
-
-  return {
-    id,
-    number: existing?.number ?? `TR-${id.slice(3)}`,
-    date: input.date,
-    fromAccountId: from.id,
-    toAccountId: to.id,
-    fromCurrency: from.currency,
-    toCurrency: to.currency,
-    fromAmount,
-    toAmount,
-    exchangeRate: input.exchangeRate,
-    baseAmount,
-    status: existing?.status ?? 'DRAFT',
-    notes: input.notes?.trim() || undefined,
-    allocations,
-  };
-}
-
 export async function createMoneyTransfer(input: MoneyTransferInput): Promise<MoneyTransfer> {
-  await delay(200);
-  const transfer = buildTransfer(input);
-  db.moneyTransfers.push(transfer);
-  persistDb();
-  return transfer;
+  return transferWrite(() => transfersApi.create(input));
 }
 
 export async function updateMoneyTransfer(id: string, input: MoneyTransferInput): Promise<MoneyTransfer> {
-  await delay(200);
-  const idx = db.moneyTransfers.findIndex((t) => t.id === id);
-  if (idx < 0) throw new Error('transfer-not-found');
-  const current = db.moneyTransfers[idx];
-  if (current.status !== 'DRAFT') throw new Error('transfer-not-draft');
-  db.moneyTransfers[idx] = buildTransfer(input, current);
-  persistDb();
-  return db.moneyTransfers[idx];
+  return transferWrite(() => transfersApi.update(id, input));
 }
 
 /** DRAFT → CONFIRMED → CANCELLED. Confirming is what actually moves the balance. */
 export async function setTransferStatus(id: string, status: TransferStatus): Promise<MoneyTransfer> {
-  await delay(160);
-  const transfer = db.moneyTransfers.find((t) => t.id === id);
-  if (!transfer) throw new Error('transfer-not-found');
-  if (transfer.status === status) return transfer;
-  if (transfer.status === 'CANCELLED') throw new Error('transfer-cancelled');
-  // A confirmed transfer used to be locked once a revaluation had measured the balance it fed.
-  // Gains no longer read account balances at all, so there is nothing left to protect and the
-  // `transfer-revalued` guard is gone with the engine that needed it.
-  transfer.status = status;
-  persistDb();
-  return transfer;
+  return transferWrite(() => transfersApi.setStatus(id, status));
 }
 
 export interface MoneyTransferRow extends MoneyTransfer {
