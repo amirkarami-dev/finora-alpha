@@ -4,8 +4,15 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "3031", "--strictPort"],
+      "runtimeArgs": ["run", "dev", "-w", "@finora/erp-panel", "--", "--port", "3031", "--strictPort"],
       "port": 3031,
+      "autoPort": false
+    },
+    {
+      "name": "land",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@finora/land-web"],
+      "port": 3032,
       "autoPort": false
     }
   ]

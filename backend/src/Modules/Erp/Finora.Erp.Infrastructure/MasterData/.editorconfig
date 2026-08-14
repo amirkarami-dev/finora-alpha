@@ -1,0 +1,14 @@
+[*.cs]
+
+# CA1862: prefer string.Equals(..., StringComparison.OrdinalIgnoreCase) over ToLower().
+#
+# The case-insensitive name checks in MasterDataService live inside expression trees that EF
+# translates to SQL, and StringComparison has no SQL equivalent — Npgsql throws at runtime rather
+# than quietly comparing the wrong way. `ToLower()` translates to PostgreSQL's `lower()`, which is
+# what "two goods may not share a name" actually means here. Following the rule would replace a
+# working query with one that fails on every call.
+#
+# Scoped to this folder, which holds only the master-data service and its DTOs; the rule stays on
+# everywhere else, including the in-memory comparisons in the same file (those use
+# StringComparison.Ordinal).
+dotnet_diagnostic.CA1862.severity = none

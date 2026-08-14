@@ -1,47 +1,24 @@
 {
-  "name": "finora-alpha",
+  "name": "finora",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Finora — modern metals & commodities trading receivables platform",
+  "description": "Finora monorepo — ERP panel, corporate site and the .NET backend behind them",
+  "//": "apps/land-web is deliberately NOT a workspace. It is React 19 + Next 15 while apps/erp-panel is React 18 + AntD 5; sharing one hoisted node_modules puts `next` beside React 18 and the app's own modules beside React 19 — two Reacts in one process. It keeps its own lockfile and install; the root scripts below drive it with --prefix.",
+  "workspaces": [
+    "apps/erp-panel",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview --port 4173",
-    "lint": "eslint .",
-    "typecheck": "tsc -b",
-    "smoke": "node scripts/smoke.mjs"
-  },
-  "dependencies": {
-    "@ant-design/icons": "^5.5.2",
-    "@fontsource-variable/inter": "^5.2.8",
-    "@fontsource-variable/vazirmatn": "^5.2.8",
-    "@tanstack/react-query": "^5.62.7",
-    "antd": "^5.22.5",
-    "dayjs": "^1.11.13",
-    "i18next": "^24.2.0",
-    "i18next-browser-languagedetector": "^8.0.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-i18next": "^15.2.0",
-    "react-router-dom": "^6.28.0",
-    "recharts": "^2.15.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zustand": "^5.0.2"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.17.0",
-    "@types/node": "^22.19.21",
-    "@types/react": "^18.3.17",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^9.17.0",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "eslint-plugin-react-refresh": "^0.4.16",
-    "globals": "^15.14.0",
-    "playwright": "^1.60.0",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
-    "vite": "^6.0.3"
+    "postinstall": "npm --prefix apps/land-web install --no-audit --no-fund",
+    "dev": "npm run dev -w @finora/erp-panel",
+    "dev:land": "npm --prefix apps/land-web run dev",
+    "build": "npm run build --workspaces --if-present && npm run build:land",
+    "build:land": "npm --prefix apps/land-web run build",
+    "preview": "npm run preview -w @finora/erp-panel",
+    "//lint": "land-web is excluded: it has no ESLint configured (see its next.config.mjs, which sets eslint.ignoreDuringBuilds) and `next lint` prompts interactively. Add it there first, then add it here.",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && npm --prefix apps/land-web run typecheck",
+    "smoke": "npm run smoke -w @finora/erp-panel"
   }
 }

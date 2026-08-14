@@ -1,0 +1,11 @@
+[*.cs]
+
+# CA1711: types should not end in a reserved suffix.
+#
+# The suffix it objects to is "Permission", which the rule reserves because .NET Framework's
+# code-access-security types ended that way. That world is gone, and `Permission` /
+# `RolePermission` are the exact words this domain uses — the authorization model in
+# AccessCatalogue, the tables, the API payload and the front end's guards all call them that.
+# Renaming the type to satisfy a rule about a retired framework feature would make the code
+# describe the business less accurately, which is the opposite of what naming rules are for.
+dotnet_diagnostic.CA1711.severity = none

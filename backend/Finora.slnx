@@ -1,0 +1,35 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Finora.Api/Finora.Api.csproj" />
+    <Project Path="src/Finora.AppHost/Finora.AppHost.csproj" />
+    <Project Path="src/Finora.Migrator/Finora.Migrator.csproj" />
+    <Project Path="src/Finora.ServiceDefaults/Finora.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/Finora.BuildingBlocks.Application/Finora.BuildingBlocks.Application.csproj" />
+    <Project Path="src/BuildingBlocks/Finora.BuildingBlocks.Contracts/Finora.BuildingBlocks.Contracts.csproj" />
+    <Project Path="src/BuildingBlocks/Finora.BuildingBlocks.Domain/Finora.BuildingBlocks.Domain.csproj" />
+    <Project Path="src/BuildingBlocks/Finora.BuildingBlocks.Infrastructure/Finora.BuildingBlocks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Cms/">
+    <Project Path="src/Modules/Cms/Finora.Cms.Application/Finora.Cms.Application.csproj" />
+    <Project Path="src/Modules/Cms/Finora.Cms.Domain/Finora.Cms.Domain.csproj" />
+    <Project Path="src/Modules/Cms/Finora.Cms.Infrastructure/Finora.Cms.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Erp/">
+    <Project Path="src/Modules/Erp/Finora.Erp.Application/Finora.Erp.Application.csproj" />
+    <Project Path="src/Modules/Erp/Finora.Erp.Domain/Finora.Erp.Domain.csproj" />
+    <Project Path="src/Modules/Erp/Finora.Erp.Infrastructure/Finora.Erp.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/Finora.Identity.Application/Finora.Identity.Application.csproj" />
+    <Project Path="src/Modules/Identity/Finora.Identity.Domain/Finora.Identity.Domain.csproj" />
+    <Project Path="src/Modules/Identity/Finora.Identity.Infrastructure/Finora.Identity.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Finora.ArchitectureTests/Finora.ArchitectureTests.csproj" />
+    <Project Path="tests/Finora.IntegrationTests/Finora.IntegrationTests.csproj" />
+    <Project Path="tests/Finora.UnitTests/Finora.UnitTests.csproj" />
+  </Folder>
+</Solution>

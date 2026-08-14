@@ -1,14 +1,27 @@
-# Finora (metals-trading SPA) — erp.metal-uae.com
-# Additive deployment: attaches to the existing external `traefik` network.
-# Distinct names (metal-erp*) so it never collides with the other `finora` stack.
+# Finora — one stack for all three deployables, deployed to /data/apps/metal-erp.
+#
+# Replaces the two separate stacks that used to live at /data/apps/metal-erp (SPA only) and
+# /data/apps/metal-uae (corporate site). Both hosts keep their existing names and routers, so
+# the consolidation is invisible from outside.
+#
+# Attaches to the existing external `traefik` network. Cloudflare proxies every domain
+# (SSL mode "Full") and Traefik terminates TLS with `tls=true`. We do NOT use the `myresolver`
+# ACME resolver: it runs the DNS-01 challenge against ArvanCloud DNS, which is not
+# authoritative for these Cloudflare-hosted zones.
+#
+# Every image is built from the REPO ROOT context, after building the apps locally:
+#     npm run build          # both frontends
+#     docker compose -f deploy/docker-compose.yml build
 services:
+  # ── ERP panel — erp.metal-uae.com ────────────────────────────────────────────────
   web:
-    build: .
+    build:
+      context: ..
+      dockerfile: deploy/erp-panel/Dockerfile
     image: metal-erp-web:latest
     container_name: metal-erp-web
     restart: unless-stopped
-    networks:
-      - traefik
+    networks: [traefik]
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
@@ -16,7 +29,174 @@ services:
       - "traefik.http.routers.metal-erp.rule=Host(`erp.metal-uae.com`)"
       - "traefik.http.routers.metal-erp.tls=true"
       - "traefik.http.services.metal-erp.loadbalancer.server.port=80"
+      # The second company's front end is the SAME container. The bundle asks for `/api/...`
+      # relative, so it has no idea which host it is on and needs no build of its own — the two
+      # instances differ only in which API answers that path, below. One container, one image to
+      # keep current, and no chance of the two front ends drifting apart.
+      - "traefik.http.routers.metal-erp2.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2.rule=Host(`erp2.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp2.tls=true"
+      - "traefik.http.routers.metal-erp2.service=metal-erp"
+
+  # ── Corporate site — metal-uae.com ───────────────────────────────────────────────
+  land:
+    build:
+      context: ..
+      dockerfile: deploy/land-web/Dockerfile
+    image: metal-uae-web:latest
+    container_name: metal-uae-web
+    restart: unless-stopped
+    networks: [traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.metal-uae.entrypoints=websecure"
+      - "traefik.http.routers.metal-uae.rule=Host(`metal-uae.com`)"
+      - "traefik.http.routers.metal-uae.tls=true"
+      - "traefik.http.services.metal-uae.loadbalancer.server.port=3000"
+      # www -> root (301), handled at the origin so it works regardless of any Cloudflare
+      # redirect rule. $$ escapes compose interpolation -> Traefik ${1}.
+      - "traefik.http.routers.metal-uae-www.entrypoints=websecure"
+      - "traefik.http.routers.metal-uae-www.rule=Host(`www.metal-uae.com`)"
+      - "traefik.http.routers.metal-uae-www.tls=true"
+      - "traefik.http.routers.metal-uae-www.service=metal-uae"
+      - "traefik.http.routers.metal-uae-www.middlewares=metal-uae-wwwredir"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.regex=^https?://www\\.metal-uae\\.com/(.*)"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.replacement=https://metal-uae.com/$${1}"
+      - "traefik.http.middlewares.metal-uae-wwwredir.redirectregex.permanent=true"
+
+  # ── API — api.metal-uae.com ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api/Dockerfile
+      target: api
+    image: metal-erp-api:latest
+    container_name: metal-erp-api
+    restart: unless-stopped
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      # The Postgres container already on this box, reachable by its container name. The
+      # password is supplied from the host environment, never committed.
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      # Data-protection keys, which encrypt the session cookie. Without a volume they live in the
+      # container and a redeploy signs every user out.
+      - api-keys:/keys
+    networks: [traefik, postgres]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.metal-erp-api.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp-api.rule=Host(`api.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp-api.tls=true"
+      - "traefik.http.services.metal-erp-api.loadbalancer.server.port=8080"
+      # The SAME-ORIGIN route, and the one the SPA actually uses. It calls `/api/...` relative,
+      # so in production that resolves to erp.metal-uae.com — and without this router nginx
+      # answers with index.html, which the app reads as a broken API and can never sign in
+      # through. It is also what makes the session work at all: the cookie is HttpOnly, Secure
+      # and SameSite=Strict, so a browser on erp.metal-uae.com would never send a cookie set by
+      # api.metal-uae.com. Same origin means no CORS and no cross-site cookie.
+      #
+      # Priority beats the SPA's Host-only router; Traefik would already rank the longer rule
+      # higher, but leaving that to a tie-break rule is how a site starts serving HTML to its
+      # own API calls.
+      - "traefik.http.routers.metal-erp-api-sameorigin.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp-api-sameorigin.rule=Host(`erp.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp-api-sameorigin.tls=true"
+      - "traefik.http.routers.metal-erp-api-sameorigin.service=metal-erp-api"
+      - "traefik.http.routers.metal-erp-api-sameorigin.priority=100"
+
+  # Runs pending migrations and exits. The API waits for it to succeed, so no replica ever
+  # serves traffic against a schema it does not match.
+  migrator:
+    build:
+      context: ..
+      dockerfile: deploy/api/Dockerfile
+      target: migrator
+    image: metal-erp-migrator:latest
+    container_name: metal-erp-migrator
+    restart: "no"
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    # The identity seeder runs here, not in the API, so this is the container that needs the
+    # `Identity__SeedPasswords__<email>` entries — without them every seeded account is created
+    # unusable, deliberately, so a production deploy cannot quietly inherit the published demo
+    # passwords.
+    #
+    # They are NOT set here and NOT in `.env`. Those names carry an @ and a dot, and compose's
+    # dotenv parser rejects both ("unexpected character @ in variable name"), while `${...}`
+    # interpolation only accepts [A-Za-z_][A-Za-z0-9_]*. A YAML `environment:` mapping has no
+    # such restriction, so they live in an uncommitted `docker-compose.override.yml` beside this
+    # file, which compose merges automatically. See deploy/README.md.
+    networks: [postgres]
+
+  # ── Second company — erp2.metal-uae.com ─────────────────────────────────────────
+  #
+  # A separate API process against a separate database, not one process choosing a database per
+  # request. Picking the tenant from the Host header would be real code — resolution, per-request
+  # connections, per-tenant migrations and seeding — and its failure mode is silent: one bug and
+  # one company's balances render under the other's name. On a ledger that is the worst thing
+  # that can happen. This costs about 90 MB of memory instead, which is what the first API
+  # actually uses.
+  #
+  # Both instances deliberately share the compose file and therefore the image tag: they are two
+  # production tenants, and a version skew between them would be an accident, never a decision.
+  api2:
+    image: metal-erp-api:latest
+    container_name: metal-erp2-api
+    restart: unless-stopped
+    depends_on:
+      migrator2:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora2;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      # Its own keys. Sessions cannot cross anyway — the cookie is host-scoped — but two tenants
+      # sharing a signing key is a coupling with no upside.
+      - api2-keys:/keys
+    networks: [traefik, postgres]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Mirrors the first instance exactly, with a 2 on every name: a public host for reaching the
+      # API directly, and the same-origin route the SPA actually uses.
+      - "traefik.http.routers.metal-erp2-api.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2-api.rule=Host(`api2.metal-uae.com`)"
+      - "traefik.http.routers.metal-erp2-api.tls=true"
+      - "traefik.http.services.metal-erp2-api.loadbalancer.server.port=8080"
+      # The route the second company's front end uses. Without it, nginx answers erp2's own
+      # `/api` calls with index.html and nobody can sign in — and it is what keeps the session
+      # working, since the cookie is host-scoped and one set by api2.metal-uae.com would never
+      # be sent by a browser sitting on erp2.metal-uae.com.
+      - "traefik.http.routers.metal-erp2-api-sameorigin.entrypoints=websecure"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.rule=Host(`erp2.metal-uae.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.tls=true"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.service=metal-erp2-api"
+      - "traefik.http.routers.metal-erp2-api-sameorigin.priority=100"
+
+  migrator2:
+    image: metal-erp-migrator:latest
+    container_name: metal-erp2-migrator
+    restart: "no"
+    environment:
+      ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora2;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    # Its own seeded accounts, with their own passwords, in the same uncommitted override file.
+    networks: [postgres]
+
+volumes:
+  api-keys:
+  api2-keys:
 
 networks:
   traefik:
     external: true
+  # The network the existing `postgres` container is on. Declared external so this stack
+  # attaches to it rather than creating a second, isolated one.
+  postgres:
+    external: true
+    name: ${POSTGRES_NETWORK:-postgres_default}

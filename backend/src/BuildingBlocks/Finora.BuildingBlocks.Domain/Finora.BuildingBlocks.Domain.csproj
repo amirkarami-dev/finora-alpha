@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- The error-code contract travels with the assembly so ErrorCodes and the /meta endpoint
+         read the same bytes that CI diffs against api.ts. -->
+    <EmbeddedResource Include="..\..\..\contracts\error-codes.json" Link="error-codes.json" />
+  </ItemGroup>
+
+</Project>

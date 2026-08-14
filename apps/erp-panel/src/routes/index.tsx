@@ -1,0 +1,146 @@
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import type { JSX } from 'react';
+import { Spin } from 'antd';
+import { useAuthStore } from '@/store/useAuthStore';
+import { ROUTES } from '@/config/constants';
+import type { RouteKey } from '@/config/roles';
+import { AppLayout } from '@/components/layout/AppLayout';
+import LoginPage from '@/pages/auth/LoginPage';
+import ExecutiveDashboardPage from '@/pages/executive/ExecutiveDashboardPage';
+import CustomerPortalPage from '@/pages/portal/CustomerPortalPage';
+import DashboardPage from '@/pages/dashboard/DashboardPage';
+import CustomersPage from '@/pages/customers/CustomersPage';
+import CustomerDetailPage from '@/pages/customers/CustomerDetailPage';
+import ContractsPage from '@/pages/contracts/ContractsPage';
+import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
+import ContainersPage from '@/pages/containers/ContainersPage';
+import PaymentsPage from '@/pages/payments/PaymentsPage';
+import PaymentDetailPage from '@/pages/payments/PaymentDetailPage';
+import TransfersPage from '@/pages/finance/TransfersPage';
+import ExchangeGainLossPage from '@/pages/finance/ExchangeGainLossPage';
+import DevelopPage from '@/pages/develop/DevelopPage';
+import ReportsPage from '@/pages/reports/ReportsPage';
+import SettingsPage from '@/pages/settings/SettingsPage';
+import PartnersPage from '@/pages/partners/PartnersPage';
+import PurchasePage from '@/pages/tradeInvoices/PurchasePage';
+import SalePage from '@/pages/tradeInvoices/SalePage';
+import InvoiceDetailPage from '@/pages/tradeInvoices/InvoiceDetailPage';
+import InvoicePrintPage from '@/pages/tradeInvoices/InvoicePrintPage';
+import WarehousePage from '@/pages/warehouse/WarehousePage';
+import BaseInfoPage from '@/pages/baseInfo/BaseInfoPage';
+import UsersPage from '@/pages/users/UsersPage';
+import ExpensesPage from '@/pages/charges/ExpensesPage';
+import RevenuesPage from '@/pages/charges/RevenuesPage';
+import ChargeDocDetailPage from '@/pages/charges/ChargeDocDetailPage';
+import ClaimsPage from '@/pages/claims/ClaimsPage';
+import NotFoundPage from '@/pages/NotFoundPage';
+
+function RequireAuth({ children }: { children: JSX.Element }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const ready = useAuthStore((s) => s.ready);
+  const location = useLocation();
+
+  // The session lives in a cookie, so on a fresh load the app does not yet know whether there
+  // is one until `restore()` has asked. Redirecting before that answer arrives would bounce a
+  // signed-in user to the login page on every refresh.
+  if (!ready) return <FullPageSpinner />;
+
+  if (!isAuthenticated) {
+    return <Navigate to={ROUTES.login} replace state={{ from: location }} />;
+  }
+  return children;
+}
+
+/** Renders children if the user holds `routeKey` (any-of when an array), else redirects home. */
+function RoleRoute({ routeKey, children }: { routeKey: RouteKey | RouteKey[]; children: JSX.Element }) {
+  const permissions = useAuthStore((s) => s.permissions);
+  const home = useAuthStore((s) => s.home);
+  const keys = Array.isArray(routeKey) ? routeKey : [routeKey];
+  if (!keys.some((k) => permissions.includes(k))) {
+    return <Navigate to={home} replace />;
+  }
+  return children;
+}
+
+/** Redirects /app to the current role's home page, as the server named it. */
+function RoleHome() {
+  return <Navigate to={useAuthStore((s) => s.home)} replace />;
+}
+
+function FullPageSpinner() {
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100dvh' }}>
+      <Spin size="large" />
+    </div>
+  );
+}
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      {/* erp.metal-uae.com is the trading desk, not a shop window — the marketing site is
+          metal-uae.com. The root goes into the app rather than straight to /login so that the
+          answer depends on who is asking: RequireAuth sends a visitor to the login page, and
+          RoleHome sends someone who already has a session to their own home page instead of a
+          form they do not need. */}
+      <Route path={ROUTES.landing} element={<Navigate to={ROUTES.app} replace />} />
+      <Route path={ROUTES.login} element={<LoginPage />} />
+
+      <Route
+        path={ROUTES.app}
+        element={
+          <RequireAuth>
+            <AppLayout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<RoleHome />} />
+        <Route path="executive" element={<RoleRoute routeKey="executive"><ExecutiveDashboardPage /></RoleRoute>} />
+        <Route path="portal" element={<RoleRoute routeKey="portal"><CustomerPortalPage /></RoleRoute>} />
+        <Route path="dashboard" element={<RoleRoute routeKey="dashboard"><DashboardPage /></RoleRoute>} />
+        <Route path="customers" element={<RoleRoute routeKey="customers"><CustomersPage /></RoleRoute>} />
+        <Route path="customers/:id" element={<RoleRoute routeKey="customers"><CustomerDetailPage /></RoleRoute>} />
+        <Route path="contracts" element={<RoleRoute routeKey="contracts"><ContractsPage /></RoleRoute>} />
+        <Route path="contracts/:id" element={<RoleRoute routeKey="contracts"><ContractDetailPage /></RoleRoute>} />
+        <Route path="partners" element={<RoleRoute routeKey="partners"><PartnersPage /></RoleRoute>} />
+        <Route path="containers" element={<RoleRoute routeKey="containers"><ContainersPage /></RoleRoute>} />
+        <Route path="invoices/purchase" element={<RoleRoute routeKey="purchase"><PurchasePage /></RoleRoute>} />
+        <Route path="invoices/sale" element={<RoleRoute routeKey="sale"><SalePage /></RoleRoute>} />
+        <Route path="warehouse" element={<RoleRoute routeKey="warehouse"><WarehousePage /></RoleRoute>} />
+        <Route path="base-info" element={<RoleRoute routeKey="baseInfo"><BaseInfoPage /></RoleRoute>} />
+        {/* Keeps old cost-centres bookmarks alive after the Phase 2 BaseInfo move. */}
+        <Route path="cost-centres" element={<Navigate to="/app/base-info?tab=costCentres" replace />} />
+        <Route path="invoices/:id" element={<RoleRoute routeKey={['purchase', 'sale']}><InvoiceDetailPage /></RoleRoute>} />
+        <Route path="payments" element={<RoleRoute routeKey="payments"><PaymentsPage /></RoleRoute>} />
+        <Route path="payments/:id" element={<RoleRoute routeKey="payments"><PaymentDetailPage /></RoleRoute>} />
+        <Route path="transfers" element={<RoleRoute routeKey="transfers"><TransfersPage /></RoleRoute>} />
+        <Route path="exchange" element={<RoleRoute routeKey="exchange"><ExchangeGainLossPage /></RoleRoute>} />
+        <Route path="develop" element={<RoleRoute routeKey="develop"><DevelopPage /></RoleRoute>} />
+        {/* Charge documents (design spec §9 Phase 4b) — one detail component for both directions,
+            registered per-direction at its own list route; Phase 5 adds the `revenues` twin. */}
+        <Route path="expenses" element={<RoleRoute routeKey="expenses"><ExpensesPage /></RoleRoute>} />
+        <Route path="expenses/:id" element={<RoleRoute routeKey="expenses"><ChargeDocDetailPage /></RoleRoute>} />
+        <Route path="revenues" element={<RoleRoute routeKey="revenues"><RevenuesPage /></RoleRoute>} />
+        <Route path="revenues/:id" element={<RoleRoute routeKey="revenues"><ChargeDocDetailPage /></RoleRoute>} />
+        {/* Claims (design spec §9 Phase 6) — one page, tabbed expense/revenue via useTabParam. */}
+        <Route path="claims" element={<RoleRoute routeKey="claims"><ClaimsPage /></RoleRoute>} />
+        <Route path="reports" element={<RoleRoute routeKey="reports"><ReportsPage /></RoleRoute>} />
+        <Route path="users" element={<RoleRoute routeKey="users"><UsersPage /></RoleRoute>} />
+        <Route path="settings" element={<RoleRoute routeKey="settings"><SettingsPage /></RoleRoute>} />
+      </Route>
+
+      <Route
+        path="/app/invoices/:id/print"
+        element={
+          <RequireAuth>
+            <RoleRoute routeKey={['purchase', 'sale']}>
+              <InvoicePrintPage />
+            </RoleRoute>
+          </RequireAuth>
+        }
+      />
+
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
+}

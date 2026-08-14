@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Finora.Cms.Domain\Finora.Cms.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\Finora.BuildingBlocks.Application\Finora.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\Finora.BuildingBlocks.Contracts\Finora.BuildingBlocks.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+  </PropertyGroup>
+
+</Project>

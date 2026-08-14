@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    // Under npm workspaces, dependencies hoist to the repo root and this app may have no
+    // local node_modules at all — so the build info cannot live there. `.tsbuild/` is
+    // app-local, gitignored, and exists regardless of how the workspace resolves.
+    "tsBuildInfoFile": "./.tsbuild/tsconfig.node.tsbuildinfo",
+    "outDir": "./.tsbuild/node",
+    "emitDeclarationOnly": true,
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts"]
+}
