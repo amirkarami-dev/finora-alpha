@@ -88,8 +88,14 @@ public sealed class PaymentService(ErpDbContext db)
         if (payment.RawType is null)
         {
             payment.Items = null;
+            return payment;
         }
 
+        // Ordered here rather than in the query, because an edited line is rebuilt and re-added,
+        // which puts it last in the tracked collection while a fresh read has it wherever the
+        // database happens to return it. The screen renders the collection as given, so without
+        // this a line jumps to the bottom when you edit it and back on the next reload.
+        payment.Items = [.. payment.Items!.OrderBy(i => LineOrder(i.Id))];
         return payment;
     }
 
@@ -100,7 +106,7 @@ public sealed class PaymentService(ErpDbContext db)
         // The same unguarded division the charge lines already close: a non-USD amount recorded
         // against a zero or negative rate produces an infinity that then poisons every aggregate
         // that sums payments.
-        if (input.Currency != Currency.USD && input.FxRate <= 0)
+        if (input.Currency != Currency.USD && input.FxRate is not > 0)
         {
             throw new DomainException(Codes.InvalidFx);
         }
@@ -125,7 +131,7 @@ public sealed class PaymentService(ErpDbContext db)
 
         var amountUsd = input.Currency == Currency.USD
             ? input.Amount
-            : Rounding.Money(input.Amount / input.FxRate);
+            : Rounding.Money(input.Amount / input.FxRate!.Value);
 
         var payment = new Payment
         {
@@ -134,7 +140,7 @@ public sealed class PaymentService(ErpDbContext db)
             Date = input.Date,
             Currency = input.Currency,
             Amount = input.Amount,
-            FxRate = input.FxRate,
+            FxRate = input.FxRate ?? 1m,
             AmountUSD = amountUsd,
             Method = input.Method,
             Reference = invoice?.InvoiceNumber,
@@ -162,6 +168,11 @@ public sealed class PaymentService(ErpDbContext db)
 
         var payment = await LoadAsync(id, cancellationToken);
         RefuseWhenConfirmed(payment);
+
+        if (input.Date == default)
+        {
+            throw new DomainException(Codes.DateRequired);
+        }
 
         if (input.Amount <= 0)
         {
@@ -242,6 +253,12 @@ public sealed class PaymentService(ErpDbContext db)
         RefuseWhenConfirmed(payment);
 
         var line = await BuildItemAsync(payment, input, existing: null, cancellationToken);
+
+        // Adding a line is what turns "the header IS the settlement" into "lines flow here", so
+        // the shape is promoted with it. Without this the row is written and then hidden on every
+        // read — the header's converted total silently re-based on a line nobody can see, and
+        // confirming skipping the check that would have caught it.
+        payment.RawType ??= payment.Type;
         (payment.Items ??= []).Add(line);
 
         RecomputeTotals(payment);
@@ -348,12 +365,14 @@ public sealed class PaymentService(ErpDbContext db)
         var fxRate = 1m;
         if (input.Currency != Currency.USD)
         {
-            if (input.FxRate <= 0)
+            // An omitted rate is refused, not read as 1. Defaulted, a dirham line books its
+            // amount verbatim as dollars — 3.67x too much — with nothing to show it happened.
+            if (input.FxRate is not > 0)
             {
                 throw new DomainException(Codes.InvalidFx);
             }
 
-            fxRate = input.FxRate;
+            fxRate = input.FxRate.Value;
         }
 
         // TT moves money through a bank and Cash through a safe, and both name the account in the
@@ -418,8 +437,18 @@ public sealed class PaymentService(ErpDbContext db)
             else
             {
                 var all = await ListAsync(cancellationToken);
+                // Ordered before the walk. The order IS the rule — first line to last, each
+                // taking what it owes — and a set returned by the database has no order at all;
+                // it merely looks stable until a row is updated and moves.
+                var ordered = new Invoice
+                {
+                    Id = invoice.Id, InvoiceNumber = invoice.InvoiceNumber,
+                    ContractId = invoice.ContractId, CustomerId = invoice.CustomerId,
+                    Items = [.. invoice.Items.OrderBy(i => LineOrder(i.Id))],
+                };
+
                 foreach (var (invoiceItemId, usd) in
-                         PaymentMath.AutoFillAllocations(invoice, amountUsd, all, payment.Id))
+                         PaymentMath.AutoFillAllocations(ordered, amountUsd, all, payment.Id))
                 {
                     requested.Add(new AllocationInput
                     {
@@ -726,6 +755,19 @@ public sealed class PaymentService(ErpDbContext db)
     }
 
     /* --------------------------------- Plumbing ------------------------------- */
+
+    /// <summary>
+    /// The number inside an id like <c>payitem-12</c> or <c>invitem-3</c>.
+    ///
+    /// <para>Ids are minted max-scan-plus-one, so ascending order is the order the lines were
+    /// created — which is the document order every screen shows and the order the auto-fill rule
+    /// is written against. Anything unparseable sorts last rather than throwing.</para>
+    /// </summary>
+    private static int LineOrder(string id)
+    {
+        var dash = id.LastIndexOf('-');
+        return dash >= 0 && int.TryParse(id.AsSpan(dash + 1), out var n) ? n : int.MaxValue;
+    }
 
     private async Task<Payment> LoadAsync(string id, CancellationToken cancellationToken) =>
         Shape(await db.Payments

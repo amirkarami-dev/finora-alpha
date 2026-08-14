@@ -13,12 +13,16 @@ namespace Finora.Erp.Application;
 public sealed record PaymentInput
 {
     public required string CustomerId { get; init; }
-    public required DateTimeOffset Date { get; init; }
+    public DateTimeOffset Date { get; init; }
     public required decimal Amount { get; init; }
     public required Currency Currency { get; init; }
 
-    /// <summary>Units per USD as the caller declares them. Forced to 1 for USD.</summary>
-    public decimal FxRate { get; init; } = 1m;
+    /// <summary>
+    /// Units per USD as the caller declares them. Forced to 1 for USD, and REQUIRED for anything
+    /// else — nullable rather than defaulted, because a default of 1 is indistinguishable from a
+    /// declared 1 and would let a dirham amount be booked verbatim as dollars.
+    /// </summary>
+    public decimal? FxRate { get; init; }
 
     public required PaymentMethod Method { get; init; }
 
@@ -47,7 +51,7 @@ public sealed record PaymentInput
 public sealed record PaymentHeaderInput
 {
     public required string CustomerId { get; init; }
-    public required DateTimeOffset Date { get; init; }
+    public DateTimeOffset Date { get; init; }
     public required decimal Amount { get; init; }
     public required Currency Currency { get; init; }
     public string? Notes { get; init; }
@@ -59,10 +63,12 @@ public sealed record PaymentItemInput
     /// <summary>Required on a payment that settles documents, refused on money on account.</summary>
     public string? InvoiceId { get; init; }
 
-    public required DateTimeOffset Date { get; init; }
+    public DateTimeOffset Date { get; init; }
     public required decimal Amount { get; init; }
     public required Currency Currency { get; init; }
-    public decimal FxRate { get; init; } = 1m;
+    /// <summary>See <see cref="PaymentInput.FxRate"/> — same rule, same reason.</summary>
+    public decimal? FxRate { get; init; }
+
     public required PaymentMethod Method { get; init; }
 
     /// <summary>The bank (TT) or safe (Cash) the money moved through.</summary>
@@ -88,7 +94,7 @@ public sealed record AllocationInput
 
 public sealed record ChequeInput
 {
-    public ChequeType Type { get; init; }
+    public required ChequeType Type { get; init; }
     public required string Number { get; init; }
     public required string BankName { get; init; }
     public required DateTimeOffset DueDate { get; init; }

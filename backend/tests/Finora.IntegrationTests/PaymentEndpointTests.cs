@@ -166,6 +166,47 @@ public sealed class PaymentEndpointTests(ApiFixture fixture)
         Assert.Equal("CONFIRMED", again.GetProperty("entity").GetProperty("status").GetString());
     }
 
+    [Fact]
+    public async Task A_line_added_to_a_single_shot_payment_is_visible()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var id = Id(await PostAsync(c, "/api/erp/payments", new
+        {
+            customerId = "cust-am", date = Date, amount = 500m, currency = "USD", fxRate = 1m,
+            method = "Cash", direction = "IN",
+        }));
+
+        // Reopen and add a line — three clicks from the payment page, and the sample dataset is
+        // full of payments with this shape.
+        await PostAsync(c, $"/api/erp/payments/{id}/status", new { status = "DRAFT" });
+        var added = await PostAsync(c, $"/api/erp/payments/{id}/items", new
+        {
+            date = Date, amount = 600m, currency = "USD", fxRate = 1m,
+            method = "Cash", bankAccountId = "acc-safe",
+        });
+
+        // Adding a line is what turns "the header IS the settlement" into "lines flow here". If
+        // the shape is not promoted with it, the row is written and then hidden on every read:
+        // the header's converted total is re-based on a line nobody can see, deleting it does
+        // nothing, and confirming skips the header-versus-lines check entirely.
+        var entity = added.GetProperty("entity");
+        Assert.True(entity.TryGetProperty("items", out var items), "the line must be visible");
+        Assert.Equal(1, items.GetArrayLength());
+
+        var reread = (await c.GetFromJsonAsync<JsonElement>(
+            new Uri("/api/erp/payments", UriKind.Relative), Json))
+            .EnumerateArray().Single(p => p.GetProperty("id").GetString() == id);
+        Assert.Equal(1, reread.GetProperty("items").GetArrayLength());
+
+        // And the header now has to agree with it.
+        var mismatch = await c.PostAsJsonAsync(
+            new Uri($"/api/erp/payments/{id}/status", UriKind.Relative), new { status = "CONFIRMED" });
+        Assert.Equal("payment-total-mismatch",
+            (await ProblemAsync(mismatch)).GetProperty("code").GetString());
+    }
+
     /* ------------------------------ Confirming -------------------------------- */
 
     [Fact]
@@ -319,6 +360,52 @@ public sealed class PaymentEndpointTests(ApiFixture fixture)
             });
 
         response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task A_line_in_another_currency_must_declare_its_rate()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = Id(await DraftAsync(c));
+
+        // No `fxRate` key at all. Defaulted to 1, this books AED 100 as USD 100 rather than USD
+        // 27.23 — a rate of one is what a dirham line looks like when nobody set one, so the
+        // guard can only fire if "absent" and "one" are different things.
+        var response = await c.PostAsJsonAsync(
+            new Uri($"/api/erp/payments/{id}/items", UriKind.Relative), new
+            {
+                invoiceId = "inv-si-0001", date = Date, amount = 100m, currency = "AED",
+                method = "TT", bankAccountId = "acc-bank",
+            });
+
+        Assert.Equal("invalid-fx", (await ProblemAsync(response)).GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task A_missing_date_is_refused_with_a_code_not_a_crash()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = Id(await DraftAsync(c));
+
+        // `required DateTimeOffset` fails at binding, which is a 400 or a 500 depending on the
+        // environment and carries no machine code — so the screen that branches on
+        // `date-required` shows its generic failure instead.
+        var header = await c.PutAsJsonAsync(
+            new Uri($"/api/erp/payments/{id}", UriKind.Relative), new
+            {
+                customerId = "cust-am", amount = 100m, currency = "USD",
+            });
+        Assert.Equal("date-required", (await ProblemAsync(header)).GetProperty("code").GetString());
+
+        var line = await c.PostAsJsonAsync(
+            new Uri($"/api/erp/payments/{id}/items", UriKind.Relative), new
+            {
+                invoiceId = "inv-si-0001", amount = 100m, currency = "USD", fxRate = 1m,
+                method = "TT", bankAccountId = "acc-bank",
+            });
+        Assert.Equal("date-required", (await ProblemAsync(line)).GetProperty("code").GetString());
     }
 
     /* -------------------------------- Methods --------------------------------- */
