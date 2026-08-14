@@ -72,7 +72,7 @@ internal static class PaymentMath
     public static decimal LinesUsd(Payment payment)
     {
         ArgumentNullException.ThrowIfNull(payment);
-        return Rounding.Money(payment.Items.Sum(item => item.AmountUSD));
+        return Rounding.Money(payment.Items?.Sum(item => item.AmountUSD) ?? 0m);
     }
 
     /// <summary>
@@ -89,7 +89,7 @@ internal static class PaymentMath
     public static bool IsSettled(Payment payment)
     {
         ArgumentNullException.ThrowIfNull(payment);
-        return payment.Status == PaymentStatus.CONFIRMED;
+        return payment.EffectiveStatus == PaymentStatus.CONFIRMED;
     }
 
     /// <summary>
@@ -124,7 +124,7 @@ internal static class PaymentMath
                 continue;
             }
 
-            foreach (var line in payment.Items)
+            foreach (var line in payment.Items ?? [])
             {
                 foreach (var allocation in line.Allocations)
                 {

@@ -64,7 +64,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
         Assert.Equal(40m, Assert.Single(item.Partners).Percent);
 
         // payment -> item -> allocation (the payment carries two lines; the TT one allocates)
-        var line = Assert.Single(Assert.Single(read.Payments).Items, i => i.Method == PaymentMethod.TT);
+        var line = Assert.Single(Assert.Single(read.Payments).Items!, i => i.Method == PaymentMethod.TT);
         Assert.Equal("ref-item-1", Assert.Single(line.Allocations).ReferenceDocumentItemId);
 
         // charge doc -> line -> allocation
@@ -102,7 +102,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
         var read = await snapshots.ReadAsync();
 
         Assert.Equal(ContractStatus.OnHold, Assert.Single(read.Contracts).Status);
-        Assert.Equal(PaymentMethod.CreditNote, Assert.Single(read.Payments).Items.Last().Method);
+        Assert.Equal(PaymentMethod.CreditNote, Assert.Single(read.Payments).Items!.Last().Method);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
 
         Assert.Single(read.Customers);
         Assert.Equal(2, read.Invoices.Count);
-        Assert.Single(Assert.Single(read.Payments).Items, i => i.Method == PaymentMethod.TT);
+        Assert.Single(Assert.Single(read.Payments).Items!, i => i.Method == PaymentMethod.TT);
     }
 
     [Fact]
@@ -308,7 +308,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
                 Direction = MoneyDirection.OUT, Type = PaymentType.INVOICE,
                 Status = PaymentStatus.CONFIRMED,
                 Items =
-                {
+                [
                     new PaymentItem
                     {
                         Id = "payitem-1", PaymentId = "NIZ001", InvoiceId = "inv-pi-0001",
@@ -332,7 +332,7 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
                         Date = When, Amount = 40m, Currency = Currency.USD, FxRate = 1m,
                         AmountUSD = 40m, Method = PaymentMethod.CreditNote,
                     },
-                },
+                ],
             },
         ],
 

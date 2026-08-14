@@ -66,21 +66,42 @@ public sealed class Payment
     }
 
     /// <summary>
-    /// CONFIRMED unless someone says otherwise, because that is what a payment carrying no status
-    /// means.
+    /// Null means the header IS the settlement — the legacy single-shot shape.
     ///
     /// <para>
-    /// The single-shot flow writes no status at all — <c>status: input.type ? 'DRAFT' : undefined</c>
-    /// — and <c>api.ts</c> reads the absence as CONFIRMED. DRAFT is both this enum's zero value and
-    /// the obvious-looking initializer, so a key the browser never wrote lands there twice over,
-    /// and a DRAFT payment is skipped by every balance in the application. The row survives; the
-    /// money leaves the customer's balance, the ageing buckets, the account movement report and
-    /// the portal, without an error anywhere.
+    /// Optional on purpose, mirroring <c>Payment.status?</c> in the SPA's types. The single-shot
+    /// flow writes no status at all (<c>status: input.type ? 'DRAFT' : undefined</c>), and the
+    /// reader treats the absence as CONFIRMED — read <see cref="EffectiveStatus"/>, never this,
+    /// when deciding whether money counts. A payment read as DRAFT is skipped by every balance in
+    /// the application, so getting this wrong removes real money from the customer's balance, the
+    /// ageing buckets, the account movement report and the portal, with no error anywhere.
+    /// </para>
+    ///
+    /// <para>
+    /// It also carries the one bit the row would otherwise lose: absent status, absent type and
+    /// absent items are written together and only together, so null here is what tells
+    /// <see cref="Items"/> apart from an empty list.
     /// </para>
     /// </summary>
-    public PaymentStatus Status { get; set; } = PaymentStatus.CONFIRMED;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PaymentStatus? Status { get; set; }
 
-    public ICollection<PaymentItem> Items { get; init; } = [];
+    /// <summary>What the status MEANS: a payment that never named one is money already recorded.</summary>
+    [JsonIgnore]
+    public PaymentStatus EffectiveStatus => Status ?? PaymentStatus.CONFIRMED;
+
+    /// <summary>
+    /// The settlement lines, or null when the header itself is the settlement.
+    ///
+    /// <para>
+    /// Three states, not two. <c>null</c> is "this payment has no lines and never will" — it
+    /// skips the empty-lines and header-versus-lines checks entirely, because there is nothing to
+    /// check against. An empty list is "lines flow here, none entered yet", which must refuse to
+    /// confirm. Collapsing the two makes every legacy payment unconfirmable.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ICollection<PaymentItem>? Items { get; set; } = [];
 }
 
 /// <summary>One settlement line, carrying its own currency, rate and method.</summary>

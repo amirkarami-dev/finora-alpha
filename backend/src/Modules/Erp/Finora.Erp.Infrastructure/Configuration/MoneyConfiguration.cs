@@ -41,7 +41,10 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         // past that getter — writing the enum's zero value, INVOICE, and inverting the rule for
         // every payment that arrives without a type.
         builder.Property(p => p.Type).HasEnumColumn().UsePropertyAccessMode(PropertyAccessMode.Property);
-        builder.Property(p => p.Status).HasEnumColumn();
+        // Nullable, and the null is meaningful: a payment that names no status is the legacy
+        // single-shot shape, where the header itself is the settlement. It is also the only thing
+        // that tells an absent line collection apart from an empty one — see Payment.Items.
+        builder.Property(p => p.Status).HasEnumColumn().IsRequired(false);
         builder.Property(p => p.FxRate).HasRateColumn();
         builder.Property(p => p.Reference).HasMaxLength(200);
         builder.Property(p => p.Notes).HasMaxLength(2000);

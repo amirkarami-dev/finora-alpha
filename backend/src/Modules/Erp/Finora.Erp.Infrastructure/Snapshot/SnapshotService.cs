@@ -52,9 +52,9 @@ public sealed class SnapshotService(ErpDbContext db)
                 .Include(d => d.Items)
                 .ToListAsync(cancellationToken),
 
-            Payments = await db.Payments.AsNoTracking()
-                .Include(p => p.Items).ThenInclude(i => i.Allocations)
-                .ToListAsync(cancellationToken),
+            Payments = LegacyShape(await db.Payments.AsNoTracking()
+                .Include(p => p.Items!).ThenInclude(i => i.Allocations)
+                .ToListAsync(cancellationToken)),
 
             MoneyTransfers = await db.MoneyTransfers.AsNoTracking()
                 .Include(t => t.Allocations)
@@ -123,11 +123,11 @@ public sealed class SnapshotService(ErpDbContext db)
                 .OrderBy(i => i.Id)
                 .ToListAsync(cancellationToken),
 
-            Payments = await db.Payments.AsNoTracking()
+            Payments = LegacyShape(await db.Payments.AsNoTracking()
                 .Where(p => p.CustomerId == customerId)
-                .Include(p => p.Items).ThenInclude(i => i.Allocations)
+                .Include(p => p.Items!).ThenInclude(i => i.Allocations)
                 .OrderBy(p => p.Id)
-                .ToListAsync(cancellationToken),
+                .ToListAsync(cancellationToken)),
 
             FxRate = fxRate,
         };
@@ -299,5 +299,27 @@ public sealed class SnapshotService(ErpDbContext db)
         await db.Customers.ExecuteDeleteAsync(cancellationToken);
         await db.Partners.ExecuteDeleteAsync(cancellationToken);
         await db.Settings.ExecuteDeleteAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Hands back the third state that the table cannot hold on its own.
+    ///
+    /// <para>
+    /// EF materialises a line collection as empty whether the payment has no lines or was never
+    /// meant to have any, and the SPA reads those two as different things: an absent collection
+    /// means the header itself is the settlement and skips the confirm checks, while an empty one
+    /// means lines belong here and none were entered, which must refuse to confirm. A missing
+    /// status is written together with missing lines and only together, so it is what tells them
+    /// apart on the way back out.
+    /// </para>
+    /// </summary>
+    private static List<Payment> LegacyShape(List<Payment> payments)
+    {
+        foreach (var payment in payments.Where(p => p.Status is null))
+        {
+            payment.Items = null;
+        }
+
+        return payments;
     }
 }

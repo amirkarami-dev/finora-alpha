@@ -79,14 +79,21 @@ public sealed class PaymentTests(ApiFixture fixture)
         var snapshot = await RoundTripAsync(client, LegacyPaymentSnapshot);
         var payment = snapshot.GetProperty("payments")[0];
 
-        // `api.ts` reads a missing status as CONFIRMED, and says why: "treating that as anything
-        // but CONFIRMED would silently erase real money from every balance in the app."
+        // It comes back exactly as it went in: with NO status key. `api.ts` reads the absence as
+        // CONFIRMED and says why — "treating that as anything but CONFIRMED would silently erase
+        // real money from every balance in the app."
         //
-        // DRAFT is the zero value of the enum AND the property's initializer, so a key the
-        // browser never wrote lands there twice over. The row survives the round-trip; the money
-        // does not — a DRAFT payment is skipped by `isSettled`, so it leaves the customer's
+        // Answering with a concrete DRAFT was the bug: DRAFT is the enum's zero value, so a key
+        // the browser never wrote landed there by default, and a DRAFT payment is skipped by
+        // `isSettled` — the row survived the round-trip and the money left the customer's
         // balance, the ageing buckets, the account movement report and the portal.
-        Assert.Equal("CONFIRMED", payment.GetProperty("status").GetString());
+        Assert.False(payment.TryGetProperty("status", out _),
+            "a payment that named no status must come back naming none");
+
+        // And the absence carries the other half of the shape: no line collection either. An
+        // empty one would mean "lines belong here, none entered", which refuses to confirm.
+        Assert.False(payment.TryGetProperty("items", out _),
+            "the header IS the settlement, so it has no lines — not zero lines");
     }
 
     [Fact]
