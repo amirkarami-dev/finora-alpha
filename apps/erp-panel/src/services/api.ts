@@ -318,8 +318,9 @@ function receivablePaidUSD(inv: Invoice): number {
 
 /**
  * Per-customer receivables aggregate (spec §6): `invoiced` = Σ chain-leaf CONFIRMED SALE
- * totals; `paid` = Σ IN payments; `outstanding = invoiced − paid`; `overdue` = Σ PER-DOCUMENT
- * netted outstanding (`totalAmount − receivablePaidUSD(inv)`, floored at 0) over sale docs whose
+ * totals IN USD; `paid` = Σ IN payments; `outstanding = invoiced − paid`; `overdue` = Σ
+ * PER-DOCUMENT netted outstanding (`invoiceTotalUSD(inv) − receivablePaidUSD(inv)`, floored at
+ * 0) over sale docs whose
  * derived due date (`invoiceDate + paymentTermsDays`) is before TODAY — true per-document
  * netting, matching `getReceivableInvoices`' per-row OVERDUE math exactly (NOT a raw-total sum
  * capped at the customer-aggregate outstanding).
@@ -332,9 +333,9 @@ function saleReceivables(): Map<string, SaleReceivable> {
   for (const inv of leaves) {
     const entry = map.get(inv.customerId);
     if (!entry) continue;
-    entry.invoiced += inv.totalAmount;
+    entry.invoiced += invoiceTotalUSD(inv);
     if (invoiceDueDate(inv).isBefore(TODAY, 'day')) {
-      const docOutstanding = Math.max(inv.totalAmount - receivablePaidUSD(inv), 0);
+      const docOutstanding = Math.max(invoiceTotalUSD(inv) - receivablePaidUSD(inv), 0);
       entry.overdue += docOutstanding;
     }
   }
@@ -709,6 +710,15 @@ export interface ReceivableInvoiceRow {
   customerName: string;
   /** First line's product, plus "+N" when the invoice carries more than one line. */
   summary: string;
+  /**
+   * USD, converted from the document's own currency — NOT `Invoice.totalAmount`, which is in
+   * whatever the document was raised in.
+   *
+   * <p>Everything beside it here is USD, and every screen renders it through `Money`, which
+   * labels USD by default. Left unconverted, a dirham invoice showed a dirham number under a
+   * dollar sign and was then subtracted from dollar payments — so it read as roughly 3.7 times
+   * the debt in outstanding, overdue, ageing and DSO alike.</p>
+   */
   totalAmount: number;
   invoiceDate: string;
   dueDate: string;
@@ -740,16 +750,17 @@ export async function getReceivableInvoices(customerId?: string): Promise<Receiv
             ? products[0]
             : `${products[0]} +${products.length - 1}`;
       const paidUSD = receivablePaidUSD(inv);
+      const totalUSD = invoiceTotalUSD(inv);
       const dueDate = invoiceDueDate(inv);
       const displayStatus: ContainerStatus =
-        paidUSD >= inv.totalAmount - 0.01 ? 'PAID' : dueDate.isBefore(TODAY, 'day') ? 'OVERDUE' : 'OPEN';
+        paidUSD >= totalUSD - 0.01 ? 'PAID' : dueDate.isBefore(TODAY, 'day') ? 'OVERDUE' : 'OPEN';
       return {
         id: inv.id,
         invoiceNumber: inv.invoiceNumber,
         customerId: inv.customerId,
         customerName: customerById.get(inv.customerId)?.name ?? '—',
         summary,
-        totalAmount: inv.totalAmount,
+        totalAmount: totalUSD,
         invoiceDate: inv.invoiceDate,
         dueDate: dueDate.toISOString(),
         paidUSD,
@@ -941,7 +952,7 @@ export async function getCashflowSeries(): Promise<TimeSeriesPoint[]> {
     const key = m.format('YYYY-MM');
     const invoiced = leaves
       .filter((inv) => dayjs(inv.invoiceDate).format('YYYY-MM') === key)
-      .reduce((s, inv) => s + inv.totalAmount, 0);
+      .reduce((s, inv) => s + invoiceTotalUSD(inv), 0);
     // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
       .filter(
@@ -1500,7 +1511,7 @@ export async function getCustomerPortalSummary(
     const key = m.format('YYYY-MM');
     const invoiced = myLeaves
       .filter((inv) => dayjs(inv.invoiceDate).format('YYYY-MM') === key)
-      .reduce((s, inv) => s + inv.totalAmount, 0);
+      .reduce((s, inv) => s + invoiceTotalUSD(inv), 0);
     // Receivables only: exclude 'OUT' (supplier) payments from the collected series (spec §7).
     const collected = db.payments
       .filter(
@@ -1759,7 +1770,7 @@ export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | 
   // direction EXCLUSION rule (§7) applies only to the separate receivables aggregations
   // (computeAccounts/getKpis/getExecutiveSummary/getCustomerPortalSummary), not here.
   const paidUSD = round(payments.reduce((s, p) => s + p.amountUSD, 0));
-  const remainingUSD = round(Math.max(invoice.totalAmount - paidUSD, 0));
+  const remainingUSD = round(Math.max(invoiceTotalUSD(invoice) - paidUSD, 0));
   return {
     invoice,
     items: invoice.items,
