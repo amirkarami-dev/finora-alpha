@@ -119,10 +119,30 @@ public sealed class PaymentTests(ApiFixture fixture)
     {
         using var client = await AsManagerAsync(fixture);
 
-        var withInvoice = LegacyPaymentSnapshot.Replace(
-            "\"direction\": \"OUT\"",
-            "\"invoiceId\": \"inv-pi-0001\", \"direction\": \"OUT\"",
-            StringComparison.Ordinal);
+        // The invoice has to be real: `payments.invoice_id` is a foreign key now, so a payment
+        // naming a document that does not exist is refused by the database rather than quietly
+        // reading as settling nothing.
+        var withInvoice = LegacyPaymentSnapshot
+            .Replace(
+                "\"contracts\": [],",
+                """
+                "contracts": [{ "id": "ctr-1", "customerId": "cust-am", "date": "2026-06-01T00:00:00Z",
+                                "destination": "NINGBO", "status": "ACTIVE", "items": [] }],
+                """,
+                StringComparison.Ordinal)
+            .Replace(
+                "\"invoices\": [],",
+                """
+                "invoices": [{ "id": "inv-pi-0001", "invoiceNumber": "PI-2026-0001",
+                               "invoiceType": "PURCHASE_INVOICE", "status": "CONFIRMED",
+                               "invoiceDate": "2026-06-01T00:00:00Z", "contractId": "ctr-1",
+                               "customerId": "cust-am", "items": [] }],
+                """,
+                StringComparison.Ordinal)
+            .Replace(
+                "\"direction\": \"OUT\"",
+                "\"invoiceId\": \"inv-pi-0001\", \"direction\": \"OUT\"",
+                StringComparison.Ordinal);
 
         var snapshot = await RoundTripAsync(client, withInvoice);
         var payment = snapshot.GetProperty("payments")[0];

@@ -25,6 +25,9 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             t.HasCheckConstraint(
                 ErpModelBuilderExtensions.CheckName("payments", "status"),
                 ErpModelBuilderExtensions.EnumCheck<PaymentStatus>("status"));
+            // Every write already refuses a non-positive amount. The rule lives in the database
+            // too, so an import cannot put money in that no screen could have entered.
+            t.HasCheckConstraint("ck_payments_amount", "amount > 0");
             // An FX rate of zero would make every USD figure derived from it infinite.
             t.HasCheckConstraint("ck_payments_fx_rate", "fx_rate > 0");
         });
@@ -54,6 +57,13 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasIndex(p => p.CustomerId);
         builder.HasIndex(p => p.Status);
+
+        // The document a single-shot payment settles. It had no key at all, so the id could point
+        // at an invoice that never existed — and the payment simply read as settling nothing.
+        builder.HasOne<Invoice>()
+            .WithMany()
+            .HasForeignKey(p => p.InvoiceId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -73,6 +83,7 @@ internal sealed class PaymentItemConfiguration : IEntityTypeConfiguration<Paymen
             // A bank transfer names a bank and a cash payment names a safe; a cheque line names
             // a cheque. Pointing one at the other makes the two impossible to tell apart in any
             // account balance, which is a silent wrong answer rather than an error.
+            t.HasCheckConstraint("ck_payment_items_amount", "amount > 0");
             t.HasCheckConstraint(
                 "ck_payment_items_method_target",
                 "(method IN ('TT', 'Cash') AND bank_account_id IS NOT NULL) OR " +
@@ -109,7 +120,8 @@ internal sealed class PaymentItemAllocationConfiguration : IEntityTypeConfigurat
 {
     public void Configure(EntityTypeBuilder<PaymentItemAllocation> builder)
     {
-        builder.ToTable("payment_item_allocations");
+        builder.ToTable("payment_item_allocations", t =>
+            t.HasCheckConstraint("ck_payment_item_allocations_amount", "amount > 0"));
         builder.HasKey(a => a.Id);
         builder.Property(a => a.Id).HasIdColumn();
         builder.Property(a => a.PaymentItemId).HasIdColumn();
@@ -119,6 +131,16 @@ internal sealed class PaymentItemAllocationConfiguration : IEntityTypeConfigurat
 
         builder.HasOne(a => a.PaymentItem).WithMany(i => i!.Allocations)
             .HasForeignKey(a => a.PaymentItemId).OnDelete(DeleteBehavior.Cascade);
+
+        // The invoice line this pays. Unkeyed, a dangling id did not error — the allocation just
+        // stopped counting, and the line quietly read as unpaid.
+        //
+        // `ReferenceDocumentItemId` stays unkeyed on purpose: it is the chain-stable key, and it
+        // must survive a provisional document becoming a final one.
+        builder.HasOne<InvoiceItem>()
+            .WithMany()
+            .HasForeignKey(a => a.InvoiceItemId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(a => a.PaymentItemId);
         // "How much of this invoice line is still owed" scans allocations across ALL payments,
@@ -139,6 +161,7 @@ internal sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
             t.HasCheckConstraint(
                 ErpModelBuilderExtensions.CheckName("cheques", "status"),
                 ErpModelBuilderExtensions.EnumCheck<ChequeStatus>("status"));
+            t.HasCheckConstraint("ck_cheques_amount", "amount > 0");
             t.HasCheckConstraint(
                 ErpModelBuilderExtensions.CheckName("cheques", "currency"),
                 ErpModelBuilderExtensions.EnumCheck<Currency>("currency"));
