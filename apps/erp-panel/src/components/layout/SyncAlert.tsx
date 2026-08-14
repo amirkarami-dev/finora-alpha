@@ -7,13 +7,15 @@ import { getSyncState, onSyncStateChange, type SyncState } from '@/services/snap
  * Says so when an edit has not reached the server.
  *
  * <p>
- * Several features — payments, cheques, expenses, revenues, claims, transfers, warehouse
- * documents — still have no endpoint of their own. Their only route to the database is a
- * background push of the whole dataset, and on this deployment that route is disabled. The push
- * used to fail silently on the reasoning that the edit was safe in localStorage and the next
- * push would carry it; that reasoning holds for a hiccup and not for a permanent refusal, where
- * there is no next push that succeeds and the screen says "Saved" to a number that exists in one
- * browser.
+ * This was built when most of the application still wrote only to the browser, and the whole-
+ * dataset push was those features' one route to the database. They all have their own endpoints
+ * now, so the only thing that still uses that push is the demo-data pair in Settings — which
+ * production deliberately switches off. That is what the permanent notice says now.
+ * </p>
+ *
+ * <p>
+ * The transient one still earns its place: an edit that cannot reach the server is worth saying
+ * out loud, whatever the reason, rather than letting the screen claim it saved.
  * </p>
  *
  * <p>
