@@ -64,6 +64,7 @@ import { masterData, type MasterDataResult } from '@/services/masterData';
 import { contractsApi, type ContractResult } from '@/services/contracts';
 import { invoicesApi, type InvoiceResult } from '@/services/invoices';
 import { paymentsApi, type ChequeResult, type PaymentResult } from '@/services/payments';
+import { containersApi, type ContainerResult } from '@/services/containers';
 import { isServerBacked } from '@/services/snapshot';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -171,6 +172,16 @@ async function invoiceWrite(send: () => Promise<InvoiceResult>): Promise<Invoice
  * record to the register that nobody named. Replacing payments alone would leave the cheques tab
  * missing it until the next reload.</p>
  */
+/** A container write. The whole list comes back — the page derives its rows from the set. */
+async function containerWrite(send: () => Promise<ContainerResult>): Promise<Container> {
+  const { entity, all } = await send();
+  db.containers.length = 0;
+  db.containers.push(...all);
+  reindex();
+  persistDb({ alreadySynced: true });
+  return entity;
+}
+
 async function paymentWrite(send: () => Promise<PaymentResult>): Promise<Payment> {
   const { entity, payments, cheques } = await send();
   applyMoney(payments, cheques);
@@ -1164,72 +1175,13 @@ export interface ContainerInput {
   goods: ContainerGood[];
 }
 
-function nextContainerId(): string {
-  const taken = new Set(db.containers.map((c) => c.id));
-  let n = db.containers.length + 1;
-  let id = `cnt-${n}`;
-  while (taken.has(id)) {
-    n += 1;
-    id = `cnt-${n}`;
-  }
-  return id;
-}
-
 export async function createContainer(input: ContainerInput): Promise<ContainerRow> {
-  await delay(180);
-  const container: Container = {
-    id: nextContainerId(),
-    reference: input.reference,
-    goods: input.goods,
-    loadDate: input.loadDate,
-    arrivalDate: input.arrivalDate,
-    grossWeightKg: input.grossWeightKg,
-    netWeightKg: input.netWeightKg,
-    blNumber: input.blNumber,
-    bookingNumber: input.bookingNumber,
-    sealNumber: input.sealNumber,
-  };
-  db.containers.push(container);
-  reindex();
-  persistDb();
+  const container = await containerWrite(() => containersApi.create(input));
   return buildContainerRows().find((c) => c.id === container.id)!;
 }
 
-/**
- * Enforces the goods-removal guard server-side (spec §4/§8): a good present on the persisted
- * container but absent from `nextGoods` may not be dropped while an invoice line still
- * references it. Throws `'good-in-use'` with `.invoices`/`.product` attached, BEFORE mutating.
- */
-function assertNoRemovedGoodInUse(container: Container, nextGoods: ContainerGood[]): void {
-  const nextIds = new Set(nextGoods.map((g) => g.contractItemId));
-  for (const good of container.goods) {
-    if (nextIds.has(good.contractItemId)) continue;
-    const usage = goodContainerUsage(container.id, good.contractItemId);
-    if (usage.length > 0) {
-      const err = new Error('good-in-use') as Error & { invoices?: string[]; product?: string };
-      err.invoices = usage;
-      err.product = itemProduct.get(good.contractItemId) ?? good.contractItemId;
-      throw err;
-    }
-  }
-}
-
 export async function updateContainer(id: string, input: ContainerInput): Promise<ContainerRow> {
-  await delay(180);
-  const container = db.containers.find((c) => c.id === id);
-  if (!container) throw new Error(`Container ${id} not found`);
-  assertNoRemovedGoodInUse(container, input.goods);
-  container.reference = input.reference;
-  container.goods = input.goods;
-  container.loadDate = input.loadDate;
-  container.arrivalDate = input.arrivalDate;
-  container.grossWeightKg = input.grossWeightKg;
-  container.netWeightKg = input.netWeightKg;
-  container.blNumber = input.blNumber;
-  container.bookingNumber = input.bookingNumber;
-  container.sealNumber = input.sealNumber;
-  reindex();
-  persistDb();
+  await containerWrite(() => containersApi.update(id, input));
   return buildContainerRows().find((c) => c.id === id)!;
 }
 

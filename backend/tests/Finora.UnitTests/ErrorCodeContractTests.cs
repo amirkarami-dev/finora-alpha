@@ -82,6 +82,15 @@ public sealed class ErrorCodeContractTests
         "not-draft",
         "not-confirmed",
         "invalid-target",
+
+        // Containers. The browser threw a sentence for the missing one ("Container cnt-x not
+        // found") because an id could not go stale in a single tab, and it never checked the
+        // reference at all — the form marks the field required, so nothing could submit without
+        // it. Both are enforced anyway, because the endpoint is reachable without the screen,
+        // and both fall through to the generic failure message, which is the right thing to say
+        // about a record that has vanished or a field the form would not have let through.
+        "container-not-found",
+        "reference-required",
     ];
 
     /// <summary>
