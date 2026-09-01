@@ -57,7 +57,8 @@ derived from the current route.
   it does **not** send anywhere. Wire `submit()` in
   [`components/ContactView.tsx`](components/ContactView.tsx) to an email service,
   API route, or form backend (e.g. Resend, Formspree) to deliver inquiries.
-- **Footer legal links** (`Privacy Policy`, `Terms & Conditions`) point to `#` — add
-  real pages when ready. The ERP Portal link points to `erp.metal-uae.com`.
+- **No legal pages.** The footer used to carry `Privacy Policy` and `Terms & Conditions`
+  links pointing at `#`; they were dropped rather than left dead. Add them back to
+  [`components/Footer.tsx`](components/Footer.tsx) once the pages exist.
 - **ESLint** isn't wired in yet (`eslint.ignoreDuringBuilds` is on). Add
   `eslint` + `eslint-config-next` and a config to enable `npm run lint`.

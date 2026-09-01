@@ -145,6 +145,19 @@ export const LOCALES: Record<Locale, LocaleMeta> = {
 
 export const SUPPORTED_LOCALES = Object.keys(LOCALES) as Locale[];
 
+/**
+ * Who this desk belongs to, for the footer.
+ *
+ * Not translated: a legal entity name, a domain and a mailbox read the same in every locale, and
+ * a transliterated company name is not the name that appears on the invoice.
+ */
+export const COMPANY = {
+  legalName: 'Jalil Jalal Metals Trading L.L.C.',
+  siteUrl: 'https://metal-uae.com',
+  siteLabel: 'metal-uae.com',
+  email: 'jalil.jalal.metals@gmail.com',
+};
+
 /** Brand palette — shared between AntD theme tokens and charts. */
 export const BRAND = {
   primary: '#b87333',

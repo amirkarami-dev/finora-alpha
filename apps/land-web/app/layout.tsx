@@ -65,7 +65,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </noscript>
         <ScrollReveal />
         <Navbar />
-        <main>{children}</main>
+        {/* The footer's "Top" link scrolls here. */}
+        <main id="top">{children}</main>
         <Footer />
         <WhatsAppFloat />
       </body>

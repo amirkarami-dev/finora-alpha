@@ -113,6 +113,9 @@
     "invalidCredentials": "Incorrect email or password",
     "demoAccounts": "Demo accounts — click to view"
   },
+  "footer": {
+    "contact": "Contact"
+  },
   "landing": {
     "navFeatures": "Features",
     "navSolutions": "Solutions",

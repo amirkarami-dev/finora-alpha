@@ -113,6 +113,9 @@
     "invalidCredentials": "ایمیل یا رمز عبور نادرست است",
     "demoAccounts": "حساب‌های نمایشی — برای نمایش کلیک کنید"
   },
+  "footer": {
+    "contact": "تماس با ما"
+  },
   "landing": {
     "navFeatures": "امکانات",
     "navSolutions": "راهکارها",
