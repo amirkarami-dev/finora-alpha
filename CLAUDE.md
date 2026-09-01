@@ -168,9 +168,17 @@ Create/edit forms, localStorage persistence and Excel export all exist — an ol
 version of this file said they were stubbed, which has not been true for some time.
 
 **Open:**
-- The backend replacing `api.ts` (see `backend/`); until it lands, data is per-browser.
+- **The reads still run in the browser.** Every ERP *write* is on the server; reading is still
+  one `GET /api/erp/snapshot` of the whole database, derived client-side in `api.ts`. Mapped,
+  not started — see [docs/handover.md](docs/handover.md).
+- **A server move is half-done.** 179.198.198.221 is built and verified; DNS still points at
+  185.206.94.116. Same file.
 - Header search and notifications are visual only.
 - `apps/land-web` has no linter wired up.
+
+> **Read [docs/handover.md](docs/handover.md) before starting work.** It carries the state that
+> is not in the code: what is half-finished, what must happen before the DNS flip, and the
+> setup a fresh machine needs.
 
 ## Notes
 
