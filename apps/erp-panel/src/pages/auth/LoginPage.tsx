@@ -22,6 +22,7 @@ import { LanguageSwitcher } from '@/components/common/LanguageSwitcher';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useAuthStore } from '@/store/useAuthStore';
 import { USERS } from '@/config/roles';
+import { LoginFooter } from './LoginFooter';
 
 const { Title, Paragraph, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -91,9 +92,6 @@ export default function LoginPage() {
               ))}
             </Space>
           </div>
-          <Text style={{ color: 'rgba(234,244,240,0.5)', fontSize: 13 }}>
-            © {new Date().getFullYear()} Finora
-          </Text>
         </div>
       )}
 
@@ -211,6 +209,10 @@ export default function LoginPage() {
           </>
           )}
         </div>
+
+        {/* Outside the `margin: auto` block above, so it sits at the foot of the panel rather
+            than travelling with the vertically centred form. */}
+        <LoginFooter />
       </div>
     </div>
   );

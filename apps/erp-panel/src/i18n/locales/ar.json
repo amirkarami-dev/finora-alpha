@@ -113,6 +113,9 @@
     "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
     "demoAccounts": "حسابات تجريبية — اضغط للعرض"
   },
+  "footer": {
+    "contact": "اتصل بنا"
+  },
   "landing": {
     "navFeatures": "المميزات",
     "navSolutions": "الحلول",
