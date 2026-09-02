@@ -983,8 +983,8 @@
   },
   "roles": {
     "CEO": "الرئيس التنفيذي",
-    "Manager": "مدير مالي",
-    "Staff": "العمليات",
+    "Manager": "مدير",
+    "Staff": "موظف",
     "Customer": "عميل"
   },
   "customerTypes": {
