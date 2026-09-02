@@ -11,7 +11,7 @@ import type {
   PaymentMethod,
 } from '@/types';
 
-export const APP_NAME = 'Finora';
+export const APP_NAME = 'Jalil-Jalal';
 export const APP_TAGLINE = 'Metals & Commodities Trading, in control.';
 
 /** Default AED per 1 USD, taken from the workbook's FX rule. */

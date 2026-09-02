@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Finora",
+    "name": "Jalil-Jalal",
     "tagline": "Metals & Commodities Trading, in control.",
     "description": "A modern receivables and contract platform for LME-priced metals trading."
   },
@@ -108,7 +108,7 @@
     "backToHome": "Back to home",
     "signOut": "Sign out",
     "profile": "Profile",
-    "loginSuccess": "Welcome to Finora",
+    "loginSuccess": "Welcome to Jalil-Jalal",
     "secured": "Secured workspace",
     "invalidCredentials": "Incorrect email or password",
     "demoAccounts": "Demo accounts — click to view"
@@ -126,7 +126,7 @@
     "openApp": "Open app",
     "heroBadge": "Built for metals traders",
     "heroTitle": "Run your trading desk on a single source of truth",
-    "heroSubtitle": "Finora turns spreadsheets into a real platform — track LME-priced contracts, container shipments, invoices and customer balances with clarity and control.",
+    "heroSubtitle": "Jalil-Jalal turns spreadsheets into a real platform — track LME-priced contracts, container shipments, invoices and customer balances with clarity and control.",
     "heroCtaPrimary": "Launch the demo",
     "heroCtaSecondary": "See how it works",
     "trustedBy": "Trusted by trading desks moving metal worldwide",
@@ -560,7 +560,7 @@
     "metalType": "Metal type",
     "form": "Form",
     "unit": "Unit",
-    "unitHint": "All quantities in Finora are metric tonnes",
+    "unitHint": "All quantities in Jalil-Jalal are metric tonnes",
     "hsCode": "HS code",
     "description": "Description",
     "newGood": "New good",
@@ -1023,7 +1023,7 @@
     "you": "You",
     "searchPlaceholder": "Search by name or email",
     "namePlaceholder": "e.g. Amir Karami",
-    "emailPlaceholder": "e.g. amir@finora.app",
+    "emailPlaceholder": "e.g. amir@jalil-jalal.com",
     "rolePlaceholder": "Select a role",
     "emailInvalid": "Enter a valid email address",
     "initialPassword": "Initial password",
