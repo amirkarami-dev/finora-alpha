@@ -983,8 +983,8 @@
   },
   "roles": {
     "CEO": "مدیرعامل",
-    "Manager": "مدیر مالی",
-    "Staff": "عملیات",
+    "Manager": "مدیر",
+    "Staff": "کارمند",
     "Customer": "مشتری"
   },
   "customerTypes": {

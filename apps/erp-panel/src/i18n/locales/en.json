@@ -982,9 +982,9 @@
     "OVERDUE": "Overdue"
   },
   "roles": {
-    "CEO": "Chief Executive",
-    "Manager": "Finance Manager",
-    "Staff": "Operations",
+    "CEO": "CEO",
+    "Manager": "Manager",
+    "Staff": "Staff",
     "Customer": "Customer"
   },
   "customerTypes": {
