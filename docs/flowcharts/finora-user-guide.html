@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finora — User Guide</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 14mm; }
+
+  :root {
+    --ink: #222; --muted: #666; --line: #444;
+    --brand: #b87333; --brand-bg: #f6ebe0;
+    --screen-bg: #eef3fb; --ok-bg: #e6f4ec; --warn-bg: #fff6df; --bad-bg: #fdeaea; --grey-bg: #f1f1f1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif; color: var(--ink); background: #dedede;
+    font-size: 10pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .page {
+    width: 182mm; min-height: 273mm; background: #fff; margin: 8mm auto; padding: 10mm 12mm;
+    box-shadow: 0 2px 10px rgba(0,0,0,.18); display: flex; flex-direction: column;
+    page-break-after: always; break-after: page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  @media print {
+    body { background: #fff; }
+    .page { width: auto; margin: 0; padding: 0; box-shadow: none; min-height: 0; height: 270mm; overflow: hidden; }
+  }
+
+  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--brand); padding-bottom: 3px; margin-bottom: 5mm; }
+  .head h1 { font-size: 15pt; margin: 0; }
+  .head .num { color: var(--muted); font-size: 9pt; }
+  .foot { margin-top: auto; padding-top: 3mm; border-top: 1px solid #ccc; display: flex; justify-content: space-between; color: var(--muted); font-size: 8pt; }
+  h2 { font-size: 11pt; margin: 4mm 0 2mm; color: var(--brand); }
+  h2:first-of-type { margin-top: 0; }
+  p { margin: 0 0 2mm; }
+  .goal { background: var(--brand-bg); border-left: 4px solid var(--brand); padding: 1.5mm 3mm; margin-bottom: 3mm; font-size: 10pt; }
+  .goal b { color: var(--brand); }
+
+  /* path bar: Menu › Tab › Button */
+  .path { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin: 1mm 0 3mm; font-size: 9.5pt; }
+  .path span { border: 1.2px solid var(--line); border-radius: 5px; padding: 3px 8px; background: #fff; }
+  .path .menu { background: var(--screen-bg); border-style: double; border-width: 3px; }
+  .path .btn { background: var(--brand-bg); border-color: var(--brand); font-weight: bold; }
+  .path .end { background: var(--ok-bg); border-radius: 30px; }
+  .path .bad { background: var(--bad-bg); }
+  .path i { font-style: normal; color: #555; font-size: 12pt; padding: 0 2px; }
+  .path i::after { content: "\2192"; }
+
+  /* numbered steps */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { counter-increment: s; display: flex; gap: 3mm; margin-bottom: 1.7mm; align-items: flex-start; }
+  ol.steps li::before {
+    content: counter(s); flex: 0 0 7mm; height: 7mm; border-radius: 50%; background: var(--brand); color: #fff;
+    font-weight: bold; display: flex; align-items: center; justify-content: center; font-size: 10pt; margin-top: 1px;
+  }
+  ol.steps li .t { flex: 1; }
+  ol.steps li .t b { color: #000; }
+  .where { display: inline-block; background: var(--screen-bg); border-radius: 4px; padding: 0 5px; font-size: 9pt; }
+  .btn { display: inline-block; background: var(--brand-bg); border: 1px solid var(--brand); border-radius: 4px; padding: 0 6px; font-size: 9pt; font-weight: bold; }
+  .see { display: block; color: var(--muted); font-size: 9pt; margin-top: 1px; }
+  .see::before { content: "\2192 You see: "; font-weight: bold; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 6mm; }
+  .box { border: 1px solid #ccc; border-radius: 5px; padding: 2.5mm 3.5mm; background: #fcfcfc; font-size: 9.5pt; }
+  .box h3 { margin: 0 0 1.5mm; font-size: 10pt; }
+  .box ul { margin: 0; padding-left: 4mm; }
+  .box li { margin-bottom: 1mm; }
+  .box.tip { background: var(--ok-bg); border-color: #9fcdb0; }
+  .box.warn { background: var(--warn-bg); border-color: #e6c66d; }
+  .box.stop { background: var(--bad-bg); border-color: #e3a3a3; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 9pt; margin: 2mm 0; }
+  th, td { border: 1px solid #ccc; padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: var(--grey-bg); }
+
+  .cover { justify-content: center; align-items: center; text-align: center; }
+  .cover .logo { font-size: 34pt; font-weight: bold; color: var(--brand); }
+  .cover .sub { font-size: 13pt; color: var(--muted); margin-bottom: 10mm; }
+  .cover .meta { font-size: 9.5pt; color: var(--muted); margin-top: 10mm; }
+  .toc { text-align: left; width: 125mm; margin: 0 auto; }
+  .toc ol { margin: 0; padding-left: 6mm; font-size: 10.5pt; line-height: 1.65; }
+  .legend { display: flex; flex-wrap: wrap; gap: 3mm; justify-content: center; margin-top: 8mm; font-size: 9pt; align-items: center; }
+
+  .menu-map { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin: 2mm 0; }
+  .menu-map .grp { border: 1px solid #bbb; border-radius: 5px; padding: 2mm; background: #fafafa; font-size: 9pt; }
+  .menu-map .grp h3 { margin: 0 0 1.5mm; font-size: 9.5pt; text-align: center; background: var(--grey-bg); border-radius: 3px; padding: 2px; }
+  .menu-map .grp div { padding: 1px 3px; }
+
+  .print-btn { position: fixed; top: 10px; right: 14px; z-index: 9; background: var(--brand); color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-size: 11pt; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  @media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="print-btn" onclick="window.print()">🖨 Print (A4)</button>
+
+<!-- ============================================================ COVER -->
+<section class="page cover">
+  <div class="logo">Finora</div>
+  <div class="sub">User guide — how to do your daily work, step by step</div>
+
+  <div class="toc">
+    <ol>
+      <li>Sign in and find your way around</li>
+      <li>First-time setup — do this once, in this order</li>
+      <li>Add a person (buyer or supplier)</li>
+      <li>Make a contract and add goods</li>
+      <li>Buying: purchase order → provisional → invoice</li>
+      <li>Selling: sale order → provisional → invoice</li>
+      <li>Record a container (shipment)</li>
+      <li>Record a payment</li>
+      <li>Cheques</li>
+      <li>Move money between your accounts · exchange gain / loss</li>
+      <li>Expenses, revenues and claims</li>
+      <li>Check a person's balance</li>
+      <li>Reports and Excel</li>
+      <li>For customers: My Account</li>
+      <li>Users, settings, and what error messages mean</li>
+    </ol>
+  </div>
+
+  <div class="legend">
+    <span class="where">Menu / screen name</span>
+    <span class="btn">Button to click</span>
+    <span class="see" style="display:inline">what the screen shows after the step</span>
+  </div>
+
+  <div class="meta">
+    Jalil Jalal Metals Trading L.L.C. · erp.metal-uae.com · Version of 2026-09-02<br>
+    Print on A4 portrait. In the print dialog, turn on "Background graphics".
+  </div>
+</section>
+
+<!-- ============================================================ 1 START -->
+<section class="page">
+  <div class="head"><h1>1 · Sign in and find your way around</h1><span class="num">start here</span></div>
+  <div class="goal"><b>Goal:</b> open Finora, sign in, and know where every page is.</div>
+
+  <h2>Sign in</h2>
+  <ol class="steps">
+    <li><div class="t">Open <b>https://erp.metal-uae.com</b> in Chrome or Edge.<span class="see">the welcome page with a "Sign in" button.</span></div></li>
+    <li><div class="t">Type your <b>email</b> and <b>password</b>. Click <span class="btn">Sign in</span>.<span class="see">your home page. Staff and managers see the Dashboard; the CEO sees the Executive page; a customer sees My Account.</span></div></li>
+    <li><div class="t">Wrong password? The page says <b>"Incorrect email or password"</b>. Try again. If you forgot it, ask a manager to reset it (section 15).</div></li>
+  </ol>
+
+  <h2>The left menu</h2>
+  <p>The menu is in four groups. You only see the pages your role allows.</p>
+  <div class="menu-map">
+    <div class="grp"><h3>Main</h3><div>Executive</div><div>Dashboard</div><div>My Account (customers)</div></div>
+    <div class="grp"><h3>Operations</h3><div>Persons</div><div>Contracts</div><div>Partners</div><div>Containers</div><div>Warehouse</div></div>
+    <div class="grp"><h3>Finance</h3><div>Purchase</div><div>Sale</div><div>Payments</div><div>Transfers</div><div>Exchange gain/loss</div><div>Expenses</div><div>Revenues</div><div>Claims</div><div>Reports</div></div>
+    <div class="grp"><h3>System</h3><div>Base Info</div><div>Users</div><div>Settings</div></div>
+  </div>
+
+  <h2>Top bar</h2>
+  <ol class="steps">
+    <li><div class="t"><b>Language:</b> click the flag / language switch to change between English, Arabic and Persian. Arabic and Persian flip the screen to right-to-left.</div></li>
+    <li><div class="t"><b>Theme:</b> the sun / moon switch changes light and dark mode.</div></li>
+    <li><div class="t"><b>Sign out:</b> click your name at the top right, then <span class="btn">Sign out</span>. Always sign out on a shared computer.</div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>Every table has a <b>Search</b> box at the top. Type a name, number or code.</li>
+      <li>Click a row to open its detail page. Click <b>Back</b> to return.</li>
+      <li>Numbers are always shown in Latin digits, in every language.</li>
+    </ul></div>
+    <div class="box warn"><h3>Two companies</h3><ul>
+      <li><b>erp.metal-uae.com</b> and <b>erp2.metal-uae.com</b> are two separate companies with separate data and separate logins.</li>
+      <li>Signing in to one does not sign you in to the other.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Sign in</span><span>Page 1 / 15</span></div>
+</section>
+
+<!-- ============================================================ 2 SETUP -->
+<section class="page">
+  <div class="head"><h1>2 · First-time setup</h1><span class="num">do this once, in this order</span></div>
+  <div class="goal"><b>Goal:</b> fill the lists that every other page picks from. A new company starts completely empty.</div>
+
+  <div class="path"><span class="menu">Base Info</span><i></i><span>Goods</span><i></i><span>Banks</span><i></i><span>Cash safes</span><i></i><span>Expense / Revenue categories</span><i></i><span>Cost centres</span><i></i><span class="menu">Warehouse</span><i></i><span class="menu">Persons</span><i></i><span class="end">Ready</span></div>
+
+  <ol class="steps">
+    <li><div class="t"><span class="where">Base Info › Goods</span> → <span class="btn">New</span>. Add each product you trade: <b>name</b>, <b>code</b>, <b>metal type</b> (copper, aluminium …), <b>form</b> (cathode, ingot, scrap …), HS code if you know it.<span class="see">the goods list. These names appear when you add goods to a contract.</span></div></li>
+    <li><div class="t"><span class="where">Base Info › Banks</span> → <span class="btn">New</span>. Add each company bank account: name, <b>currency</b>, account number, IBAN, SWIFT.<br><span class="where">Base Info › Cash safes</span> → <span class="btn">New</span>. Add each cash box: name and currency.<span class="see">you will pick these when money comes in by bank transfer (TT) or when a cheque is paid.</span></div></li>
+    <li><div class="t"><span class="where">Base Info › Expense categories</span> and <span class="where">Revenue categories</span> → <span class="btn">New</span>. Example expenses: Freight, Customs, Rent, Salaries. Example revenues: Commission, Interest. For each one choose the <b>scope</b>: <b>Invoice</b> (belongs to a shipment) or <b>General</b> (office cost).</div></li>
+    <li><div class="t"><span class="where">Base Info › Cost centres</span> → <span class="btn">New</span>. Optional. Example: Dubai office, Iraq branch.</div></li>
+    <li><div class="t"><span class="where">Warehouse › Warehouses</span> → <span class="btn">New warehouse</span>. Name, code, location. You need at least one active warehouse before you can confirm an invoice.</div></li>
+    <li><div class="t"><span class="where">Persons</span> → add your buyers and suppliers (section 3).</div></li>
+    <li><div class="t"><span class="where">Settings</span> → check the <b>FX rate (AED per 1 USD)</b> and <b>IQD exchange rate</b>. These are only the default values shown in new forms.</div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Rules for codes</h3><ul>
+      <li>Codes use letters, numbers and hyphens only. They become UPPERCASE.</li>
+      <li>A code cannot be changed after saving. Choose short and clear: <b>CU-CATH</b>, <b>MW</b>, <b>AM</b>.</li>
+      <li>A code cannot be used twice in the same list.</li>
+    </ul></div>
+    <div class="box warn"><h3>Nothing is deleted</h3><ul>
+      <li>Records with history cannot be deleted. Use <b>Deactivate</b> instead. An inactive record is hidden from the pick lists but stays in old documents.</li>
+      <li>Currency of a bank or cash safe cannot change after saving.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · First-time setup</span><span>Page 2 / 15</span></div>
+</section>
+
+<!-- ============================================================ 3 PERSON -->
+<section class="page">
+  <div class="head"><h1>3 · Add a person</h1><span class="num">buyers, suppliers, employees</span></div>
+  <div class="goal"><b>Goal:</b> create the party you trade with, so you can make contracts and record money with them.</div>
+
+  <div class="path"><span class="menu">Persons</span><i></i><span class="btn">New person</span><i></i><span>Fill the form</span><i></i><span class="btn">Save</span><i></i><span class="end">Person created</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Persons</span> and click <span class="btn">New person</span>.</div></li>
+    <li><div class="t"><b>Name</b> — the company or person name, as it must appear on documents. Example: <i>Alco Metal Trading</i>.</div></li>
+    <li><div class="t"><b>Code</b> — short, example <i>AM</i>. It becomes part of every contract number of this person, so choose it carefully. It cannot change later.</div></li>
+    <li><div class="t"><b>Type</b> — choose one:
+      <table>
+        <tr><th>Type</th><th>Use it for</th><th>Can have contracts?</th></tr>
+        <tr><td>Buyer</td><td>a customer who buys from you</td><td>Yes — sell contracts</td></tr>
+        <tr><td>Supplier</td><td>a company you buy from</td><td>Yes — purchase contracts</td></tr>
+        <tr><td>Both</td><td>buys and sells</td><td>Yes — both</td></tr>
+        <tr><td>Employee / Other</td><td>staff, landlord, bank … (for expenses and general payments)</td><td>No</td></tr>
+      </table></div></li>
+    <li><div class="t"><b>Currency</b> — USD, AED or IQD. This is the default for new forms with this person.</div></li>
+    <li><div class="t">For buyers and suppliers: <b>Payment terms (days)</b> — how many days they have to pay. After this, an invoice counts as <b>overdue</b>. <b>Credit limit</b> in USD — the app warns when a buyer goes above it.</div></li>
+    <li><div class="t">Contact, email, phone, country — optional.</div></li>
+    <li><div class="t"><b>Customer portal access</b> — tick this only for the ONE customer that will sign in to My Account (section 14).</div></li>
+    <li><div class="t">Click <span class="btn">Save</span>.<span class="see">"Person created". The person is in the list with 0 balance.</span></div></li>
+  </ol>
+
+  <h2>Partners (only for purchase deals with profit sharing)</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Partners</span> → <span class="btn">New</span>: name and code. Later, on a purchase contract, you give each partner a <b>%</b> of a goods line. The total must be 100 or less; your company keeps the rest.</div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>Click a person's row to see their balance, contracts, invoices and payments (section 12).</li>
+      <li>To edit, open the person and click <span class="btn">Edit person</span>.</li>
+    </ul></div>
+    <div class="box warn"><h3>Cannot save?</h3><ul>
+      <li>"This code is already in use" — pick another code.</li>
+      <li>"Letters, numbers and hyphens only" — remove spaces and symbols from the code.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Add a person</span><span>Page 3 / 15</span></div>
+</section>
+
+<!-- ============================================================ 4 CONTRACT -->
+<section class="page">
+  <div class="head"><h1>4 · Make a contract and add goods</h1><span class="num">the deal</span></div>
+  <div class="goal"><b>Goal:</b> write down the deal: who, when, where to, and what goods at what price.</div>
+
+  <div class="path"><span class="menu">Contracts</span><i></i><span class="btn">New sell / purchase contract</span><i></i><span>Header</span><i></i><span class="btn">Add goods</span><i></i><span class="end">Contract ACTIVE</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Contracts</span>. Choose the tab <b>Sell contracts</b> or <b>Purchase contracts</b>, then click <span class="btn">New sell contract</span> or <span class="btn">New purchase contract</span>.</div></li>
+    <li><div class="t"><b>Customer</b> — pick the person. A sell contract shows only buyers; a purchase contract shows only suppliers.</div></li>
+    <li><div class="t"><b>Date</b>, <b>Destination</b> (example: NINGBO), notes. Click <span class="btn">Save</span>.<span class="see">"Contract created". The contract number is made from the person code and the date, example <b>AM-P-251101156</b>. Status is ACTIVE.</span></div></li>
+    <li><div class="t">Open the contract and click <span class="btn">Add goods</span>. For each goods line:
+      <table>
+        <tr><th>Field</th><th>What to enter</th></tr>
+        <tr><td>Product</td><td>start typing; pick from your Goods list so the spelling stays the same</td></tr>
+        <tr><td>Quantity (MT)</td><td>total metric tons in the deal</td></tr>
+        <tr><td>LME fixed?</td><td><b>Yes</b> = the LME price is agreed now → enter <b>Fixed LME price</b> (USD/MT).<br><b>No</b> = floating; you enter the LME price later, on the invoice</td></tr>
+        <tr><td>LME %</td><td>the agreed percentage of LME, example 94.76</td></tr>
+        <tr><td>Premium</td><td>USD per MT added on top (can be 0 or negative)</td></tr>
+        <tr><td>Incoterm</td><td>FOB, CIF, CFR, CNF, EXW or DAP</td></tr>
+        <tr><td>Partners</td><td>purchase only: partner + % share, optional</td></tr>
+      </table></div></li>
+    <li><div class="t">Click <span class="btn">Save</span>. Repeat for every product in the deal.<span class="see">the goods table with the price per MT and the line value, both computed for you.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>How the price is computed</h3><ul>
+      <li><b>Price per MT</b> = fixed LME price × LME % ÷ 100 + premium</li>
+      <li><b>Line value</b> = price per MT × quantity</li>
+      <li>Example: 11,685 × 94.76 % + 0 = <b>11,072 USD/MT</b></li>
+    </ul></div>
+    <div class="box warn"><h3>Two "remaining" numbers</h3><ul>
+      <li><b>Shipped / Remaining</b> on the contract = goods that left in containers.</li>
+      <li><b>Uninvoiced</b> on the Purchase / Sale pages = goods not yet on a confirmed document.</li>
+      <li>They are different things. Both start at the full quantity.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Make a contract</span><span>Page 4 / 15</span></div>
+</section>
+
+<!-- ============================================================ 5 PURCHASE -->
+<section class="page">
+  <div class="head"><h1>5 · Buying: order → provisional → invoice</h1><span class="num">Purchase page</span></div>
+  <div class="goal"><b>Goal:</b> record what you buy from a supplier, step by step, and put the goods into your warehouse.</div>
+
+  <div class="path"><span class="menu">Purchase</span><i></i><span>Order (PO)</span><i></i><span>Provisional (PP)</span><i></i><span>Invoice (PI)</span><i></i><span class="end">Goods in warehouse</span></div>
+  <p style="font-size:9.5pt;color:var(--muted)">You can skip a step: an order can go straight to the invoice. You can also start directly with a provisional or an invoice.</p>
+
+  <h2>A. Make the order</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Purchase › Orders</span> → <span class="btn">New order</span>. Pick the <b>contract</b>; the supplier fills in by itself. Choose currency and rate. <span class="btn">Save</span>.<span class="see">a DRAFT document with a number like PO-2026-0001.</span></div></li>
+    <li><div class="t">Click <span class="btn">Add items</span> → <span class="btn">Insert all from contract</span> (or tick lines and <span class="btn">Insert selected</span>). Change quantities if this order is only part of the contract.</div></li>
+    <li><div class="t">Click <span class="btn">Confirm</span>.<span class="see">status CONFIRMED. The document is now locked. The page shows how many MT of the contract are still uninvoiced.</span></div></li>
+  </ol>
+
+  <h2>B. Convert to a provisional, then price it</h2>
+  <ol class="steps">
+    <li><div class="t">On the confirmed order click <span class="btn">Convert</span> → choose <b>Provisional</b>.<span class="see">a new DRAFT PP-2026-0001 with the same items. It shows "Reference: PO-2026-0001".</span></div></li>
+    <li><div class="t">In the <b>Pricing</b> panel enter the <b>LME price</b> and <b>LME date</b> (needed for floating lines). Click <span class="btn">Apply to all</span>, or set each line. Add a <b>Discount %</b> if agreed.<span class="see">every line now has an amount, and the total at the bottom.</span></div></li>
+    <li><div class="t">Optional: <span class="btn">Send</span> marks it as sent to the other party. <span class="btn">Print</span> gives a printable copy.</div></li>
+    <li><div class="t">Click <span class="btn">Confirm</span>.</div></li>
+  </ol>
+
+  <h2>C. Convert to the final invoice and receive the goods</h2>
+  <ol class="steps">
+    <li><div class="t">On the confirmed provisional click <span class="btn">Convert</span> → <b>Invoice</b>. Check prices (they are copied). Click <span class="btn">Confirm</span>.</div></li>
+    <li><div class="t">A window asks: <b>which warehouse receives the goods?</b> Choose it and click OK.<span class="see">"Document confirmed", and in Warehouse › Documents a new receipt <b>GRN-2026-0001</b>. Stock goes up.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>A DRAFT can be edited freely. CONFIRMED is locked — to change it, cancel it and make a new one.</li>
+      <li>Each document can be converted only once. After that the Convert button disappears.</li>
+    </ul></div>
+    <div class="box stop"><h3>If the app refuses</h3><ul>
+      <li><b>"Quantity exceeds the contract's remaining uninvoiced amount"</b> — another document already used that quantity. Lower the quantity.</li>
+      <li><b>"Cannot cancel — a converted document already exists"</b> — cancel the newer document first, then this one.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Buying</span><span>Page 5 / 15</span></div>
+</section>
+
+<!-- ============================================================ 6 SALE -->
+<section class="page">
+  <div class="head"><h1>6 · Selling: order → provisional → invoice</h1><span class="num">Sale page</span></div>
+  <div class="goal"><b>Goal:</b> record what you sell to a buyer and take the goods out of the warehouse. Same steps as buying, with one extra check: stock.</div>
+
+  <div class="path"><span class="menu">Sale</span><i></i><span>Order (SO)</span><i></i><span>Provisional (SP)</span><i></i><span>Invoice (SI)</span><i></i><span>Stock check</span><i></i><span class="end">Goods out · buyer owes you</span></div>
+
+  <ol class="steps">
+    <li><div class="t"><span class="where">Sale › Orders</span> → <span class="btn">New order</span>. Pick the sell contract. <span class="btn">Save</span>, <span class="btn">Add items</span>, <span class="btn">Confirm</span>.</div></li>
+    <li><div class="t"><span class="btn">Convert</span> → <b>Provisional</b>. Enter <b>LME price</b>, <b>LME date</b>, discount. <span class="btn">Confirm</span>.</div></li>
+    <li><div class="t">Optional but useful: on each line click <span class="btn">Assign container</span> and pick the container that carries these goods (section 7). The container number and BL number then print on the invoice.</div></li>
+    <li><div class="t"><span class="btn">Convert</span> → <b>Invoice</b>. While it is a DRAFT, the items table shows an <b>"Available"</b> column: how many MT of that product are in stock. Red means not enough.</div></li>
+    <li><div class="t">Click <span class="btn">Confirm</span>. A window asks: <b>which warehouse do the goods leave from?</b> Choose and click OK.<span class="see">"Document confirmed", a new issue <b>GDN-2026-0001</b> in Warehouse › Documents, stock goes down, and the buyer's balance goes up by the invoice total.</span></div></li>
+    <li><div class="t">Click <span class="btn">Send</span> to mark it sent, <span class="btn">Print</span> to print or save as PDF.</div></li>
+  </ol>
+
+  <h2>After the sale — what happens by itself</h2>
+  <table>
+    <tr><th>Where</th><th>What you will see</th></tr>
+    <tr><td>Persons › the buyer</td><td>Outstanding balance goes up. It becomes <b>Overdue</b> after their payment-terms days.</td></tr>
+    <tr><td>Dashboard</td><td>Total invoiced, outstanding and the aging chart update.</td></tr>
+    <tr><td>Containers</td><td>The container linked to the invoice shows OPEN, then PAID when the invoice is fully paid, or OVERDUE.</td></tr>
+    <tr><td>My Account (portal)</td><td>The customer sees the new open invoice.</td></tr>
+  </table>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>Stock is counted per warehouse and per product from confirmed receipts and issues only.</li>
+      <li>You can record a payment straight from the invoice page — the Payments card at the bottom.</li>
+    </ul></div>
+    <div class="box stop"><h3>If the app refuses</h3><ul>
+      <li><b>"Insufficient stock"</b> with a product name and the available MT — receive the goods first (a purchase invoice, or Warehouse › New receipt), or lower the quantity. Nothing was changed.</li>
+      <li><b>"No active warehouse"</b> — create one in Warehouse › Warehouses.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Selling</span><span>Page 6 / 15</span></div>
+</section>
+
+<!-- ============================================================ 7 CONTAINER -->
+<section class="page">
+  <div class="head"><h1>7 · Record a container</h1><span class="num">shipments</span></div>
+  <div class="goal"><b>Goal:</b> record each shipment with its container number, dates and papers, and link it to the goods it carries.</div>
+
+  <div class="path"><span class="menu">Containers</span><i></i><span class="btn">New container</span><i></i><span>Reference + dates</span><i></i><span class="btn">Add goods line</span><i></i><span class="btn">Save</span><i></i><span class="end">Shipped MT updates on the contract</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Containers</span> → <span class="btn">New container</span>.</div></li>
+    <li><div class="t"><b>Container</b> — the container number, example <i>MSNU8018095</i>.</div></li>
+    <li><div class="t"><b>Load date</b> — when it was loaded. <b>Arrival</b> — expected or real arrival date. The list shows "Due in N days" or "Overdue by N days" from this.</div></li>
+    <li><div class="t">Papers: <b>Bill of Lading no.</b>, <b>Booking no.</b>, <b>Seal no.</b>, <b>Gross / Net weight (kg)</b>. All optional, but they print on documents.</div></li>
+    <li><div class="t">Click <span class="btn">Add goods line</span> → <b>Choose goods from a contract</b> → enter the <b>MT</b> in this container. The form shows "<i>N MT left</i>" on that contract line. One container can carry goods from several lines.</div></li>
+    <li><div class="t">Click <span class="btn">Save</span>.<span class="see">"Container added". On the contract, the Shipped column goes up and Remaining goes down.</span></div></li>
+  </ol>
+
+  <h2>Link the container to an invoice</h2>
+  <ol class="steps">
+    <li><div class="t">Open the sale or purchase document, find the line, click <span class="btn">Assign container</span>. Only containers carrying that product are listed (tick "Show all containers" to see the rest).<span class="see">Container no. and BL no. on the line, and on the printed invoice.</span></div></li>
+  </ol>
+
+  <h2>Warehouse pages</h2>
+  <table>
+    <tr><th>Tab</th><th>What it is for</th></tr>
+    <tr><td>Warehouses</td><td>the list of your warehouses — add or edit them here</td></tr>
+    <tr><td>Inventory</td><td>stock levels: MT of each product in each warehouse right now</td></tr>
+    <tr><td>Documents</td><td>every receipt (IN, GRN-…) and issue (OUT, GDN-…), with the invoice that made it</td></tr>
+  </table>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>Receipts and issues are normally created by confirming an invoice (sections 5 and 6). You can also make one by hand: <span class="btn">New receipt</span> / <span class="btn">New issue</span>, choose the confirmed invoice and the lines.</li>
+    </ul></div>
+    <div class="box warn"><h3>Take care</h3><ul>
+      <li>A container has no money on it. Paid / overdue on a container comes from the invoice it is linked to.</li>
+      <li>A goods line that is already on a document cannot be removed from the container.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Containers</span><span>Page 7 / 15</span></div>
+</section>
+
+<!-- ============================================================ 8 PAYMENT -->
+<section class="page">
+  <div class="head"><h1>8 · Record a payment</h1><span class="num">money in, money out</span></div>
+  <div class="goal"><b>Goal:</b> record money you received from a buyer or paid to a supplier, and say which invoices it settles.</div>
+
+  <div class="path"><span class="menu">Payments</span><i></i><span class="btn">New invoice payment</span><i></i><span>Header</span><i></i><span class="btn">Add line</span><i></i><span class="btn">Confirm</span><i></i><span class="end">Balance updated</span></div>
+
+  <h2>Which kind?</h2>
+  <table>
+    <tr><th>Tab</th><th>Use it when</th><th>Result</th></tr>
+    <tr><td><b>Invoice payments</b></td><td>the money is for one or more specific invoices</td><td>those invoices show as paid (fully or partly)</td></tr>
+    <tr><td><b>General payments</b></td><td>money with a person but no invoice — advance, deposit, loan, salary</td><td>sits on the person's account as a balance</td></tr>
+    <tr><td><b>Cheques</b></td><td>see section 9</td><td></td></tr>
+  </table>
+
+  <h2>Steps — invoice payment</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Payments › Invoice payments</span> → <span class="btn">New invoice payment</span>.</div></li>
+    <li><div class="t"><b>Person</b>, <b>Date</b>, <b>Money direction</b>: <b>Money in</b> (received from a buyer) or <b>Money out</b> (paid to a supplier). <b>Currency</b> and <b>Declared total</b> — the amount on the bank slip. <span class="btn">Save</span>.<span class="see">a DRAFT payment. "Not yet allocated" shows the full amount.</span></div></li>
+    <li><div class="t">Click <span class="btn">Add line</span>. Pick the <b>invoice</b>, enter <b>amount</b>, <b>currency</b>, <b>FX rate</b> and <b>method</b>:
+      <table>
+        <tr><th>Method</th><th>Extra field</th></tr>
+        <tr><td>TT (bank transfer)</td><td><b>Bank account</b> — which company account received or sent it</td></tr>
+        <tr><td>Cash</td><td><b>Cash safe</b></td></tr>
+        <tr><td>Cheque</td><td><b>Cheque</b> — pick an existing one or create it here</td></tr>
+        <tr><td>Offset · Credit Note</td><td>none</td></tr>
+      </table>
+      The amount is spread over the invoice items from the top down. You can change the share per item.<span class="see">"Line added". "Not yet allocated" goes down. One payment can have lines on several invoices.</span></div></li>
+    <li><div class="t">When the lines equal the declared total ("Fully allocated"), click <span class="btn">Confirm</span>.<span class="see">status CONFIRMED. The person's balance and the invoice's "Paid to date" update. The invoice shows "Remaining" or "Overpaid by".</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>A <b>DRAFT</b> payment is not counted anywhere. Only CONFIRMED money changes balances.</li>
+      <li>Made a mistake? Reopen the payment to DRAFT, fix the lines, confirm again.</li>
+    </ul></div>
+    <div class="box warn"><h3>General payment</h3><ul>
+      <li>Same steps from the <b>General payments</b> tab, without picking an invoice. Use it for an advance, or money paid to an employee or landlord.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Payments</span><span>Page 8 / 15</span></div>
+</section>
+
+<!-- ============================================================ 9 CHEQUES -->
+<section class="page">
+  <div class="head"><h1>9 · Cheques</h1><span class="num">Payments › Cheques</span></div>
+  <div class="goal"><b>Goal:</b> keep a list of every cheque you hold or gave, know when each is due, and record when it clears.</div>
+
+  <div class="path"><span class="menu">Payments › Cheques</span><i></i><span class="btn">New cheque</span><i></i><span>PENDING</span><i></i><span class="btn">Mark as paid</span><i></i><span class="end">PAID — money in your account</span></div>
+
+  <h2>Add a cheque</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Payments › Cheques</span> → <span class="btn">New cheque</span> (or create it inside a payment line with method Cheque).</div></li>
+    <li><div class="t"><b>Type</b>: <b>Normal</b> (a real payment) or <b>Security</b> (a guarantee, not for cashing unless needed).</div></li>
+    <li><div class="t"><b>Number</b>, <b>Issuing bank</b> (the bank written on the cheque), <b>Owner</b> (whose cheque it is), <b>Due date</b>, <b>Amount</b>, <b>Currency</b>. <span class="btn">Save</span>.<span class="see">the cheque with status PENDING and "Due in N days".</span></div></li>
+  </ol>
+
+  <h2>When something happens to the cheque</h2>
+  <ol class="steps">
+    <li><div class="t">Open the cheque and change its <b>Status</b>:
+      <table>
+        <tr><th>Status</th><th>Meaning</th><th>What the app asks</th></tr>
+        <tr><td>PENDING</td><td>you hold it, not yet due or not yet presented</td><td>—</td></tr>
+        <tr><td><b>PAID</b></td><td>the bank cleared it</td><td><b>"Which of your accounts received this money?"</b> — pick the bank or cash safe. For a cheque you gave: which account it left from.</td></tr>
+        <tr><td>RETURNED</td><td>it bounced</td><td>—</td></tr>
+        <tr><td>EXPIRED</td><td>due date passed, never presented</td><td>—</td></tr>
+        <tr><td>CHANGED</td><td>replaced by another cheque</td><td>—</td></tr>
+      </table></div></li>
+  </ol>
+
+  <h2>Find cheques that need action</h2>
+  <ol class="steps">
+    <li><div class="t">Use the filters above the list: <b>Due from / Due to</b>, <b>Min / Max amount</b>, and tick <b>Needs action only</b> to see cheques that are due or past due.</div></li>
+    <li><div class="t">Type in the search box to find a cheque by number, owner or bank.</div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>One cheque can pay lines on several invoices. The cheque page shows "Used on" with the payments that use it.</li>
+      <li>Two different banks can have the same cheque number — that is allowed.</li>
+    </ul></div>
+    <div class="box warn"><h3>Take care</h3><ul>
+      <li>You can move a cheque from any status to any other, because real life can be corrected. But moving to PAID always needs an account, and moving away from PAID removes it.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Cheques</span><span>Page 9 / 15</span></div>
+</section>
+
+<!-- ============================================================ 10 TRANSFERS + FX -->
+<section class="page">
+  <div class="head"><h1>10 · Transfers · Exchange gain / loss</h1><span class="num">your own accounts</span></div>
+  <div class="goal"><b>Goal:</b> record money moved between your own banks and cash safes, and write down what a currency change cost or earned.</div>
+
+  <h2>Move money between your accounts</h2>
+  <div class="path"><span class="menu">Transfers</span><i></i><span class="btn">New transfer</span><i></i><span>From → To</span><i></i><span class="btn">Confirm</span><i></i><span class="end">TR-0001 confirmed</span></div>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Transfers</span> → <span class="btn">New transfer</span>.</div></li>
+    <li><div class="t"><b>From account</b> and <b>To account</b> — your banks and cash safes from Base Info.</div></li>
+    <li><div class="t"><b>Amount out</b> in the from-currency. If the two accounts have different currencies, enter the <b>Rate</b>; the app shows <b>Amount in</b>. Same currency: rate is 1.</div></li>
+    <li><div class="t">Optional: allocate part of it to an invoice, if this transfer is connected to a deal. It can stay unallocated.</div></li>
+    <li><div class="t"><span class="btn">Save</span>, then <span class="btn">Confirm</span>. The page says: <i>"Nothing moves until the transfer is confirmed."</i><span class="see">status CONFIRMED and a number like TR-0001. The Reports › Banks &amp; cash safes tab shows it as money out of one account and into the other.</span></div></li>
+  </ol>
+
+  <h2>Exchange gain / loss</h2>
+  <div class="path"><span class="menu">Exchange gain/loss</span><i></i><span class="btn">New record</span><i></i><span>Amount (USD) with + or −</span><i></i><span class="end">Gain or Loss</span></div>
+  <ol class="steps">
+    <li><div class="t">Use this when a currency change made you earn or lose money — for example you received AED at a worse rate than the invoice rate.</div></li>
+    <li><div class="t"><span class="where">Exchange gain/loss</span> → <span class="btn">New record</span>. Enter <b>Date</b> and <b>Amount (USD)</b>.<br>A <b>positive</b> number is saved as a <b>Gain</b> ("it raises your net"). A <b>negative</b> number is a <b>Loss</b> ("it lowers your net"). Add a note saying why.</div></li>
+    <li><div class="t"><span class="btn">Save</span>.<span class="see">a record EGL-0001 marked Gain or Loss, and the Net total at the top of the page.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>A transfer is only between YOUR accounts. Money to or from a person is a <b>payment</b> (section 8).</li>
+      <li>A DRAFT transfer can be edited or cancelled; a CONFIRMED one can only be cancelled.</li>
+    </ul></div>
+    <div class="box warn"><h3>Simple by design</h3><ul>
+      <li>The gain / loss record is just a number and a date. It is not tied to an account or a rate. You decide the figure.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Transfers and exchange</span><span>Page 10 / 15</span></div>
+</section>
+
+<!-- ============================================================ 11 EXPENSES + CLAIMS -->
+<section class="page">
+  <div class="head"><h1>11 · Expenses, revenues and claims</h1><span class="num">costs, extra income, disputes</span></div>
+  <div class="goal"><b>Goal:</b> record costs like freight and rent, extra income like commission, and claims about quantity or quality on an invoice.</div>
+
+  <h2>Expense or revenue document</h2>
+  <div class="path"><span class="menu">Expenses</span> / <span class="menu">Revenues</span><i></i><span>Invoice tab or General tab</span><i></i><span class="btn">New … document</span><i></i><span class="btn">Add category line</span><i></i><span class="end">Total in USD</span></div>
+  <ol class="steps">
+    <li><div class="t">Choose the tab. <b>Invoice expenses</b> = a cost that belongs to one shipment (freight, customs, inspection). <b>General expenses</b> = office costs (rent, salaries, bank fees). Revenues work the same way.</div></li>
+    <li><div class="t">Click <span class="btn">New invoice document</span> (pick the invoice — it cannot change later) or <span class="btn">New general document</span>. Give it a <b>Title</b>, example <i>"Freight and customs for PP-2026-0001"</i>. <span class="btn">Save</span>.</div></li>
+    <li><div class="t">Click <span class="btn">Add category line</span>: <b>Category</b> (from Base Info), <b>Person</b> (who you paid or who paid you — the shipping company, the landlord …), <b>Amount</b>, <b>Currency</b>, <b>FX rate</b>, optional <b>Cost centre</b>.<br>On an invoice document you also split the amount over the goods (the "Share" per line). The app then shows the cost per MT.</div></li>
+    <li><div class="t">Add more lines if needed.<span class="see">the total in USD on the document, and the cost per MT on each goods line. The person's balance changes by the amount.</span></div></li>
+  </ol>
+
+  <h2>Claim</h2>
+  <div class="path"><span class="menu">Claims</span><i></i><span>Sale claims / Purchase claims</span><i></i><span class="btn">New claim</span><i></i><span>Pick invoice + items</span><i></i><span class="end">Claim amount on the person's account</span></div>
+  <ol class="steps">
+    <li><div class="t">A <b>sale claim</b> is a buyer complaining to you (goods short or bad → you owe them). A <b>purchase claim</b> is you complaining to a supplier (→ they owe you).</div></li>
+    <li><div class="t"><span class="where">Claims</span> → the right tab → <span class="btn">New claim</span>. <b>Select invoice</b> — a confirmed one. The party fills in from the invoice.</div></li>
+    <li><div class="t"><b>Title</b>, <b>Claim type</b>: <b>Quantity</b> (weight short) or <b>Quality</b>. <b>Currency</b>, <b>FX rate</b>, <b>Date</b>.</div></li>
+    <li><div class="t">In <b>Invoice items</b>, enter the claim <b>amount</b> for each affected goods line. <span class="btn">Save</span>.<span class="see">the claim total in USD, and the person's balance changed by that amount.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>Documents and claims are not deleted; use <b>Cancel</b>. A cancelled one is ignored everywhere.</li>
+      <li>The <b>Reports › Expenses</b> tab groups costs by category, cost centre and person.</li>
+    </ul></div>
+    <div class="box warn"><h3>Categories</h3><ul>
+      <li>A line can only use a category of the same kind: an "Invoice" category on an invoice document, a "General" category on a general document. If the category you need is missing, add it in Base Info.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Expenses and claims</span><span>Page 11 / 15</span></div>
+</section>
+
+<!-- ============================================================ 12 BALANCE -->
+<section class="page">
+  <div class="head"><h1>12 · Check a person's balance</h1><span class="num">who owes what</span></div>
+  <div class="goal"><b>Goal:</b> answer "how much does this buyer owe us?" or "how much do we owe this supplier?", and see why.</div>
+
+  <div class="path"><span class="menu">Persons</span><i></i><span>Click the person</span><i></i><span>Overview</span><i></i><span>Ledger</span><i></i><span class="end">Balance and every movement</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Persons</span>. The list already shows, per person: <b>Outstanding</b>, <b>Overdue</b>, <b>Paid</b>, <b>Invoiced</b>, <b>Balance</b>. Search by name or code.</div></li>
+    <li><div class="t">Click the person.<span class="see">the Person overview: profile, credit used, and tabs for Contracts, Invoices, Claims, Ledger.</span></div></li>
+    <li><div class="t">Read the numbers:
+      <table>
+        <tr><th>Number</th><th>Meaning</th></tr>
+        <tr><td><b>Outstanding</b></td><td>sale invoices not yet paid (never below zero)</td></tr>
+        <tr><td><b>Overdue</b></td><td>the part of Outstanding older than the person's payment terms</td></tr>
+        <tr><td><b>Net balance</b></td><td>everything together — <b>"This person owes you"</b> or <b>"You owe this person"</b></td></tr>
+        <tr><td><b>Credit used</b></td><td>Outstanding compared with the credit limit</td></tr>
+      </table></div></li>
+    <li><div class="t">Open the <b>Ledger</b> tab.<span class="see">every movement in date order — invoices, payments, claims, expenses, cheques — with the <b>Change</b> and the <b>Balance after</b> each line. Sale side and purchase side are shown separately, then the net.</span></div></li>
+    <li><div class="t">Lines marked <b>"Not counted yet"</b> are drafts (a draft payment or draft invoice). They do not change the balance until confirmed.</div></li>
+  </ol>
+
+  <h2>The Dashboard — the whole company at a glance</h2>
+  <table>
+    <tr><th>Card</th><th>Shows</th></tr>
+    <tr><td>Total outstanding · Overdue · Total collected · Total invoiced</td><td>the four key money numbers, with change vs. last month</td></tr>
+    <tr><td>Collection rate</td><td>collected ÷ invoiced</td></tr>
+    <tr><td>Invoiced vs. collected</td><td>a monthly chart for the last 12 months</td></tr>
+    <tr><td>Top customers by outstanding · Product mix · Contracts by status</td><td>who owes most, what you trade, contract statuses</td></tr>
+    <tr><td>Receivables aging</td><td>how old the unpaid money is: current, 1–30, 31–60, 61–90, 90+ days</td></tr>
+    <tr><td>Upcoming &amp; overdue · Recent invoices</td><td>what needs attention now</td></tr>
+  </table>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>All figures are computed from confirmed documents and confirmed payments only.</li>
+      <li>"Today" is the real date, so overdue days grow by themselves.</li>
+    </ul></div>
+    <div class="box warn"><h3>Executive page (CEO)</h3><ul>
+      <li>Same numbers at company level — revenue, cash collected, outstanding, collection rate, top customers — without the operational tables.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Balances</span><span>Page 12 / 15</span></div>
+</section>
+
+<!-- ============================================================ 13 REPORTS -->
+<section class="page">
+  <div class="head"><h1>13 · Reports and Excel</h1><span class="num">Reports page</span></div>
+  <div class="goal"><b>Goal:</b> get a report for a date range and take it to Excel.</div>
+
+  <div class="path"><span class="menu">Reports</span><i></i><span>Choose date range</span><i></i><span>Choose tab</span><i></i><span class="btn">Export</span><i></i><span class="end">.xlsx file downloaded</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Reports</span>. Set <b>From</b> and <b>To</b> at the top. The range stays when you switch tabs.</div></li>
+    <li><div class="t">Choose a tab:
+      <table>
+        <tr><th>Tab</th><th>What you get</th><th>Excel</th></tr>
+        <tr><td><b>Overview</b></td><td>charts: monthly cashflow, volume by product, value by customer, status, incoterm mix, aging buckets</td><td>—</td></tr>
+        <tr><td><b>Banks &amp; cash safes</b></td><td>for each of your accounts: opening balance, money in, money out, closing balance, and every line (payments and transfers) with "Balance after"</td><td>Yes</td></tr>
+        <tr><td><b>Persons</b></td><td>choose a person → their full movement list for the range: invoices, payments, claims, expenses, running balance</td><td>Yes</td></tr>
+        <tr><td><b>Expenses</b></td><td>expenses and revenues by category, by cost centre, and line by line</td><td>Yes</td></tr>
+        <tr><td><b>Purchases &amp; sales</b></td><td>every trade document with its goods, MT, prices, discount, total and the payments on it</td><td>Yes</td></tr>
+      </table></div></li>
+    <li><div class="t">Click <span class="btn">Export</span> at the top right.<span class="see">an Excel file (.xlsx) in your Downloads folder, with the same rows as on screen.</span></div></li>
+  </ol>
+
+  <h2>Print a document</h2>
+  <ol class="steps">
+    <li><div class="t">Open any order, provisional or invoice and click <span class="btn">Print</span>.<span class="see">a clean print page with your company name, the person, goods, prices, totals, "Prepared by" and "Authorized signatory" lines. Use the browser's print dialog to print or save as PDF.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>To send a customer a statement: Reports › Persons → pick them → Export.</li>
+      <li>To check a bank: Reports › Banks &amp; cash safes → compare the closing balance with your bank statement.</li>
+    </ul></div>
+    <div class="box warn"><h3>Reports only count</h3><ul>
+      <li>confirmed documents and confirmed payments. Drafts and cancelled records are not included.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Reports</span><span>Page 13 / 15</span></div>
+</section>
+
+<!-- ============================================================ 14 PORTAL -->
+<section class="page">
+  <div class="head"><h1>14 · For customers: My Account</h1><span class="num">the customer portal</span></div>
+  <div class="goal"><b>Goal:</b> a customer signs in and sees their own account — nothing else.</div>
+
+  <div class="path"><span>Customer signs in</span><i></i><span class="menu">My Account</span><i></i><span>Balance · open invoices · payments · contracts</span><i></i><span class="end">Read only</span></div>
+
+  <h2>What the customer does</h2>
+  <ol class="steps">
+    <li><div class="t">Go to <b>https://erp.metal-uae.com</b> and sign in with the login you gave them.<span class="see">only one page: My Account. Every other page is hidden, and typing another address brings them back here.</span></div></li>
+    <li><div class="t">At the top: a standing badge — <b>In good standing</b>, <b>Action needed</b> (something overdue) or <b>No activity yet</b>.</div></li>
+    <li><div class="t">Cards: <b>Outstanding balance</b>, <b>Overdue</b>, <b>Available credit</b>, <b>Settlement rate</b>, <b>Avg. days to settle</b>, their payment terms, credit utilization.</div></li>
+    <li><div class="t">Charts: receivables aging, paid vs. outstanding, invoiced vs. collected.</div></li>
+    <li><div class="t">Tables: <b>Open invoices</b> with due date and days overdue, <b>Payments</b>, <b>Contracts</b>. When everything is paid: "No open invoices — you're all settled."</div></li>
+  </ol>
+
+  <h2>What you do to set it up (manager)</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Persons</span> → open the customer → <span class="btn">Edit person</span> → tick <b>Customer portal access</b> → <span class="btn">Save</span>. The list shows a <b>Portal</b> badge on that person.</div></li>
+    <li><div class="t"><span class="where">Users</span> → make sure there is a user with role <b>Customer</b> (section 15). Give them the email and password.</div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>The portal is <b>read only</b>. The customer cannot change anything.</li>
+      <li>They see the same numbers you see on their Person page.</li>
+    </ul></div>
+    <div class="box warn"><h3>Only one</h3><ul>
+      <li>Only one person can have portal access at a time. If you tick it on another person, it moves.</li>
+      <li>If you deactivate that person, the portal access is removed. The customer then sees "Account unavailable".</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Finora user guide · Customer portal</span><span>Page 14 / 15</span></div>
+</section>
+
+<!-- ============================================================ 15 USERS + SETTINGS + ERRORS -->
+<section class="page">
+  <div class="head"><h1>15 · Users, settings, and error messages</h1><span class="num">for managers</span></div>
+
+  <h2>Users</h2>
+  <ol class="steps">
+    <li><div class="t"><span class="where">Users</span> → <span class="btn">New user</span>: <b>Name</b>, <b>Email</b> (this is their login), <b>Role</b>, <b>Initial password</b>. <span class="btn">Save</span>. Tell them the password; they can change it later.</div></li>
+    <li><div class="t">Forgot password? Open the user → <span class="btn">Reset password</span> → type a new one.</div></li>
+    <li><div class="t">Someone leaves? Open the user → <b>Deactivate</b>. They cannot sign in anymore. You cannot deactivate yourself.</div></li>
+    <li><div class="t">Your own password: click your name at the top right → <span class="btn">Change password</span>.</div></li>
+  </ol>
+  <table>
+    <tr><th>Role</th><th>Can do</th></tr>
+    <tr><td><b>Staff</b></td><td>daily operations: persons, contracts, containers, warehouse, purchase and sale documents, base info. No money pages.</td></tr>
+    <tr><td><b>Manager</b></td><td>everything, including payments, transfers, expenses, claims, reports, users, settings.</td></tr>
+    <tr><td><b>CEO</b></td><td>Executive page, reports, settings, users.</td></tr>
+    <tr><td><b>Customer</b></td><td>My Account only.</td></tr>
+  </table>
+
+  <h2>Settings</h2>
+  <ol class="steps">
+    <li><div class="t"><b>Theme</b>, <b>Language</b>, <b>Base reporting currency</b>, <b>FX rate (AED per 1 USD)</b>, <b>IQD exchange rate</b> (defaults for new forms), <b>Company name</b> (printed on documents). <b>Danger zone</b> — Load sample data / Wipe all data are for testing only; on the real system they are switched off.</div></li>
+  </ol>
+
+  <h2>Error messages and what to do</h2>
+  <table>
+    <tr><th>Message</th><th>Meaning</th><th>What to do</th></tr>
+    <tr><td>Incorrect email or password</td><td>login failed</td><td>check both; ask a manager to reset the password</td></tr>
+    <tr><td>Quantity exceeds the contract's remaining uninvoiced amount</td><td>this contract line is already used by other documents</td><td>lower the quantity, or cancel the other document</td></tr>
+    <tr><td>Insufficient stock</td><td>not enough of that product in that warehouse</td><td>receive goods first, or choose another warehouse</td></tr>
+    <tr><td>A converted document already exists</td><td>you cannot convert or cancel because a newer document is linked</td><td>work on the newer document; cancel it first if needed</td></tr>
+    <tr><td>Cancel the linked warehouse document first</td><td>the invoice already moved stock</td><td>Warehouse › Documents → cancel the GRN / GDN, then cancel the invoice</td></tr>
+    <tr><td>Couldn't save changes / red banner at the top</td><td>the server did not accept or receive the change</td><td>check your internet, try again; if the banner stays, tell the administrator</td></tr>
+  </table>
+
+  <div class="box tip"><h3>Golden rules</h3><ul>
+    <li>Set up Base Info and Persons first. Then contracts. Then documents. Then payments.</li>
+    <li>DRAFT = you can still change it and it counts for nothing. CONFIRMED = locked and counted.</li>
+    <li>Never delete — cancel or deactivate. History stays complete.</li>
+  </ul></div>
+  <div class="foot"><span>Finora user guide · Users, settings, errors</span><span>Page 15 / 15</span></div>
+</section>
+
+</body>
+</html>
