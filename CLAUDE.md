@@ -8,15 +8,17 @@ A **monorepo** for the Jalil Jalal Metals Trading estate:
 
 | Path | What | Deployed at |
 |---|---|---|
-| `apps/erp-panel` | **Finora** — receivables/trading ERP. Vite 6 · React 18 · AntD 5 | erp.metal-uae.com |
+| `apps/erp-panel` | **Finora** — receivables/trading ERP. Vite 6 · React 18 · AntD 5 | erp.metal-uae.com + erp2 |
 | `apps/land-web` | Corporate site. Next 15 · React 19 | metal-uae.com |
-| `backend/` | .NET 10 modular monolith (Identity · CMS · ERP) | api.metal-uae.com |
-| `packages/` | Shared TS packages (API client) | — |
-| `deploy/` | One compose stack + per-app Dockerfiles | /data/apps/metal-erp |
+| `backend/` | .NET 10 modular monolith (Identity · CMS · ERP) | api.metal-uae.com + api2 |
+| `deploy/` | One compose stack + per-app Dockerfiles; see `deploy/README.md` | /data/apps/metal-erp |
 
 **Finora** replaces a spreadsheet ("Customers Accounts" workbook) for an LME-priced
-metals trading desk. It currently runs on deterministic **mock data**; the backend
-that replaces it is being built on `feat/monorepo-dotnet-backend`.
+metals trading desk. The backend is merged and live: data lives in **PostgreSQL**,
+every domain write has its own endpoint, and the panel hydrates its dataset from the
+server on sign-in (see "How data flows" below). Production runs **two tenants** —
+`erp2`/`api2` are a second company on the same image with its own database
+(`deploy/README.md` explains why it's a second process, not Host-header routing).
 
 ## Commands
 
@@ -50,6 +52,18 @@ Aspire starts PostgreSQL 17, Redis and pgAdmin, migrates, seeds, then serves the
 **:5080** — the port both the vite dev server and `vite preview` proxy `/api` to. The ERP panel
 needs it running to sign in.
 
+```bash
+dotnet build backend/Finora.slnx   # warnings are errors
+dotnet test  backend/Finora.slnx   # unit + architecture + integration tests
+```
+
+`Finora.ArchitectureTests` fails the build on cross-module references, EF Core in a
+Domain project, `float`/`double` in domain files, or `Math.Round` outside
+`BuildingBlocks.Domain.Rounding` — see `backend/README.md` for the reasoning. Every
+API failure is RFC 9457 ProblemDetails with a machine code in `extensions.code`
+(catalogued in `backend/contracts/error-codes.json`); the front end's `http.ts`
+surfaces that code as the `ApiError` message components branch on.
+
 **Sign-in is real.** Four seeded accounts, listed on the login page:
 
 | Account | Role | Sees |
@@ -80,11 +94,18 @@ src/
 ├── config/constants.ts                 # enums, route map, brand palette, locales
 ├── hooks/useLocaleEffect.ts            # syncs i18n + dayjs + <html dir/lang>
 ├── i18n/{index.ts,locales/*.json}      # en / ar / fa
-├── mock/data.ts                        # empty seed + persistence (single source of truth)
+├── mock/data.ts                        # client-side store + localStorage persistence
 ├── mock/sampleData.ts                  # demo dataset generator ("Load sample data")
 ├── pages/<feature>/                    # one folder per route
 ├── routes/index.tsx                    # router + RequireAuth
-├── services/{api.ts,queries.ts}        # mock async API + React Query hooks
+├── services/
+│   ├── api.ts                          # derived reads + writes, over the hydrated store
+│   ├── queries.ts                      # React Query hooks — the only way components read data
+│   ├── http.ts                         # one fetch wrapper: cookie auth + ApiError(code)
+│   ├── snapshot.ts                     # boot hydration from /api/erp/snapshot (strangler seam)
+│   ├── identity.ts                     # sign-in, /api/identity/me permissions
+│   └── {contracts,invoices,payments,containers,warehouseDocs,charges,claims,
+│        transfers,exchangeGainLoss,masterData,users}.ts   # per-feature endpoints
 ├── store/                              # zustand: useUiStore, useAuthStore, useSettingsStore
 ├── theme/tokens.ts                     # AntD light/dark design tokens
 ├── types/index.ts                      # domain types
@@ -107,12 +128,36 @@ An **Item (goods)** carries: `quantityMt`, `lmePercent`, `lmeFixed`,
 unitPrice (USD/MT) = fixedLmePrice * (lmePercent / 100) + premium
 invoice    (USD)   = unitPrice * quantityMt
 AED → USD          = amountAED / fxRate           (fxRate ≈ 3.6725)
+IQD → USD          = amountIQD / fxRate           (default 1310, form-prefilled only)
 ```
+
+Currencies are `USD`/`AED`/`IQD`. Use `config/constants.ts:defaultFxFor()` to pick
+the rate — an inline `=== 'AED' ? rate : 1` silently gave IQD a rate of 1 once.
 
 Reference contract `AM-P-251101156` (Alco Metal) is seeded verbatim from the
 workbook into the **sample dataset** and is its canonical correctness check —
 see "Empty start" below for how that dataset relates to what a fresh install
 shows.
+
+## How data flows (the strangler seam)
+
+The panel's **derived reads are still computed client-side**: one person's balance
+walks customers, invoices, payments, claims, charge docs, cheques and transfers
+together, so no single entity's reads could move to the server alone without
+leaving balances quietly wrong. Instead:
+
+- On sign-in, `services/snapshot.ts` fills the client store (`mock/data.ts`'s `db`)
+  from **`GET /api/erp/snapshot`** in one piece; `api.ts`'s selectors and
+  aggregations keep running over it. If the API is unreachable the app degrades to
+  whatever localStorage holds rather than a blank screen.
+- **Writes go to real per-feature endpoints** (`services/contracts.ts`,
+  `payments.ts`, …) — every domain entity has its own by now. The only remaining
+  user of the debounced whole-dataset `PUT /api/erp/snapshot` is the demo-data
+  pair in Settings; that PUT is gated on `Erp:AllowDestructiveAdmin`, which
+  production leaves **off** (the `SyncAlert` banner then says "refused").
+- `snapshot.ts` deletes itself when the last read moves server-side. On sign-out,
+  `clearHydratedData()` empties store + localStorage so the next user on the
+  browser can't read the previous user's data.
 
 ## Empty start
 
@@ -122,17 +167,18 @@ invoices, payments, incl. the `AM-P-251101156` reference contract above) lives
 behind **Settings → Danger zone → "Load sample data"**, which regenerates it
 centred on the current date (so it always sits inside every rolling
 12-month/aging chart, no matter when it's pressed) and persists it exactly
-like hand-entered data. "Reset" wipes back to empty; both actions reload the
-page (`apps/erp-panel/src/mock/data.ts`'s module-level lookup indexes must not go stale).
+like hand-entered data — including pushing it to the server when one is reachable
+(dev only; production refuses, see above). "Reset" wipes back to empty; both
+actions reload the page (`apps/erp-panel/src/services/api.ts`'s module-level
+lookup indexes must not go stale).
 
 ## Conventions
 
-- **Data is mock & deterministic, but starts empty.** `apps/erp-panel/src/mock/data.ts` holds
-  only the (empty) seed + the localStorage persistence layer; the demo dataset
-  generator is `apps/erp-panel/src/mock/sampleData.ts`'s `buildSampleData()`, invoked only by
-  "Load sample data" (see "Empty start" above). Aggregations/selectors live in
+- **All reads through hooks.** Aggregations/selectors live in
   `apps/erp-panel/src/services/api.ts`; components consume them only via the hooks in
-  `apps/erp-panel/src/services/queries.ts`. To go real, replace `api.ts` internals.
+  `apps/erp-panel/src/services/queries.ts` — never by importing `db` or a service
+  file directly. `mock/data.ts` holds the (empty) seed, the localStorage layer and
+  `SCHEMA_VERSION` — bump it when a persisted entity's shape changes.
 - **i18n is mandatory.** No hard-coded user-facing strings — add keys to all
   three locale files (`en`, `ar`, `fa`) and use `t('...')`. Keep `ar`/`fa` in
   sync with `en`. Layout must stay RTL-safe (use logical CSS:
@@ -164,17 +210,22 @@ exchange gain/loss, base info, five report tabs with real `.xlsx` export, settin
 customer portal, executive dashboard; dark/light; en/ar/fa + RTL; responsive; RBAC
 across CEO/Manager/Staff/Customer.
 
-Create/edit forms, localStorage persistence and Excel export all exist — an older
-version of this file said they were stubbed, which has not been true for some time.
+The backend has **landed on `main`**: sign-in, permissions and every domain
+entity's writes (contracts, trade documents, payments, cheques, containers,
+warehouse docs, expenses/revenues, claims, transfers, exchange gain/loss) go to
+their own PostgreSQL-backed endpoints, behind server-side permission checks.
 
 **Open:**
 - **The reads still run in the browser.** Every ERP *write* is on the server; reading is still
-  one `GET /api/erp/snapshot` of the whole database, derived client-side in `api.ts`. Mapped,
+  one `GET /api/erp/snapshot` of the whole database, derived client-side in `api.ts` (see
+  "How data flows" above — `services/snapshot.ts` disappears when the reads move). Mapped,
   not started — see [docs/handover.md](docs/handover.md).
 - **A server move is half-done.** 179.198.198.221 is built and verified; DNS still points at
   185.206.94.116. Same file.
 - Header search and notifications are visual only.
 - `apps/land-web` has no linter wired up.
+- Root `package.json` still lists `packages/*` in workspaces, but the directory
+  no longer exists (harmless — the glob matches nothing).
 
 > **Read [docs/handover.md](docs/handover.md) before starting work.** It carries the state that
 > is not in the code: what is half-finished, what must happen before the DNS flip, and the
@@ -182,7 +233,8 @@ version of this file said they were stubbed, which has not been true for some ti
 
 ## Notes
 
+- Design docs live in `docs/superpowers/{specs,plans}` — dated per feature; schema
+  and behaviour decisions cite them, so check there before re-deciding something.
 - Fonts load from Google Fonts; offline/strict-TLS environments fall back to
   system fonts (cosmetic only).
-- The default branch is `main`. `claude/awesome-turing-b8ven2` was the default
-  until 2026-07-28 and still exists pointing at the same commit; prefer `main`.
+- The default branch is `main`.
