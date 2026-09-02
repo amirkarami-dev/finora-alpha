@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finora — Application Flowcharts</title>
+<style>
+  /* ---------- Print setup: one A4 page per section ---------- */
+  @page { size: A4 portrait; margin: 12mm 14mm; }
+
+  :root {
+    --ink: #222;
+    --muted: #666;
+    --line: #444;
+    --brand: #b87333;
+    --brand-bg: #f6ebe0;
+    --data-bg: #e9f0fb;
+    --ok-bg: #e6f4ec;
+    --warn-bg: #fff6df;
+    --bad-bg: #fdeaea;
+    --grey-bg: #f1f1f1;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    color: var(--ink);
+    background: #dedede;
+    font-size: 10pt;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 182mm;
+    min-height: 273mm;
+    background: #fff;
+    margin: 8mm auto;
+    padding: 10mm 12mm;
+    box-shadow: 0 2px 10px rgba(0,0,0,.18);
+    display: flex;
+    flex-direction: column;
+    page-break-after: always;
+    break-after: page;
+    position: relative;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+
+  @media print {
+    body { background: #fff; }
+    .page {
+      width: auto; margin: 0; padding: 0; box-shadow: none;
+      min-height: 0; height: 270mm; overflow: hidden;
+    }
+  }
+
+  /* ---------- Page chrome ---------- */
+  .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid var(--brand); padding-bottom: 3px; margin-bottom: 6mm;
+  }
+  .head h1 { font-size: 15pt; margin: 0; }
+  .head .num { color: var(--muted); font-size: 9pt; }
+  .foot {
+    margin-top: auto; padding-top: 3mm; border-top: 1px solid #ccc;
+    display: flex; justify-content: space-between; color: var(--muted); font-size: 8pt;
+  }
+  h2 { font-size: 11pt; margin: 5mm 0 2mm; color: var(--brand); text-transform: uppercase; letter-spacing: .04em; }
+  h2:first-of-type { margin-top: 0; }
+  p { margin: 0 0 2mm; }
+  .lead { color: var(--muted); font-size: 9.5pt; margin-bottom: 4mm; }
+
+  /* ---------- Flowchart vocabulary ---------- */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: 2mm 0; }
+  .flow.center { justify-content: center; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .row { display: flex; align-items: center; gap: 2px; }
+
+  .node {
+    border: 1.2px solid var(--line); border-radius: 5px;
+    padding: 4px 9px; background: #fff; text-align: center;
+    font-size: 9.5pt; min-width: 22mm; line-height: 1.25;
+  }
+  .node small { display: block; font-size: 7.5pt; color: var(--muted); font-weight: normal; }
+  .node.start  { border-radius: 30px; background: var(--brand-bg); border-color: var(--brand); }
+  .node.data   { background: var(--data-bg); border-style: double; border-width: 3px; }
+  .node.dec    { background: var(--warn-bg); border-style: dashed; }
+  .node.ok     { background: var(--ok-bg); }
+  .node.bad    { background: var(--bad-bg); }
+  .node.grey   { background: var(--grey-bg); }
+  .node.sys    { background: #fff; border-width: 2px; }
+  .node.wide   { min-width: 40mm; }
+
+  .arr { color: #555; font-size: 13pt; line-height: 1; padding: 0 3px; text-align: center; }
+  .arr::after { content: "\2192"; }
+  .arr[data-l]::before { content: attr(data-l); display: block; font-size: 7pt; color: var(--muted); font-family: inherit; }
+  .darr { color: #555; font-size: 13pt; line-height: 1; text-align: center; }
+  .darr::after { content: "\2193"; }
+  .darr[data-l]::after { content: "\2193\00a0" attr(data-l); font-size: 7.5pt; color: var(--muted); }
+  .darr[data-l] { font-size: 13pt; }
+
+  /* branch: one source, several targets */
+  .branch { display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 2px 4px; }
+  .branch .targets { display: flex; flex-direction: column; gap: 3px; border-left: 1.2px solid #777; padding-left: 6px; }
+  .branch .targets .t { display: flex; align-items: center; gap: 3px; }
+  .branch .targets .t::before { content: "\2192"; color: #555; }
+  .branch .targets .t .lbl { font-size: 7.5pt; color: var(--muted); min-width: 16mm; }
+
+  /* lanes */
+  .lanes { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 3mm; margin: 2mm 0; }
+  .lane { border: 1px solid #bbb; border-radius: 4px; padding: 2mm; background: #fafafa; }
+  .lane h3 { margin: 0 0 2mm; font-size: 9pt; text-align: center; background: var(--grey-bg); padding: 2px; border-radius: 3px; }
+  .lane .col { width: 100%; }
+  .lane .col > .node { width: 100%; }
+
+  /* ---------- Details ---------- */
+  .details {
+    border: 1px solid #ccc; border-radius: 5px; padding: 3mm 4mm; margin-top: 3mm;
+    background: #fcfcfc; font-size: 9pt;
+  }
+  .details h3 { margin: 0 0 1.5mm; font-size: 9.5pt; }
+  .details ul { margin: 0; padding-left: 4mm; }
+  .details li { margin-bottom: 1mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 6mm; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.5pt; background: #f2f2f2; padding: 0 3px; border-radius: 3px; }
+  .formula { font-family: Consolas, "Courier New", monospace; font-size: 9pt; background: #f4f4f4; border: 1px solid #ddd; padding: 2mm 3mm; border-radius: 4px; margin: 2mm 0; white-space: pre; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin: 2mm 0; }
+  th, td { border: 1px solid #ccc; padding: 2px 5px; text-align: left; vertical-align: top; }
+  th { background: var(--grey-bg); }
+  td.c, th.c { text-align: center; }
+  .yes { color: #1b7f3b; font-weight: bold; }
+  .no { color: #bbb; }
+
+  /* ---------- Cover ---------- */
+  .cover { justify-content: center; align-items: center; text-align: center; }
+  .cover .logo { font-size: 34pt; font-weight: bold; color: var(--brand); letter-spacing: .02em; }
+  .cover .sub { font-size: 13pt; color: var(--muted); margin-bottom: 12mm; }
+  .cover .meta { font-size: 9.5pt; color: var(--muted); margin-top: 10mm; }
+  .toc { text-align: left; width: 120mm; margin: 0 auto; }
+  .toc ol { margin: 0; padding-left: 6mm; font-size: 10.5pt; line-height: 1.7; }
+  .legend { display: flex; flex-wrap: wrap; gap: 3mm; justify-content: center; margin-top: 10mm; font-size: 8.5pt; }
+  .legend .node { min-width: 0; padding: 2px 8px; font-size: 8.5pt; }
+
+  .print-btn {
+    position: fixed; top: 10px; right: 14px; z-index: 9;
+    background: var(--brand); color: #fff; border: 0; border-radius: 6px;
+    padding: 8px 14px; font-size: 11pt; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  }
+  @media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+
+<button class="print-btn" onclick="window.print()">🖨 Print (A4)</button>
+
+<!-- ============================================================ COVER -->
+<section class="page cover">
+  <div class="logo">Finora</div>
+  <div class="sub">Application flowcharts — section by section</div>
+
+  <div class="toc">
+    <ol>
+      <li>System overview — who talks to what</li>
+      <li>Sign-in, roles and permissions</li>
+      <li>How data moves between browser and server</li>
+      <li>Persons (customers, suppliers) and partners</li>
+      <li>Contracts, goods lines and pricing</li>
+      <li>Trade documents — orders, provisional and final invoices</li>
+      <li>Containers and warehouse movements</li>
+      <li>Payments and cheques</li>
+      <li>Money transfers and exchange gain / loss</li>
+      <li>Expenses, revenues and claims</li>
+      <li>Base info — master data</li>
+      <li>Dashboards, customer portal and reports</li>
+      <li>Settings, users and the two-company deployment</li>
+    </ol>
+  </div>
+
+  <div class="legend">
+    <span class="node start">Start / end</span>
+    <span class="node">Step or screen</span>
+    <span class="node dec">Decision / rule check</span>
+    <span class="node data">Stored data</span>
+    <span class="node ok">Success state</span>
+    <span class="node bad">Refused / cancelled</span>
+    <span class="node sys">System component</span>
+  </div>
+
+  <div class="meta">
+    Jalil Jalal Metals Trading L.L.C. · erp.metal-uae.com · Generated 2026-09-02 from the source code<br>
+    Print: A4 portrait, one page per section. Use the browser's print dialog, "Background graphics" on.
+  </div>
+</section>
+
+<!-- ============================================================ 1 SYSTEM -->
+<section class="page">
+  <div class="head"><h1>1 · System overview</h1><span class="num">who talks to what</span></div>
+  <p class="lead">One application, one Docker stack, two companies. Each company has its own API process and its own database, so their data can never mix.</p>
+
+  <h2>Request path</h2>
+  <div class="flow center">
+    <span class="node start">User's browser</span><span class="arr" data-l="https"></span>
+    <span class="node sys">Cloudflare<small>DNS + TLS (mode: Full)</small></span><span class="arr"></span>
+    <span class="node sys">Traefik v3<small>routes on Host header</small></span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node sys">Traefik</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">erp.metal-uae.com</span><span class="node">web — nginx + SPA</span></div>
+        <div class="t"><span class="lbl">…/api on erp</span><span class="node">api (.NET 10)</span><span class="arr"></span><span class="node data">finora</span></div>
+        <div class="t"><span class="lbl">…/api on erp2</span><span class="node">api2 (same image)</span><span class="arr"></span><span class="node data">finora2</span></div>
+        <div class="t"><span class="lbl">metal-uae.com</span><span class="node">land — Next.js site</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>Inside the API — modular monolith</h2>
+  <div class="lanes" style="--n:3">
+    <div class="lane"><h3>Identity module</h3><div class="col">
+      <span class="node">Sign-in, session cookie</span><span class="darr"></span>
+      <span class="node">Roles → permissions</span><span class="darr"></span>
+      <span class="node">User admin</span>
+    </div></div>
+    <div class="lane"><h3>ERP module</h3><div class="col">
+      <span class="node">Contracts, documents</span><span class="darr"></span>
+      <span class="node">Payments, cheques, transfers</span><span class="darr"></span>
+      <span class="node">Warehouse, charges, claims</span>
+    </div></div>
+    <div class="lane"><h3>CMS module</h3><div class="col">
+      <span class="node">Content for the corporate site</span>
+    </div></div>
+  </div>
+  <div class="flow center"><span class="node grey">Modules never call each other directly — they talk only through shared contracts (enforced by architecture tests)</span></div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Front end:</b> React 18 + Ant Design 5, built with Vite. One bundle serves both companies — it calls <code>/api/...</code> relative to its own host.</li>
+        <li><b>Back end:</b> .NET 10, PostgreSQL 17, Redis. Every write has its own endpoint with a server-side permission check.</li>
+        <li><b>Errors:</b> every failure is an RFC 9457 problem with a machine code (e.g. <code>invalid-credentials</code>, <code>qty-exceeds-remaining</code>) that the screens react to.</li>
+      </ul>
+      <ul>
+        <li><b>Money rules in code:</b> money is <code>decimal</code>, never float; rounding happens in exactly one place, so C# (writes) and TypeScript (reads) agree to the cent.</li>
+        <li><b>Languages:</b> English, Arabic, Persian with full right-to-left layout. Dark and light theme.</li>
+        <li><b>Hosting:</b> one compose stack at <code>/data/apps/metal-erp</code>; Traefik + Postgres in a second stack at <code>/data/apps/infra</code>. Postgres has no public port.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · System overview</span><span>Page 1 / 13</span></div>
+</section>
+
+<!-- ============================================================ 2 SIGN-IN -->
+<section class="page">
+  <div class="head"><h1>2 · Sign-in, roles and permissions</h1><span class="num">who may see what</span></div>
+  <p class="lead">Sign-in is real: the server checks the password, sets an HttpOnly cookie, and tells the browser which pages this person is allowed to open.</p>
+
+  <h2>Sign-in flow</h2>
+  <div class="flow center">
+    <span class="node start">Login page</span><span class="arr" data-l="email + password"></span>
+    <span class="node">POST /api/identity/login</span><span class="arr"></span>
+    <span class="node dec">Password hash matches?</span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">matches?</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">yes</span><span class="node ok">Set HttpOnly session cookie</span><span class="arr"></span><span class="node">GET /api/identity/me</span><span class="arr"></span><span class="node ok">Land on role's home page</span></div>
+        <div class="t"><span class="lbl">no</span><span class="node bad">422 · invalid-credentials</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>Every page load</h2>
+  <div class="flow center">
+    <span class="node start">App opens</span><span class="arr"></span>
+    <span class="node">GET /api/identity/me<small>cookie sent automatically</small></span><span class="arr"></span>
+    <span class="node data">permissions = list of route keys</span><span class="arr"></span>
+    <span class="node">Sidebar shows only allowed pages</span><span class="arr"></span>
+    <span class="node dec">Route guard: allowed?</span><span class="arr" data-l="no"></span><span class="node bad">Redirect to home</span>
+  </div>
+
+  <h2>Role matrix (from the server's access catalogue)</h2>
+  <table>
+    <tr><th>Page</th><th class="c">CEO</th><th class="c">Manager</th><th class="c">Staff</th><th class="c">Customer</th></tr>
+    <tr><td>Executive dashboard</td><td class="c yes">✓</td><td class="c yes">✓</td><td class="c no">–</td><td class="c no">–</td></tr>
+    <tr><td>Dashboard, Persons, Contracts, Partners, Containers, Warehouse, Purchase, Sale, Base info</td><td class="c no">–</td><td class="c yes">✓</td><td class="c yes">✓</td><td class="c no">–</td></tr>
+    <tr><td>Payments, Transfers, Exchange, Expenses, Revenues, Claims</td><td class="c no">–</td><td class="c yes">✓</td><td class="c no">–</td><td class="c no">–</td></tr>
+    <tr><td>Reports, Settings, Users</td><td class="c yes">✓</td><td class="c yes">✓</td><td class="c no">–</td><td class="c no">–</td></tr>
+    <tr><td>Develop (build status &amp; docs)</td><td class="c no">–</td><td class="c yes">✓</td><td class="c no">–</td><td class="c no">–</td></tr>
+    <tr><td>Customer portal (own account only, read-only)</td><td class="c no">–</td><td class="c no">–</td><td class="c no">–</td><td class="c yes">✓</td></tr>
+  </table>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Session:</b> an HttpOnly cookie — JavaScript cannot read it and nothing is stored in the browser. The cookie is tied to the host, so a login on <code>erp</code> gives nothing on <code>erp2</code>.</li>
+        <li><b>Permissions come from the server</b> on every load, not from a table inside the app bundle.</li>
+        <li><b>Sign-out</b> clears the cookie and empties all data held in the browser, so the next person on the same computer sees nothing from the previous user.</li>
+      </ul>
+      <ul>
+        <li><b>Seeded accounts:</b> CEO, Manager, Staff and one Customer-portal login per company. Demo passwords work only in development; production needs its own password file or the account is created unusable.</li>
+        <li><b>Portal scope:</b> which customer the portal login sees is set by the <code>portalAccount</code> flag on exactly one customer.</li>
+        <li><b>API side:</b> every ERP endpoint also checks the permission itself — the sidebar is a convenience, not the security.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Sign-in, roles and permissions</span><span>Page 2 / 13</span></div>
+</section>
+
+<!-- ============================================================ 3 DATA FLOW -->
+<section class="page">
+  <div class="head"><h1>3 · How data moves</h1><span class="num">reads vs. writes</span></div>
+  <p class="lead">Writes go to the server one by one. Reads still arrive as one snapshot that the browser computes balances from. This is a deliberate half-way state (the "strangler seam").</p>
+
+  <h2>On sign-in — reads</h2>
+  <div class="flow center">
+    <span class="node start">Signed in</span><span class="arr"></span>
+    <span class="node">GET /api/erp/snapshot<small>whole dataset, one request</small></span><span class="arr"></span>
+    <span class="node data">Browser store<small>+ localStorage copy</small></span><span class="arr"></span>
+    <span class="node">api.ts derives balances, aging, KPIs</span><span class="arr"></span>
+    <span class="node">React Query hooks</span><span class="arr"></span>
+    <span class="node ok">Screens</span>
+  </div>
+  <div class="flow center">
+    <span class="node dec">API unreachable?</span><span class="arr" data-l="yes"></span>
+    <span class="node grey">Use whatever localStorage holds — the app degrades, it does not go blank</span>
+  </div>
+
+  <h2>Every save — writes</h2>
+  <div class="flow center">
+    <span class="node start">User saves a form</span><span class="arr"></span>
+    <span class="node">Feature endpoint<small>POST /api/erp/contracts, /payments, …</small></span><span class="arr"></span>
+    <span class="node dec">Permission + business rules</span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">valid?</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">yes</span><span class="node data">PostgreSQL</span><span class="arr"></span><span class="node ok">Server-derived fields returned (ids, totals, USD amounts)</span><span class="arr"></span><span class="node">Store updated, screens refresh</span></div>
+        <div class="t"><span class="lbl">no</span><span class="node bad">Problem with a code</span><span class="arr"></span><span class="node">Toast / message in the user's language</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>The one exception — demo data</h2>
+  <div class="flow center">
+    <span class="node start">Settings → Load sample / Reset</span><span class="arr"></span>
+    <span class="node">PUT /api/erp/snapshot<small>whole dataset</small></span><span class="arr"></span>
+    <span class="node dec">Erp:AllowDestructiveAdmin on?</span><span class="arr" data-l="dev: yes"></span><span class="node ok">Replaced</span>
+  </div>
+  <div class="flow center"><span class="arr" data-l="production: no"></span><span class="node bad">403 — the red "refused" banner; production starts empty and is filled by hand</span></div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Why one snapshot:</b> a person's balance walks customers, invoices, payments, claims, charges, cheques and transfers together. Moving one entity's reads alone would leave balances quietly wrong, so reads move all at once — a mapped, not yet started project.</li>
+        <li><b>Server-derived fields</b> (amounts in USD, allocation totals, reference ids) are never trusted from the browser; the server computes and returns them.</li>
+      </ul>
+      <ul>
+        <li><b>Known limits of the current state:</b> the whole dataset reaches every browser (the portal hides, it does not filter); a colleague's change is visible only after reload; the maths exists in both C# and TypeScript.</li>
+        <li><b>Empty start:</b> a new installation has zero records. The full demo dataset lives behind Settings → Danger zone and is centred on today's date.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · How data moves</span><span>Page 3 / 13</span></div>
+</section>
+
+<!-- ============================================================ 4 PERSONS -->
+<section class="page">
+  <div class="head"><h1>4 · Persons and partners</h1><span class="num">who we trade with</span></div>
+  <p class="lead">A "person" is any party with an account: a buyer, a supplier, both, an employee or other. Partners are profit-share parties on purchase contracts.</p>
+
+  <h2>Creating a person</h2>
+  <div class="flow center">
+    <span class="node start">Persons page → New</span><span class="arr"></span>
+    <span class="node">Name, code, type, currency<small>contact, country, terms</small></span><span class="arr"></span>
+    <span class="node dec">Type is BUYER / SUPPLIER / BOTH?</span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">trading?</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">yes</span><span class="node">Credit limit (USD) + payment terms (days)</span><span class="arr"></span><span class="node ok">Can hold contracts</span></div>
+        <div class="t"><span class="lbl">EMPLOYEE / OTHER</span><span class="node grey">No credit, no terms, no contracts — used for expenses and general payments</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>What a person's page shows</h2>
+  <div class="flow center">
+    <span class="node data">Contracts</span><span class="node data">Invoices</span><span class="node data">Payments</span><span class="node data">Claims</span><span class="node data">Charges</span><span class="node data">Cheques</span><span class="node data">Transfers</span>
+    <span class="arr"></span><span class="node wide">Ledger<small>every movement, running balance</small></span>
+  </div>
+  <div class="flow center">
+    <span class="node ok">Total outstanding<small>sale receivable, never below 0</small></span>
+    <span class="node">Overdue<small>past payment terms</small></span>
+    <span class="node">Net balance<small>+ they owe us · − we owe them</small></span>
+    <span class="node">Total invoiced / paid</span>
+  </div>
+
+  <h2>Partners on a purchase line</h2>
+  <div class="flow center">
+    <span class="node start">Partners page</span><span class="arr"></span>
+    <span class="node">Partner: name, code, active</span><span class="arr"></span>
+    <span class="node">Attached to a goods line of a PURCHASE contract with a %</span><span class="arr"></span>
+    <span class="node dec">Sum of % ≤ 100</span><span class="arr"></span>
+    <span class="node ok">Company keeps 100 − sum</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Code</b> (e.g. <code>AM</code> for Alco Metal) becomes part of contract numbers such as <code>AM-P-251101156</code>.</li>
+        <li><b>Default currency</b> per person: USD, AED or IQD. Every record still stores the rate actually used.</li>
+        <li><b>Portal account:</b> at most one customer can carry the flag; it is cleared automatically when that customer is deactivated.</li>
+      </ul>
+      <ul>
+        <li><b>Deactivate, don't delete:</b> persons with history are set inactive and hidden from pickers.</li>
+        <li><b>Outstanding vs. net balance:</b> aging, DSO, credit-limit warnings and the portal use the sale-only outstanding figure; the ledger uses the two-sided net balance.</li>
+        <li><b>Reports:</b> the "Persons" report tab prints one person's movements for a date range.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Persons and partners</span><span>Page 4 / 13</span></div>
+</section>
+
+<!-- ============================================================ 5 CONTRACTS -->
+<section class="page">
+  <div class="head"><h1>5 · Contracts, goods lines and pricing</h1><span class="num">the deal</span></div>
+  <p class="lead">A contract belongs to one person and holds one or more goods lines. Each line carries the commercial terms; the product itself is just a name from Base info.</p>
+
+  <h2>Hierarchy</h2>
+  <div class="flow center">
+    <span class="node data">Person</span><span class="arr" data-l="1 → many"></span>
+    <span class="node data">Contract<small>SELL or PURCHASE</small></span><span class="arr" data-l="1 → many"></span>
+    <span class="node data">Goods line (Item)<small>quantity, LME %, premium, incoterm</small></span><span class="arr" data-l="1 → many"></span>
+    <span class="node data">Container / Invoice line</span>
+  </div>
+
+  <h2>Creating a contract</h2>
+  <div class="flow center">
+    <span class="node start">Contracts → New</span><span class="arr"></span>
+    <span class="node">Pick person<small>BUYER/BOTH for SELL · SUPPLIER/BOTH for PURCHASE</small></span><span class="arr"></span>
+    <span class="node">Date, destination, notes</span><span class="arr"></span>
+    <span class="node">Add goods lines</span><span class="arr"></span>
+    <span class="node ok">Status ACTIVE</span>
+  </div>
+  <div class="flow center">
+    <span class="node">Per line:</span>
+    <span class="node">Product<small>autocomplete from Goods</small></span><span class="node">Quantity MT</span>
+    <span class="node dec">LME fixed?<small>yes → fixed LME price · no → priced later on the invoice</small></span>
+    <span class="node">LME %</span><span class="node">Premium USD/MT</span><span class="node">Incoterm<small>FOB CIF CFR CNF EXW DAP</small></span>
+  </div>
+
+  <h2>Pricing formula (validated against the original workbook)</h2>
+  <div class="formula">unit price (USD/MT) = fixed LME price × (LME % / 100) + premium
+line value  (USD)    = unit price × quantity MT
+AED → USD            = amount AED / fx rate      (default 3.6725)
+IQD → USD            = amount IQD / fx rate      (default 1310, editable per record)
+
+Example (Alco Metal, contract AM-P-251101156):  11,685 × 94.76 % + 0  ≈  11,072 USD/MT</div>
+
+  <h2>Status</h2>
+  <div class="flow center">
+    <span class="node ok">ACTIVE</span><span class="arr"></span><span class="node dec">ON HOLD</span><span class="arr"></span><span class="node grey">CLOSED</span>
+    <span class="node bad" style="margin-left:6mm">CANCELLED</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Two "remaining" figures</b> per line: <i>remaining MT</i> = quantity − shipped in containers (logistics); <i>uninvoiced MT</i> = quantity − confirmed final-chain documents (finance). They are shown apart on purpose.</li>
+        <li><b>Contract id</b> is built from the person code and the date.</li>
+      </ul>
+      <ul>
+        <li><b>Floating lines</b> (LME not fixed) get their LME quotation and date on the provisional or final invoice, not on the contract.</li>
+        <li><b>Purchase lines</b> may carry partner profit shares (see section 4).</li>
+        <li><b>Detail page</b> shows the goods table, containers, and every trade document of that contract.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Contracts, goods lines and pricing</span><span>Page 5 / 13</span></div>
+</section>
+
+<!-- ============================================================ 6 TRADE DOCS -->
+<section class="page">
+  <div class="head"><h1>6 · Trade documents</h1><span class="num">orders → provisional → final</span></div>
+  <p class="lead">Six types: purchase or sale × order, provisional, final invoice. Created from a contract, converted down the chain.</p>
+
+  <h2>Conversion chain (one live successor per document)</h2>
+  <div class="lanes" style="--n:2">
+    <div class="lane"><h3>Purchase side</h3>
+      <div class="flow center">
+        <span class="node">PO<small>Purchase order</small></span><span class="arr" data-l="convert"></span>
+        <span class="node">PP<small>Purchase provisional</small></span><span class="arr" data-l="convert"></span>
+        <span class="node ok">PI<small>Purchase invoice</small></span>
+      </div>
+    </div>
+    <div class="lane"><h3>Sale side</h3>
+      <div class="flow center">
+        <span class="node">SO<small>Sale order</small></span><span class="arr" data-l="convert"></span>
+        <span class="node">SP<small>Sale provisional</small></span><span class="arr" data-l="convert"></span>
+        <span class="node ok">SI<small>Sale invoice</small></span>
+      </div>
+    </div>
+  </div>
+  <div class="flow center"><span class="node grey" style="font-size:8pt">An order may also convert straight to the final invoice (PO → PI, SO → SI)</span></div>
+
+  <h2>Life of one document</h2>
+  <div class="flow center">
+    <span class="node start">New from contract</span><span class="arr"></span>
+    <span class="node">DRAFT<small>header + items editable</small></span><span class="arr" data-l="confirm"></span>
+    <span class="node dec">Quantity ≤ remaining on contract?<small>re-checked at confirm time</small></span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">ok?</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">yes</span><span class="node ok">CONFIRMED<small>read-only · convert · send · pay</small></span><span class="arr" data-l="final invoice"></span><span class="node">Warehouse IN / OUT document (section 7)</span></div>
+        <div class="t"><span class="lbl">no</span><span class="node bad">qty-exceeds-remaining</span></div>
+        <div class="t"><span class="lbl">cancel</span><span class="node bad">CANCELLED<small>only if it has no live successor — chains cancel leaf first</small></span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>Pricing an item on a provisional / final document</h2>
+  <div class="flow center">
+    <span class="node">Copied from contract line<small>LME %, fixed?, fixed price, premium — read-only</small></span><span class="arr"></span>
+    <span class="node dec">LME fixed?</span><span class="arr" data-l="no"></span>
+    <span class="node">Enter LME price + date<small>can apply to all lines</small></span><span class="arr"></span>
+    <span class="node">Discount %</span><span class="arr"></span>
+    <span class="node ok">Line amount in document currency</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Numbers</b> are automatic per type and year (e.g. <code>PO-2026-0001</code>), editable while DRAFT.</li>
+        <li><b>Currency</b> per document with its exchange rate (1 for USD); totals, discount and weight are stored on the header and recomputed on every item change.</li>
+        <li><b>Convert</b> creates a new DRAFT of the target type dated today, linked back with a reference. Orders never carry an LME price; PP → PI carries price, date and discount.</li>
+      </ul>
+      <ul>
+        <li><b>Remaining per contract line</b> = quantity − Σ chain-leaf confirmed documents of that side, so a PO turned into a PI is counted once.</li>
+        <li><b>Chain-stable line id</b> survives conversion; payments, claims, charges and warehouse documents all point at it, so they still match after PP → PI.</li>
+        <li><b>Detail page:</b> reference and "converted to" links, payments recorded anywhere in the chain, print view, "send" marks a sent time.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Trade documents</span><span>Page 6 / 13</span></div>
+</section>
+
+<!-- ============================================================ 7 CONTAINERS + WAREHOUSE -->
+<section class="page">
+  <div class="head"><h1>7 · Containers and warehouse</h1><span class="num">the physical side</span></div>
+  <p class="lead">A container is pure logistics — it carries goods lines and dates, never money. Warehouse stock moves only when a final invoice is confirmed.</p>
+
+  <h2>Container</h2>
+  <div class="flow center">
+    <span class="node start">Containers → New</span><span class="arr"></span>
+    <span class="node">Reference<small>e.g. MSNU8018095</small></span><span class="arr"></span>
+    <span class="node">Pick contract goods lines + MT carried<small>one container may carry several lines</small></span><span class="arr"></span>
+    <span class="node">Load date, arrival date<small>B/L no., booking no., seal no., weights</small></span><span class="arr"></span>
+    <span class="node ok">Saved · contract line "shipped MT" updates</span>
+  </div>
+  <div class="flow center">
+    <span class="node">Later: an invoice line can point at the container it shipped in</span>
+    <span class="arr"></span><span class="node grey">Status shown from linked invoices: OPEN · PAID · OVERDUE</span>
+  </div>
+
+  <h2>Stock movement — triggered by confirming a final invoice</h2>
+  <div class="lanes" style="--n:2">
+    <div class="lane"><h3>Purchase invoice (PI) confirm</h3><div class="col">
+      <span class="node">Modal: choose target warehouse</span><span class="darr"></span>
+      <span class="node ok">GRN-2026-0001<small>IN document, CONFIRMED, one line per invoice item</small></span><span class="darr"></span>
+      <span class="node data">Stock += quantity</span>
+    </div></div>
+    <div class="lane"><h3>Sale invoice (SI) confirm</h3><div class="col">
+      <span class="node">Modal: choose source warehouse</span><span class="darr"></span>
+      <span class="node dec">Per product: qty ≤ stock in that warehouse?</span><span class="darr" data-l="yes"></span>
+      <span class="node ok">GDN-2026-0001<small>OUT document, CONFIRMED</small></span><span class="darr"></span>
+      <span class="node data">Stock −= quantity</span>
+    </div></div>
+  </div>
+  <div class="flow center"><span class="node bad">Shortfall → "insufficient stock" with product + available; nothing changes</span></div>
+
+  <h2>Stock rule</h2>
+  <div class="formula">stock(warehouse, product) = Σ IN − Σ OUT   over CONFIRMED warehouse documents
+product key = name trimmed + lower-cased, so "Copper Cathode" and "copper cathode" are one bucket</div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Warehouse page</b> lists receipts (GRN) and issues (GDN) with their invoice link, warehouse, date and lines; stock per warehouse and product.</li>
+        <li><b>Warehouses</b> are master data (name, code, location, active). With zero active warehouses the confirm modal explains and blocks.</li>
+      </ul>
+      <ul>
+        <li><b>Draft sale invoices</b> show a live "available MT" column per line, coloured when the quantity exceeds stock — the real check is still at confirm.</li>
+        <li><b>Documents dedupe</b> against the chain-stable invoice-line id, so converting PP → PI never doubles a movement.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Containers and warehouse</span><span>Page 7 / 13</span></div>
+</section>
+
+<!-- ============================================================ 8 PAYMENTS -->
+<section class="page">
+  <div class="head"><h1>8 · Payments and cheques</h1><span class="num">settling money</span></div>
+  <p class="lead">A payment has a header, lines and allocations. Only CONFIRMED payments count toward balances. A cheque is a shared record that several payment lines may point at.</p>
+
+  <h2>Recording a payment</h2>
+  <div class="flow center">
+    <span class="node start">Payments → New</span><span class="arr"></span>
+    <span class="node">Header: person, date, direction IN / OUT<small>currency, control total, fx rate</small></span><span class="arr"></span>
+    <span class="node dec">Type?</span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">type</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">INVOICE</span><span class="node">Lines, each on one document</span><span class="arr"></span><span class="node">Allocations to invoice items<small>auto-filled first item down</small></span><span class="arr"></span><span class="node data">Settles those documents</span></div>
+        <div class="t"><span class="lbl">GENERAL</span><span class="node">Lines with no document</span><span class="arr"></span><span class="node data">On-account balance for that person</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+  <div class="flow center">
+    <span class="node">Per line: amount, currency, fx, method</span><span class="arr"></span>
+    <span class="node dec">Method?</span>
+    <span class="arr" data-l="TT"></span><span class="node">Company bank account required</span>
+    <span class="arr" data-l="Cheque"></span><span class="node">Cheque required (new or existing)</span>
+    <span class="arr" data-l="Cash · Offset · Credit note"></span><span class="node grey">no extra link</span>
+  </div>
+
+  <h2>Payment status</h2>
+  <div class="flow center">
+    <span class="node">DRAFT<small>being built up · not counted</small></span><span class="arr" data-l="confirm"></span>
+    <span class="node ok">CONFIRMED<small>counts in balances, KPIs, aging</small></span><span class="arr" data-l="reopen"></span>
+    <span class="node">DRAFT</span>
+  </div>
+  <div class="flow center"><span class="node grey">Header USD amount = Σ line USD amounts (server-derived); the header's control total is checked against the lines</span></div>
+
+  <h2>Cheque life-cycle</h2>
+  <div class="flow center">
+    <span class="node start">Cheque<small>NORMAL or SECURITY · number, bank name, due date, amount, owner</small></span><span class="arr"></span>
+    <span class="node">PENDING</span><span class="arr"></span>
+    <span class="node ok">PAID<small>needs the company account it was banked into</small></span>
+    <span class="node bad">RETURNED</span><span class="node grey">EXPIRED</span><span class="node">CHANGED<small>replaced by another</small></span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Any status may follow any other</b> for a cheque — it describes the real world, which can be corrected. What is guarded is the money: entering PAID demands a live account; leaving PAID drops it.</li>
+        <li><b>Cheque numbers are unique per bank</b>, not globally — two banks may issue the same number.</li>
+      </ul>
+      <ul>
+        <li><b>Chain-aware:</b> payments recorded on a provisional invoice still show on the final invoice it became — no double-pay blind spot.</li>
+        <li><b>Methods:</b> TT, Cash, Cheque, Offset, Credit Note.</li>
+        <li><b>Legacy rows</b> without a status are treated as CONFIRMED, never as drafts — otherwise real money would vanish from balances.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Payments and cheques</span><span>Page 8 / 13</span></div>
+</section>
+
+<!-- ============================================================ 9 TRANSFERS + FX -->
+<section class="page">
+  <div class="head"><h1>9 · Money transfers and exchange gain / loss</h1><span class="num">company accounts</span></div>
+  <p class="lead">Two separate ideas on purpose: a transfer moves money between the company's own accounts; a gain or loss records what a currency movement cost or earned.</p>
+
+  <h2>Money transfer</h2>
+  <div class="flow center">
+    <span class="node start">Transfers → New</span><span class="arr"></span>
+    <span class="node">From account → To account<small>bank or cash safe, from Base info</small></span><span class="arr"></span>
+    <span class="node">From amount, currency<small>rate → to amount</small></span><span class="arr"></span>
+    <span class="node dec">Same currency?<small>yes → rate = 1</small></span><span class="arr"></span>
+    <span class="node data">Base amount in USD<small>server-derived</small></span>
+  </div>
+  <div class="flow center">
+    <span class="node">Optional: allocate parts of it to invoices / lines<small>may be partly or fully unallocated</small></span>
+  </div>
+  <div class="flow center">
+    <span class="node">DRAFT</span><span class="arr" data-l="confirm"></span><span class="node ok">CONFIRMED</span><span class="arr" data-l="cancel"></span><span class="node bad">CANCELLED</span>
+    <span class="node grey" style="margin-left:6mm">Number TR-0001, TR-0002 …</span>
+  </div>
+  <div class="formula">to amount = from amount × exchange rate      (rate = how many "to" units one "from" unit buys)</div>
+
+  <h2>Exchange gain / loss</h2>
+  <div class="flow center">
+    <span class="node start">Exchange → New</span><span class="arr"></span>
+    <span class="node">Date, signed USD amount, notes</span><span class="arr"></span>
+    <span class="node dec">Sign of amount</span>
+    <span class="arr" data-l="positive"></span><span class="node ok">GAIN</span>
+    <span class="arr" data-l="negative"></span><span class="node bad">LOSS</span>
+    <span class="arr"></span><span class="node data">EGL-0001 …</span>
+  </div>
+  <div class="flow center">
+    <span class="node grey">Deliberately not tied to an account, a rate or a balance — the desk writes the figure down directly. Type is derived from the sign, never chosen.</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Financial accounts</b> are one entity with a type: BANK (account number, IBAN, SWIFT, address) or CASH_SAFE. Currency is fixed after creation.</li>
+        <li><b>Transfers appear</b> on the "Accounts" report tab as movements of each company account.</li>
+      </ul>
+      <ul>
+        <li><b>History:</b> an earlier revaluation engine (book rates, previews, proportional allocation) was replaced by the simple signed entry, because it answered a question the desk was not asking.</li>
+        <li><b>Gains and losses</b> flow into the person-independent part of the finance reports.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Money transfers and exchange gain / loss</span><span>Page 9 / 13</span></div>
+</section>
+
+<!-- ============================================================ 10 CHARGES + CLAIMS -->
+<section class="page">
+  <div class="head"><h1>10 · Expenses, revenues and claims</h1><span class="num">costs, income and disputes</span></div>
+  <p class="lead">Expenses and revenues are the same shape ("charge documents") with a direction. Claims are filed against a confirmed invoice for quantity or quality problems.</p>
+
+  <h2>Charge document (expense or revenue)</h2>
+  <div class="flow center">
+    <span class="node start">Expenses / Revenues → New</span><span class="arr"></span>
+    <span class="node">Direction fixed by the page<small>EXPENSE or REVENUE</small></span><span class="arr"></span>
+    <span class="node dec">Kind?</span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node dec">kind</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">INVOICE</span><span class="node">Booked on one document (fixed)</span><span class="arr"></span><span class="node">Lines → allocations per invoice item<small>line amount = Σ allocations</small></span><span class="arr"></span><span class="node data">Cost per MT on those goods</span></div>
+        <div class="t"><span class="lbl">GENERAL</span><span class="node">Lines with no document<small>rent, salaries, bank fees …</small></span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+  <div class="flow center">
+    <span class="node">Per line: category<small>must match direction + kind</small></span><span class="node">Person<small>who the money went to / came from</small></span>
+    <span class="node">Amount, currency, fx</span><span class="node">Cost centre<small>optional</small></span>
+    <span class="arr"></span><span class="node data">Total USD (server-derived)</span>
+  </div>
+  <div class="flow center"><span class="node ok">ACTIVE</span><span class="arr" data-l="cancel"></span><span class="node bad">CANCELLED (excluded everywhere)</span></div>
+
+  <h2>Claim</h2>
+  <div class="flow center">
+    <span class="node start">Claims → New</span><span class="arr"></span>
+    <span class="node">Pick a confirmed invoice<small>fixed afterwards</small></span><span class="arr"></span>
+    <span class="node data">Side = invoice side<small>SALE claim on a sale invoice · PURCHASE on a purchase</small></span><span class="arr"></span>
+    <span class="node dec">Type: QUANTITY or QUALITY</span><span class="arr"></span>
+    <span class="node">Items: amount per invoice line<small>product + MT snapshot</small></span><span class="arr"></span>
+    <span class="node ok">Claim total in currency + USD</span>
+  </div>
+  <div class="flow center">
+    <span class="node grey">Party is taken from the invoice. A claim reduces what that party owes (sale) or what we owe (purchase) in the ledger.</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Categories</b> (Base info) carry a direction and a scope; a code is unique within a direction.</li>
+        <li><b>Person on a line</b> is required for new lines; older lines without one render "—" and must pick a person when next edited.</li>
+      </ul>
+      <ul>
+        <li><b>Expense report</b> tab groups charges by category, cost centre and person for a date range.</li>
+        <li><b>Chain-stable ids</b> mean a charge booked on a provisional invoice keeps matching its lines after conversion to the final invoice.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Expenses, revenues and claims</span><span>Page 10 / 13</span></div>
+</section>
+
+<!-- ============================================================ 11 BASE INFO -->
+<section class="page">
+  <div class="head"><h1>11 · Base info — master data</h1><span class="num">the lists everything else picks from</span></div>
+  <p class="lead">Master data is entered once and referenced everywhere. Codes are upper-cased, unique and fixed after creation; records are deactivated rather than deleted.</p>
+
+  <div class="lanes" style="--n:2">
+    <div class="lane"><h3>Goods</h3><div class="col">
+      <span class="node">Name, code, metal type<small>COPPER · ALUMINIUM · ZINC · LEAD · NICKEL · TIN · BRASS · STEEL · OTHER</small></span><span class="darr"></span>
+      <span class="node">Form<small>CATHODE · INGOT · BILLET · SCRAP · WIRE ROD · GRANULES · POWDER</small></span><span class="darr"></span>
+      <span class="node">Unit MT · HS code · active</span><span class="darr"></span>
+      <span class="node data">Feeds the product autocomplete on contract lines</span>
+    </div></div>
+    <div class="lane"><h3>Financial accounts</h3><div class="col">
+      <span class="node dec">Type: BANK or CASH SAFE</span><span class="darr"></span>
+      <span class="node">Name, currency (fixed), active</span><span class="darr"></span>
+      <span class="node">Bank only: account no., IBAN, SWIFT, address</span><span class="darr"></span>
+      <span class="node data">Used by TT payments, PAID cheques, transfers</span>
+    </div></div>
+    <div class="lane"><h3>Cost centres</h3><div class="col">
+      <span class="node">Name, code, description, active</span><span class="darr"></span>
+      <span class="node data">Optional tag on every charge line</span>
+    </div></div>
+    <div class="lane"><h3>Charge categories</h3><div class="col">
+      <span class="node">Name, code, description</span><span class="darr"></span>
+      <span class="node dec">Direction EXPENSE / REVENUE · Scope INVOICE / GENERAL<small>both fixed</small></span><span class="darr"></span>
+      <span class="node data">A line may only use a category of its own direction and kind</span>
+    </div></div>
+  </div>
+
+  <h2>Also master data, on their own pages</h2>
+  <div class="flow center">
+    <span class="node">Persons<small>section 4</small></span><span class="node">Partners<small>section 4</small></span><span class="node">Warehouses<small>section 7 — seeded "Main Warehouse", Jebel Ali</small></span><span class="node">Users<small>section 13</small></span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Goods hold only facts about the material.</b> LME %, premium, incoterm and quantity are terms of a deal and live on the contract line — the same good sold twice can carry two premiums.</li>
+        <li><b>Product name is a reference, not a key:</b> the goods list keeps spelling consistent so reports do not split one product into two rows.</li>
+      </ul>
+      <ul>
+        <li><b>One account entity</b> for bank and cash safe, so transfers and payments reference a single id space; the UI still shows two tabs.</li>
+        <li><b>Unit is MT only.</b> Every quantity in the app is metric tons; adding a unit would touch the pricing maths and every quantity field.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Base info</span><span>Page 11 / 13</span></div>
+</section>
+
+<!-- ============================================================ 12 DASHBOARDS + REPORTS -->
+<section class="page">
+  <div class="head"><h1>12 · Dashboards, portal and reports</h1><span class="num">reading the numbers</span></div>
+  <p class="lead">All figures are derived in the browser from the same dataset (section 3), so every screen agrees with every other screen.</p>
+
+  <h2>Where each figure comes from</h2>
+  <div class="flow center">
+    <span class="node data">Confirmed sale invoices</span><span class="node data">Confirmed payments</span><span class="node data">Claims · charges</span><span class="node data">Payment terms</span>
+    <span class="arr"></span><span class="node wide">Derived reads<small>api.ts</small></span>
+  </div>
+  <div class="flow center">
+    <div class="branch">
+      <span class="node">Derived</span>
+      <div class="targets">
+        <div class="t"><span class="lbl">Dashboard</span><span class="node">KPIs: outstanding, overdue, collected, invoiced, collection rate, active contracts</span><span class="node">Cashflow 12 m · status donut · top customers · product mix · aging · recent invoices</span></div>
+        <div class="t"><span class="lbl">Executive</span><span class="node">CEO view: the same figures at company level, no operational tables</span></div>
+        <div class="t"><span class="lbl">Portal</span><span class="node">One customer's own contracts, invoices, payments and balance — read-only</span></div>
+      </div>
+      <span></span>
+    </div>
+  </div>
+
+  <h2>Reports page — five tabs, one shared date range</h2>
+  <div class="flow center">
+    <span class="node start">Reports</span><span class="arr"></span>
+    <span class="node">Pick date range<small>kept when switching tabs</small></span><span class="arr"></span>
+    <span class="node dec">Tab</span>
+  </div>
+  <table>
+    <tr><th>Tab</th><th>What it answers</th><th class="c">Excel</th></tr>
+    <tr><td>Overview</td><td>Charts: cashflow, volume by product, value by customer, status, incoterm mix, aging</td><td class="c">–</td></tr>
+    <tr><td>Accounts</td><td>Movements of each company bank / cash-safe account (payments in, out, transfers)</td><td class="c yes">✓</td></tr>
+    <tr><td>Persons</td><td>One person's ledger: invoices, payments, claims, charges, running balance</td><td class="c yes">✓</td></tr>
+    <tr><td>Expenses</td><td>Charges by category, cost centre and person</td><td class="c yes">✓</td></tr>
+    <tr><td>Trade</td><td>Trade detail per document: goods, MT, prices, discount, totals, linked payments</td><td class="c yes">✓</td></tr>
+  </table>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>"Today"</b> is the live clock: overdue badges, aging buckets and rolling 12-month windows are computed against the real date.</li>
+        <li><b>Overdue</b> = confirmed sale invoice older than the person's payment terms and still unpaid.</li>
+      </ul>
+      <ul>
+        <li><b>Excel export</b> writes a real <code>.xlsx</code> of the current tab and range.</li>
+        <li><b>Numbers</b> always render in Latin digits in all three languages, for finance clarity; labels and layout localise fully.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Dashboards, portal and reports</span><span>Page 12 / 13</span></div>
+</section>
+
+<!-- ============================================================ 13 SETTINGS + DEPLOY -->
+<section class="page">
+  <div class="head"><h1>13 · Settings, users and deployment</h1><span class="num">running the system</span></div>
+
+  <h2>Settings</h2>
+  <div class="flow center">
+    <span class="node">Theme light / dark</span><span class="node">Language en · ar · fa<small>direction follows</small></span><span class="node">Base currency + default FX rates</span><span class="node">Company profile</span>
+    <span class="node bad">Danger zone<small>Load sample data · Reset — dev only</small></span>
+  </div>
+
+  <h2>Users (Manager / CEO)</h2>
+  <div class="flow center">
+    <span class="node start">Users → New</span><span class="arr"></span>
+    <span class="node">Email, name, role<small>CEO · Manager · Staff · Customer</small></span><span class="arr"></span>
+    <span class="node">Set / reset password<small>never shown again</small></span><span class="arr"></span>
+    <span class="node ok">Active · last login recorded</span><span class="arr" data-l="deactivate"></span><span class="node grey">Cannot sign in</span>
+  </div>
+
+  <h2>Release — built on a PC, shipped as images</h2>
+  <div class="flow center">
+    <span class="node start">npm run build<small>both front ends</small></span><span class="arr"></span>
+    <span class="node">docker build × 4<small>web · land · api · migrator</small></span><span class="arr"></span>
+    <span class="node">docker save → .tar.gz<small>only what changed</small></span><span class="arr" data-l="scp"></span>
+    <span class="node sys">Server: docker load</span><span class="arr"></span>
+    <span class="node">docker compose up -d</span>
+  </div>
+  <div class="flow center">
+    <span class="node">migrator runs first<small>applies schema changes, seeds missing accounts, exits</small></span><span class="arr"></span>
+    <span class="node ok">api starts</span>
+    <span class="node">migrator2</span><span class="arr"></span><span class="node ok">api2</span>
+    <span class="node grey">Both companies always run the same image tag</span>
+  </div>
+
+  <h2>Nightly safety net</h2>
+  <div class="flow center">
+    <span class="node start">02:15 UTC cron</span><span class="arr"></span>
+    <span class="node">pg_dump finora + finora2<small>written to .part, renamed on success</small></span><span class="arr"></span>
+    <span class="node dec">Read back with pg_restore --list</span><span class="arr" data-l="ok"></span>
+    <span class="node ok">Kept 30 days in /data/backups/postgres</span>
+    <span class="arr" data-l="bad"></span><span class="node bad">FAIL line in backup.log</span>
+  </div>
+
+  <div class="details">
+    <h3>Details</h3>
+    <div class="two">
+      <ul>
+        <li><b>Secrets stay on the server:</b> the database password in <code>.env</code>, the seeded accounts' passwords in <code>docker-compose.override.yml</code>, both mode 600, never in the repository.</li>
+        <li><b>Production switches off</b> the demo passwords, the login-page account list, and the whole-dataset PUT — production starts empty and is filled by hand.</li>
+      </ul>
+      <ul>
+        <li><b>Develop page</b> (Manager) frames two plain HTML pages: build status and documentation — printable on their own.</li>
+        <li><b>Backups protect</b> against a bad delete or migration, not against losing the machine: an off-server copy is the missing half.</li>
+        <li><b>Rollback of a release</b> is loading the previous image and <code>up -d</code> again.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Finora · Settings, users and deployment</span><span>Page 13 / 13</span></div>
+</section>
+
+</body>
+</html>
