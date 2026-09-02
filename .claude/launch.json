@@ -11,7 +11,7 @@
     {
       "name": "land",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@finora/land-web"],
+      "runtimeArgs": ["run", "dev:land"],
       "port": 3032,
       "autoPort": false
     }
