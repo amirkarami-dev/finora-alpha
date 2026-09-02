@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Currency } from '@/types';
-import { APP_NAME, DEFAULT_FX_AED_PER_USD, DEFAULT_FX_IQD_PER_USD, defaultFxFor } from '@/config/constants';
+import { COMPANY, DEFAULT_FX_AED_PER_USD, DEFAULT_FX_IQD_PER_USD, defaultFxFor } from '@/config/constants';
 
 interface SettingsState {
   baseCurrency: Currency;
@@ -23,7 +23,7 @@ export const useSettingsStore = create<SettingsState>()(
       baseCurrency: 'USD',
       fxRate: DEFAULT_FX_AED_PER_USD,
       fxRateIqd: DEFAULT_FX_IQD_PER_USD,
-      companyName: `${APP_NAME} Metals DMCC`,
+      companyName: COMPANY.legalName,
       setBaseCurrency: (baseCurrency) => set({ baseCurrency }),
       setFxRate: (fxRate) => set({ fxRate }),
       setFxRateIqd: (fxRateIqd) => set({ fxRateIqd }),
