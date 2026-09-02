@@ -1,0 +1,66 @@
+Expense Management
+
+در زمان ایجاد هزینه، ابتدا نوع هزینه مشخص می‌شود.
+
+Expense Types
+Invoice Expense
+هزینه‌های مرتبط با یک فاکتور خرید یا فروش
+مانند:
+Freight (حمل)
+Customs (گمرک)
+Shipping (کشتیرانی)
+Loading & Unloading (بارگیری و تخلیه)
+Insurance
+Packaging
+کاربر ابتدا فاکتور را انتخاب می‌کند، سپس هزینه به آن فاکتور متصل می‌شود.
+General Expense
+هزینه‌های عمومی شرکت
+مانند:
+Salary
+Office Expenses
+Rent
+Electricity
+Internet
+Fuel
+Maintenance
+Claim
+ثبت خسارت یا مطالبه
+Claim Types
+
+Claim دارای دو نوع است:
+
+Supplier Claim
+
+مطالبه یا خسارت مربوط به تأمین‌کننده.
+
+Workflow:
+
+Select Supplier
+Display related Purchase Invoices
+Select Invoice
+Register Claim Amount
+Customer Claim
+
+مطالبه یا خسارت مربوط به مشتری.
+
+Workflow:
+
+Select Customer
+Display related Sales Invoices
+Select Invoice
+Register Claim Amount
+Create Expense
+
+در فرم ایجاد هزینه، حداقل فیلدهای زیر وجود داشته باشد:
+
+Title *
+Expense Type
+Invoice Expense
+General Expense
+Claim
+Amount
+Date
+Cost Center
+Description
+
+در صورتی که نوع هزینه Invoice Expense یا Claim باشد، فیلدهای انتخاب فاکتور نیز نمایش داده شوند.
