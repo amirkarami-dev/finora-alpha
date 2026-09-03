@@ -34,6 +34,11 @@ public sealed class ErrorCodeContractTests
         "partner-not-found",
         "warehouse-not-found",
 
+        // Codes are assigned by the server now, so the browser never raises this itself. It can
+        // still come back when two people save in the same second and the retry also collides —
+        // the modals show their generic failure message for it, which is honest for a race.
+        "duplicate-code",
+
         // User administration. These live on the server because `api.ts` never had accounts to
         // administer — the mock app had four hardcoded logins. Every one of them is reachable
         // from a form a person is filling in, so each has a translation in all three locale

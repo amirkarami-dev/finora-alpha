@@ -40,88 +40,94 @@ public sealed class MasterDataTests(ApiFixture fixture) : IAsyncLifetime
     /* ------------------------------- Id minting ------------------------------- */
 
     [Fact]
-    public async Task A_customers_id_is_derived_from_its_code()
+    public async Task Customers_are_numbered_from_one_and_the_id_follows_the_code()
     {
-        var created = await _service.CreateCustomerAsync(Customer("Alco Metal Trading", "am"));
+        var first = await _service.CreateCustomerAsync(Customer("Alco Metal Trading"));
+        var second = await _service.CreateCustomerAsync(Customer("Million Gen Tr"));
 
-        // Lower-cased in the id, upper-cased in the field — the shape the sample data ships and
-        // every contract number embeds.
-        Assert.Equal("cust-am", created.Entity.Id);
-        Assert.Equal("AM", created.Entity.Code);
+        Assert.Equal("1", first.Entity.Code);
+        Assert.Equal("cust-1", first.Entity.Id);
+        Assert.Equal("2", second.Entity.Code);
+        Assert.Equal("cust-2", second.Entity.Id);
     }
 
     [Fact]
-    public async Task Sequential_ids_continue_past_the_highest_already_stored()
+    public async Task Partners_warehouses_and_cost_centres_count_separately()
     {
-        await _service.CreateCostCentreAsync(new CostCentreInput("Logistics", "LOG", null));
-        var second = await _service.CreateCostCentreAsync(new CostCentreInput("Admin", "ADM", null));
+        await _service.CreatePartnerAsync(new PartnerInput("Crescent Capital"));
+        var partner = await _service.CreatePartnerAsync(new PartnerInput("Gulf Metals JV"));
+        var warehouse = await _service.CreateWarehouseAsync(new WarehouseInput("Main Warehouse", "Jebel Ali"));
+        await _service.CreateCostCentreAsync(new CostCentreInput("Logistics", null));
+        var centre = await _service.CreateCostCentreAsync(new CostCentreInput("Admin", null));
 
-        Assert.Equal("cc-0002", second.Entity.Id);
+        Assert.Equal("2", partner.Entity.Code);
+        Assert.Equal("ptnr-2", partner.Entity.Id);
+        Assert.Equal("1", warehouse.Entity.Code);
+        Assert.Equal("wh-1", warehouse.Entity.Id);
+        Assert.Equal("2", centre.Entity.Code);
+        Assert.Equal("cc-0002", centre.Entity.Id);
+    }
+
+    [Fact]
+    public async Task Goods_are_coded_by_metal()
+    {
+        var cathode = await _service.CreateGoodAsync(Good("Copper Cathode"));
+        var ingot = await _service.CreateGoodAsync(Good("Copper Ingot"));
+        var aluminium = await _service.CreateGoodAsync(Good("Aluminium Ingot", MetalType.ALUMINIUM));
+
+        Assert.Equal("copper-001", cathode.Entity.Code);
+        Assert.Equal("copper-002", ingot.Entity.Code);
+        Assert.Equal("aluminium-001", aluminium.Entity.Code);
+    }
+
+    [Fact]
+    public async Task A_goods_metal_type_cannot_be_changed_after_creation()
+    {
+        var created = await _service.CreateGoodAsync(Good("Copper Cathode"));
+
+        var edited = await _service.UpdateGoodAsync(
+            created.Entity.Id, Good("Copper Cathode 99.9", MetalType.ALUMINIUM));
+
+        Assert.Equal(MetalType.COPPER, edited.Entity.MetalType);
+        Assert.Equal("copper-001", edited.Entity.Code);
+        Assert.Equal("Copper Cathode 99.9", edited.Entity.Name);
+    }
+
+    [Fact]
+    public async Task A_good_still_needs_a_name()
+    {
+        var error = await Assert.ThrowsAsync<DomainException>(() => _service.CreateGoodAsync(Good("  ")));
+        Assert.Equal("name-required", error.Code);
+    }
+
+    [Fact]
+    public async Task Expense_and_revenue_categories_count_separately()
+    {
+        var freight = await _service.CreateChargeCategoryAsync(
+            new ChargeCategoryInput("Freight", ChargeDirection.EXPENSE, ChargeScope.INVOICE, null));
+        var customs = await _service.CreateChargeCategoryAsync(
+            new ChargeCategoryInput("Customs", ChargeDirection.EXPENSE, ChargeScope.INVOICE, null));
+        var commission = await _service.CreateChargeCategoryAsync(
+            new ChargeCategoryInput("Commission", ChargeDirection.REVENUE, ChargeScope.GENERAL, null));
+
+        Assert.Equal("1", freight.Entity.Code);
+        Assert.Equal("2", customs.Entity.Code);
+        Assert.Equal("1", commission.Entity.Code);
     }
 
     /* -------------------------------- Guards ---------------------------------- */
 
     [Fact]
-    public async Task A_repeated_customer_code_is_refused_with_duplicate_code()
-    {
-        await _service.CreateCustomerAsync(Customer("Alco Metal Trading", "AM"));
-
-        var error = await Assert.ThrowsAsync<DomainException>(
-            () => _service.CreateCustomerAsync(Customer("Another Company", "am")));
-
-        // Case-folded: "am" and "AM" mint the same id, so they are the same code.
-        Assert.Equal("duplicate-code", error.Code);
-    }
-
-    [Fact]
     public async Task A_good_repeating_a_name_in_different_case_is_refused()
     {
-        await _service.CreateGoodAsync(Good("Copper Ingots", "CU-ING"));
+        await _service.CreateGoodAsync(Good("Copper Ingots"));
 
         var error = await Assert.ThrowsAsync<DomainException>(
-            () => _service.CreateGoodAsync(Good("COPPER INGOTS", "CU-ING-2")));
+            () => _service.CreateGoodAsync(Good("COPPER INGOTS")));
 
         // Names, not just codes: a contract line matches a good by NAME, so two spellings of one
         // product split it into two rows in every report.
         Assert.Equal("duplicate-name", error.Code);
-    }
-
-    [Theory]
-    [InlineData("", "CODE", "name-required")]
-    [InlineData("Name", "", "code-required")]
-    public async Task A_good_needs_both_a_name_and_a_code(string name, string code, string expected)
-    {
-        var error = await Assert.ThrowsAsync<DomainException>(
-            () => _service.CreateGoodAsync(Good(name, code)));
-
-        Assert.Equal(expected, error.Code);
-    }
-
-    [Fact]
-    public async Task A_charge_category_code_may_repeat_across_directions()
-    {
-        await _service.CreateChargeCategoryAsync(
-            new ChargeCategoryInput("Freight", "FRT", ChargeDirection.EXPENSE, ChargeScope.INVOICE, null));
-
-        var revenue = await _service.CreateChargeCategoryAsync(
-            new ChargeCategoryInput("Freight recharged", "FRT", ChargeDirection.REVENUE, ChargeScope.INVOICE, null));
-
-        // EXPENSE and REVENUE are maintained as independent lists, so each may hold its own FRT.
-        Assert.Equal("FRT", revenue.Entity.Code);
-        Assert.Equal(2, revenue.All.Count);
-    }
-
-    [Fact]
-    public async Task A_charge_category_code_may_not_repeat_within_a_direction()
-    {
-        await _service.CreateChargeCategoryAsync(
-            new ChargeCategoryInput("Freight", "FRT", ChargeDirection.EXPENSE, ChargeScope.INVOICE, null));
-
-        var error = await Assert.ThrowsAsync<DomainException>(
-            () => _service.CreateChargeCategoryAsync(
-                new ChargeCategoryInput("Freight again", "frt", ChargeDirection.EXPENSE, ChargeScope.GENERAL, null)));
-
-        Assert.Equal("duplicate-code", error.Code);
     }
 
     [Theory]
@@ -215,22 +221,22 @@ public sealed class MasterDataTests(ApiFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task Granting_the_portal_account_takes_it_from_whoever_had_it()
     {
-        await _service.CreateCustomerAsync(Customer("Alco Metal Trading", "AM") with { PortalAccount = true });
+        var first = await _service.CreateCustomerAsync(Customer("Alco Metal Trading") with { PortalAccount = true });
 
         var second = await _service.CreateCustomerAsync(
-            Customer("Zurich Metal", "ZM") with { PortalAccount = true });
+            Customer("Zurich Metal") with { PortalAccount = true });
 
         // The whole list comes back precisely so the caller sees this: the row it never named
         // changed too.
-        Assert.True(second.All.Single(c => c.Id == "cust-zm").PortalAccount);
-        Assert.False(second.All.Single(c => c.Id == "cust-am").PortalAccount);
+        Assert.True(second.All.Single(c => c.Id == second.Entity.Id).PortalAccount);
+        Assert.False(second.All.Single(c => c.Id == first.Entity.Id).PortalAccount);
     }
 
     [Fact]
     public async Task Deactivating_a_customer_closes_its_portal_door()
     {
         var created = await _service.CreateCustomerAsync(
-            Customer("Alco Metal Trading", "AM") with { PortalAccount = true });
+            Customer("Alco Metal Trading") with { PortalAccount = true });
 
         var deactivated = await _service.SetCustomerActiveAsync(created.Entity.Id, active: false);
 
@@ -243,11 +249,11 @@ public sealed class MasterDataTests(ApiFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task An_edited_row_keeps_its_place_in_the_list()
     {
-        await _service.CreateGoodAsync(Good("Copper Ingots", "A"));
-        await _service.CreateGoodAsync(Good("Lead Ingots", "B"));
-        await _service.CreateGoodAsync(Good("Zinc Ingots", "C"));
+        await _service.CreateGoodAsync(Good("Copper Ingots"));
+        await _service.CreateGoodAsync(Good("Lead Ingots"));
+        await _service.CreateGoodAsync(Good("Zinc Ingots"));
 
-        var updated = await _service.UpdateGoodAsync("good-0001", Good("Copper Cathodes", "A"));
+        var updated = await _service.UpdateGoodAsync("good-0001", Good("Copper Cathodes"));
 
         // PostgreSQL puts an updated row wherever the new tuple landed, so without an explicit
         // order the edited good would fall to the bottom of the BaseInfo table on save.
@@ -260,14 +266,14 @@ public sealed class MasterDataTests(ApiFixture fixture) : IAsyncLifetime
     public async Task Editing_something_that_is_not_there_is_a_not_found_not_a_rule_violation()
     {
         var error = await Assert.ThrowsAsync<NotFoundException>(
-            () => _service.UpdateWarehouseAsync("wh-nope", new WarehouseInput("X", "X", null)));
+            () => _service.UpdateWarehouseAsync("wh-nope", new WarehouseInput("X", null)));
 
         Assert.Equal("warehouse-not-found", error.Code);
     }
 
-    private static CustomerInput Customer(string name, string code) =>
-        new(name, code, Currency.USD, CustomerType.BUYER, null, null, null, null, 30, 0m, null);
+    private static CustomerInput Customer(string name) =>
+        new(name, Currency.USD, CustomerType.BUYER, null, null, null, null, 30, 0m, null);
 
-    private static GoodInput Good(string name, string code) =>
-        new(name, code, MetalType.COPPER, null, GoodUnit.MT, null, null);
+    private static GoodInput Good(string name, MetalType metal = MetalType.COPPER) =>
+        new(name, metal, null, GoodUnit.MT, null, null);
 }
