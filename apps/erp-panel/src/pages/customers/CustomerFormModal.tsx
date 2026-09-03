@@ -127,13 +127,13 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
               <Input placeholder={t('customers.namePlaceholder')} />
             </Form.Item>
           </Col>
-          <Col xs={24} sm={12}>
-            {isEdit && (
+          {isEdit && (
+            <Col xs={24} sm={12}>
               <Form.Item label={t('customers.code')}>
                 <Input value={customer?.code} disabled />
               </Form.Item>
-            )}
-          </Col>
+            </Col>
+          )}
           <Col xs={24} sm={12}>
             <Form.Item name="customerType" label={t('customers.type')} rules={[{ required: true, message: t('common.required') }]}>
               <Select options={CUSTOMER_TYPES.map((v) => ({ value: v, label: t(`customerTypes.${v}`) }))} />

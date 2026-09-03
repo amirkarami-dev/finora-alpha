@@ -601,8 +601,7 @@
     "namePlaceholder": "مثال: الشحن",
     "descriptionPlaceholder": "ملاحظات اختيارية لهذه الفئة",
     "errors": {
-      "name-required": "الاسم مطلوب",
-      "code-required": "الرمز مطلوب"
+      "name-required": "الاسم مطلوب"
     },
     "created": "تم إنشاء الفئة",
     "updated": "تم تحديث الفئة",
@@ -641,7 +640,7 @@
     "newGeneralDoc": "مستند عام جديد",
     "editDoc": "تعديل المستند",
     "docTitle": "العنوان",
-    "titlePlaceholder": "مثال: الشحن والجمارك للفاتورة PP-2026-0001",
+    "titlePlaceholder": "مثال: الشحن والجمارك للفاتورة 26090002",
     "invoice": "الفاتورة",
     "date": "التاريخ",
     "description": "الوصف",
@@ -1082,7 +1081,7 @@
     "selectInvoice": "اختر فاتورة",
     "changeInvoice": "تغيير الفاتورة",
     "claimTitle": "العنوان",
-    "titlePlaceholder": "مثال: مطالبة جودة للفاتورة PP-2026-0001",
+    "titlePlaceholder": "مثال: مطالبة جودة للفاتورة 26090002",
     "claimType": "نوع المطالبة",
     "date": "التاريخ",
     "invoice": "الفاتورة",
