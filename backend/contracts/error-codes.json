@@ -104,6 +104,7 @@
   "payment-total-mismatch",
   "person-not-found",
   "person-required",
+  "product-required",
   "quantity-below-invoiced",
   "reference-required",
   "role-not-found",

@@ -29,6 +29,7 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
         public const string CostCategoryInvalid = "cost-category-invalid";
         public const string WarehouseNotFound = "warehouse-not-found";
         public const string PersonNotFound = "person-not-found";
+        public const string ProductRequired = "product-required";
         public const string InvalidQuantity = "invalid-quantity";
         public const string InvalidAmount = "invalid-amount";
         public const string InvalidFx = "invalid-fx";
@@ -176,6 +177,8 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
             return doc;
         }
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
         if (doc.Status == ConversionStatus.CONFIRMED)
         {
             var positions = await ledger.PositionsAsync(cancellationToken);
@@ -200,6 +203,7 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
 
         doc.Status = ConversionStatus.CANCELLED;
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return doc;
     }
 
@@ -224,6 +228,14 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
         if (!await db.Warehouses.AnyAsync(w => w.Id == input.WarehouseId && w.Active, cancellationToken))
         {
             throw new DomainException(Codes.WarehouseNotFound);
+        }
+
+        foreach (var product in input.Inputs.Select(i => i.Product).Concat(input.Outputs.Select(o => o.Product)))
+        {
+            if (string.IsNullOrWhiteSpace(product))
+            {
+                throw new DomainException(Codes.ProductRequired);
+            }
         }
 
         foreach (var line in input.Inputs.Select(i => i.QuantityMt).Concat(input.Outputs.Select(o => o.QuantityMt)))
@@ -283,11 +295,12 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
         foreach (var line in input.Costs)
         {
             var fx = line.Currency == Currency.USD ? 1m : line.FxRate!.Value;
+            var amount = Rounding.Money(line.Amount);
             doc.Costs.Add(new ConversionCost
             {
                 Id = $"cnvcost-{nextCost++}", DocumentId = doc.Id, CategoryId = line.CategoryId, PersonId = line.PersonId,
-                Amount = Rounding.Money(line.Amount), Currency = line.Currency, FxRate = fx,
-                AmountUsd = Rounding.Money(line.Amount / fx), Description = Blank(line.Description),
+                Amount = amount, Currency = line.Currency, FxRate = fx,
+                AmountUsd = Rounding.Money(amount / fx), Description = Blank(line.Description),
             });
         }
     }

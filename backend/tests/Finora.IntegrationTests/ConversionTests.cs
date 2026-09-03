@@ -176,6 +176,20 @@ public sealed class ConversionTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task A_line_with_a_blank_product_is_refused()
+    {
+        await ResetAsync();
+        var manager = await AsManagerAsync(fixture);
+        var body = new { warehouseId = "wh-1", date = Date, notes = (string?)null,
+            inputs = new[] { new { product = "   ", quantityMt = 0.5m } },
+            outputs = new[] { new { product = "Stripped copper", quantityMt = 0.5m, sharePercent = (decimal?)null } },
+            costs = Array.Empty<object>() };
+        var response = await manager.PostAsJsonAsync(new Uri("/api/erp/conversions", UriKind.Relative), body);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("product-required", problem.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task An_input_larger_than_the_stock_is_refused_with_the_available_figure()
     {
         await ResetAsync();

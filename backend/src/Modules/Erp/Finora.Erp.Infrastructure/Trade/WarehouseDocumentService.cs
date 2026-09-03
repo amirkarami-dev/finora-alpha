@@ -135,12 +135,12 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
                     throw new DomainException(Codes.InsufficientStock, new Dictionary<string, object?>
                     {
                         ["product"] = invoiceItem.Product,
-                        ["available"] = Rounding.Money(Math.Max(available, 0m)),
+                        ["available"] = Rounding.Quantity(Math.Max(available, 0m)),
                     });
                 }
 
                 // Same running rule, for the same reason.
-                stock[key] = Rounding.Money(available - line.QuantityMt);
+                stock[key] = Rounding.Quantity(available - line.QuantityMt);
             }
 
             decimal unitCost;
@@ -232,7 +232,7 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
                     });
                 }
 
-                stock[key] = Rounding.Money(current - item.QuantityMt);
+                stock[key] = Rounding.Quantity(current - item.QuantityMt);
             }
         }
 

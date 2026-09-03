@@ -127,6 +127,12 @@ public sealed class ErrorCodeContractTests
         // paths (the edit button appears on drafts only), so both get the generic message.
         "conversion-not-found",
         "conversion-not-draft",
+
+        // A conversion input/output line with no product — the form already blocks submitting
+        // a started row that is missing one (mirrors the cost rows' `common.required`), so this
+        // only guards the endpoint against a caller that skips the screen; the generic message
+        // is honest for that.
+        "product-required",
     ];
 
     /// <summary>
