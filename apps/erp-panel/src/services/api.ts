@@ -2184,8 +2184,8 @@ async function setWarehouseActiveLocal(id: string, active: boolean): Promise<War
 }
 
 /* -------------------------- Cost Centre CRUD --------------------------- *
- * Mirrors the Warehouse master exactly (spec §5): code trimmed+uppercased and immutable after
- * create, 'duplicate-code' guard, active/inactive toggle. Inactive centres are excluded from
+ * Mirrors the Warehouse master exactly (spec §5): code is server-assigned (next integer) and
+ * immutable after create, active/inactive toggle. Inactive centres are excluded from
  * pickers but retained on already-saved records that reference them (the picker filters
  * client-side; the id itself is never invalidated here).
  * ------------------------------------------------------------------ */
@@ -2549,9 +2549,9 @@ async function setFinancialAccountActiveLocal(id: string, active: boolean): Prom
 /* ------------------------ Charge Category CRUD -------------------------- *
  * Master data behind BaseInfo's Expense/Revenue category tabs (design spec §4). Mirrors the
  * Cost Centre CRUD immediately above almost exactly — same id/active/persist idioms — with one
- * deliberate difference: `duplicate-code` is scoped WITHIN a direction (spec §2), so the same
- * code may exist once under EXPENSE and once under REVENUE, since the two directions are
- * maintained as fully independent lists.
+ * deliberate difference: the server-assigned code is counted WITHIN a direction (spec §2), so
+ * the same code may exist once under EXPENSE and once under REVENUE, since the two directions
+ * are maintained as fully independent lists.
  * ------------------------------------------------------------------ */
 
 export interface ChargeCategoryInput {
