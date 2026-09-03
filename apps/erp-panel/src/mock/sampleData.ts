@@ -15,6 +15,10 @@ import type {
   Contract,
   ContractStatus,
   ContractType,
+  ConversionCost,
+  ConversionDocument,
+  ConversionInput,
+  ConversionOutput,
   CostCentre,
   Currency,
   Customer,
@@ -569,6 +573,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   ];
   const invoices: Invoice[] = [];
   const inventoryDocs: InventoryDocument[] = [];
+  const conversions: ConversionDocument[] = [];
 
   let invoiceItemCounter = 0;
   function nextInvoiceItemId(): string {
@@ -1414,6 +1419,91 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     });
   }
 
+  // CNV-2026-0001: one CONFIRMED conversion — the GRN's product, strip-and-melted into an ingot
+  // (warehouse spec §2, controller ruling #1). Feeds the same product the GRN received, at the
+  // GRN's own stored unit cost: nothing else has moved that product yet, so the "current average"
+  // a real confirm reads is exactly the GRN's cost.
+  const cnvId = 'cnv-0001';
+  const cnvDocNumber = 'CNV-2026-0001';
+  const cnvDate = rel('2026-05-28').toISOString();
+  const cnvGrn = inventoryDocs.find((d) => d.id === 'idoc-0001')!;
+  const cnvInputItem = cnvGrn.items[0];
+  const cnvOutputProduct = `${cnvInputItem.product} ingot`;
+  const cnvOutputQtyMt = round(cnvInputItem.quantityMt * 0.92, 3);
+
+  const cnvInput: ConversionInput = {
+    id: 'cnvin-1',
+    documentId: cnvId,
+    product: cnvInputItem.product,
+    quantityMt: cnvInputItem.quantityMt,
+    unitCostUsd: cnvInputItem.unitCostUsd,
+    costUsd: cnvInputItem.costUsd,
+  };
+
+  // The workshop cost line: first EXPENSE/GENERAL category, first EMPLOYEE/OTHER customer. The
+  // sample seeds no EMPLOYEE/OTHER customer, so this falls back to the first customer — the same
+  // fallback `makeChargeLine` already uses for every other invoiceless GENERAL line above.
+  const cnvCostCategory = chargeCategories.find((c) => c.direction === 'EXPENSE' && c.scope === 'GENERAL')!;
+  const cnvCostPerson =
+    customers.find((c) => c.customerType === 'EMPLOYEE' || c.customerType === 'OTHER') ?? customers[0];
+  const cnvCostAmountUsd = 800;
+  const cnvCost: ConversionCost = {
+    id: 'cnvcost-1',
+    documentId: cnvId,
+    categoryId: cnvCostCategory.id,
+    personId: cnvCostPerson.id,
+    amount: cnvCostAmountUsd,
+    currency: 'USD',
+    fxRate: 1,
+    amountUsd: cnvCostAmountUsd,
+    description: 'Workshop labour and gas',
+  };
+
+  // Stored costs (spec §2.4 step 5): total to distribute = input cost + added cost. With one
+  // output, `ConversionMath.Distribute` (n = 1) gives it the whole rounded total.
+  const cnvTotalInputCostUsd = cnvInput.costUsd;
+  const cnvTotalAddedCostUsd = round(cnvCost.amountUsd, 2);
+  const cnvOutputCostUsd = round(cnvTotalInputCostUsd + cnvTotalAddedCostUsd, 2);
+  const cnvOutput: ConversionOutput = {
+    id: 'cnvout-1',
+    documentId: cnvId,
+    product: cnvOutputProduct,
+    quantityMt: cnvOutputQtyMt,
+    sharePercent: null,
+    unitCostUsd: round(cnvOutputCostUsd / cnvOutputQtyMt, 4),
+    costUsd: cnvOutputCostUsd,
+  };
+
+  // The linked GENERAL expense document (spec §2.4 step 4) — one line, ACTIVE, booked on the
+  // same person as the conversion's own cost line.
+  pushChargeDoc({
+    direction: 'EXPENSE',
+    kind: 'GENERAL',
+    title: `Conversion ${cnvDocNumber}`,
+    date: cnvDate,
+    description: 'Workshop labour and gas booked from a conversion',
+    lines: [
+      { categoryId: cnvCostCategory.id, amount: cnvCostAmountUsd, currency: 'USD', costCentreId: 'cc-0002', description: 'Strip and melt labour, gas', dayOffset: 0 },
+    ],
+  });
+  const cnvChargeDoc = chargeDocs[chargeDocs.length - 1];
+  cnvChargeDoc.lines[0].personId = cnvCostPerson.id;
+
+  conversions.push({
+    id: cnvId,
+    docNumber: cnvDocNumber,
+    warehouseId: cnvGrn.warehouseId,
+    date: cnvDate,
+    status: 'CONFIRMED',
+    chargeDocId: cnvChargeDoc.id,
+    totalInputCostUsd: cnvTotalInputCostUsd,
+    totalAddedCostUsd: cnvTotalAddedCostUsd,
+    createdAt: cnvDate,
+    inputs: [cnvInput],
+    outputs: [cnvOutput],
+    costs: [cnvCost],
+  });
+
   // A second import build-up, so the invoice-scope categories are not one-line each either.
   if (multiGoodPurchases[1]) {
     pushChargeDoc({
@@ -1875,10 +1965,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     cheques,
     moneyTransfers,
     exchangeGainLosses,
-    // Empty on purpose (Task 6 — the data layer and UI, not the sample dataset): a sample
-    // conversion document is Task 7's ("Sample data, docs, full verification"). This entry only
-    // satisfies `Db`'s now-required `conversions` field so the sample generator typechecks.
-    conversions: [],
+    conversions,
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

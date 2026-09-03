@@ -115,6 +115,7 @@
       <li>Buying: purchase order → provisional → invoice</li>
       <li>Selling: sale order → provisional → invoice</li>
       <li>Record a container (shipment)</li>
+      <li>Convert stock (strip, melt, cut)</li>
       <li>Record a payment</li>
       <li>Cheques</li>
       <li>Move money between your accounts · exchange gain / loss</li>
@@ -148,7 +149,7 @@
   <ol class="steps">
     <li><div class="t">Open <b>https://erp.metal-uae.com</b> in Chrome or Edge.<span class="see">the welcome page with a "Sign in" button.</span></div></li>
     <li><div class="t">Type your <b>email</b> and <b>password</b>. Click <span class="btn">Sign in</span>.<span class="see">your home page. Staff and managers see the Dashboard; the CEO sees the Executive page; a customer sees My Account.</span></div></li>
-    <li><div class="t">Wrong password? The page says <b>"Incorrect email or password"</b>. Try again. If you forgot it, ask a manager to reset it (section 15).</div></li>
+    <li><div class="t">Wrong password? The page says <b>"Incorrect email or password"</b>. Try again. If you forgot it, ask a manager to reset it (section 16).</div></li>
   </ol>
 
   <h2>The left menu</h2>
@@ -178,7 +179,7 @@
       <li>Signing in to one does not sign you in to the other.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Sign in</span><span>Page 1 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Sign in</span><span>Page 1 / 17</span></div>
 </section>
 
 <!-- ============================================================ 2 SETUP -->
@@ -208,7 +209,7 @@
       <li>Currency of a bank or cash safe cannot change after saving.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · First-time setup</span><span>Page 2 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · First-time setup</span><span>Page 2 / 17</span></div>
 </section>
 
 <!-- ============================================================ 3 PERSON -->
@@ -233,7 +234,7 @@
     <li><div class="t"><b>Currency</b> — USD, AED or IQD. This is the default for new forms with this person.</div></li>
     <li><div class="t">For buyers and suppliers: <b>Payment terms (days)</b> — how many days they have to pay. After this, an invoice counts as <b>overdue</b>. <b>Credit limit</b> in USD — the app warns when a buyer goes above it.</div></li>
     <li><div class="t">Contact, email, phone, country — optional.</div></li>
-    <li><div class="t"><b>Customer portal access</b> — tick this only for the ONE customer that will sign in to My Account (section 14).</div></li>
+    <li><div class="t"><b>Customer portal access</b> — tick this only for the ONE customer that will sign in to My Account (section 15).</div></li>
     <li><div class="t">Click <span class="btn">Save</span>.<span class="see">"Person created". The person is in the list with 0 balance.</span></div></li>
   </ol>
 
@@ -244,14 +245,14 @@
 
   <div class="two">
     <div class="box tip"><h3>Good to know</h3><ul>
-      <li>Click a person's row to see their balance, contracts, invoices and payments (section 12).</li>
+      <li>Click a person's row to see their balance, contracts, invoices and payments (section 13).</li>
       <li>To edit, open the person and click <span class="btn">Edit person</span>.</li>
     </ul></div>
     <div class="box warn"><h3>Cannot save?</h3><ul>
       <li>Name is required. The code is given by the system, so nothing else can block the save.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Add a person</span><span>Page 3 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Add a person</span><span>Page 3 / 17</span></div>
 </section>
 
 <!-- ============================================================ 4 CONTRACT -->
@@ -291,7 +292,7 @@
       <li>They are different things. Both start at the full quantity.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Make a contract</span><span>Page 4 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Make a contract</span><span>Page 4 / 17</span></div>
 </section>
 
 <!-- ============================================================ 5 PURCHASE -->
@@ -333,7 +334,7 @@
       <li><b>"Cannot cancel — a converted document already exists"</b> — cancel the newer document first, then this one.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Buying</span><span>Page 5 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Buying</span><span>Page 5 / 17</span></div>
 </section>
 
 <!-- ============================================================ 6 SALE -->
@@ -348,7 +349,7 @@
     <li><div class="t"><span class="btn">Convert</span> → <b>Provisional</b>. Enter <b>LME price</b>, <b>LME date</b>, discount. <span class="btn">Confirm</span>.</div></li>
     <li><div class="t">Optional but useful: on each line click <span class="btn">Assign container</span> and pick the container that carries these goods (section 7). The container number and BL number then print on the invoice.</div></li>
     <li><div class="t"><span class="btn">Convert</span> → <b>Invoice</b>. While it is a DRAFT, the items table shows an <b>"Available"</b> column: how many MT of that product are in stock. Red means not enough.</div></li>
-    <li><div class="t">Click <span class="btn">Confirm</span>. A window asks: <b>which warehouse do the goods leave from?</b> Choose and click OK.<span class="see">"Document confirmed", a new issue <b>GDN-2026-0001</b> in Warehouse › Documents, stock goes down, and the buyer's balance goes up by the invoice total.</span></div></li>
+    <li><div class="t">Click <span class="btn">Confirm</span>. A window asks: <b>which warehouse do the goods leave from?</b> Choose and click OK.<span class="see">"Document confirmed", a new issue <b>GDN-2026-0001</b> in Warehouse › Documents, stock goes down, and the buyer's balance goes up by the invoice total, and the invoice shows its cost of sales and margin.</span></div></li>
     <li><div class="t">Click <span class="btn">Send</span> to mark it sent, <span class="btn">Print</span> to print or save as PDF.</div></li>
   </ol>
 
@@ -371,7 +372,7 @@
       <li><b>"No active warehouse"</b> — create one in Warehouse › Warehouses.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Selling</span><span>Page 6 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Selling</span><span>Page 6 / 17</span></div>
 </section>
 
 <!-- ============================================================ 7 CONTAINER -->
@@ -412,12 +413,43 @@
       <li>A goods line that is already on a document cannot be removed from the container.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Containers</span><span>Page 7 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Containers</span><span>Page 7 / 17</span></div>
 </section>
 
-<!-- ============================================================ 8 PAYMENT -->
+<!-- ============================================================ 8 CONVERSION -->
 <section class="page">
-  <div class="head"><h1>8 · Record a payment</h1><span class="num">money in, money out</span></div>
+  <div class="head"><h1>8 · Convert stock (strip, melt, cut)</h1><span class="num">Warehouse › Conversions</span></div>
+  <div class="goal"><b>Goal:</b> turn one stock item into another, and keep the cost.</div>
+
+  <div class="path"><span class="menu">Warehouse</span><i></i><span>Conversions</span><i></i><span class="btn">New conversion</span><i></i><span>Inputs</span><i></i><span>Outputs</span><i></i><span>Costs</span><i></i><span class="btn">Save</span><i></i><span class="btn">Confirm</span><i></i><span class="end">Stock and cost move</span></div>
+
+  <ol class="steps">
+    <li><div class="t">Open <span class="where">Warehouse › Conversions</span> → <span class="btn">New conversion</span>. Pick the <b>warehouse</b> and the <b>date</b>.</div></li>
+    <li><div class="t">Add the goods you use up: <b>product</b> and <b>MT</b>. This is the <b>Inputs</b> table.</div></li>
+    <li><div class="t">Add the goods you get: <b>product</b> and <b>MT</b>. This is the <b>Outputs</b> table. Leave the <b>cost share</b> empty to split the cost by weight.</div></li>
+    <li><div class="t">Add workshop costs: <b>category</b>, <b>who you paid</b>, <b>amount</b>. They are booked as an expense by themselves — you do not make a separate expense document.</div></li>
+    <li><div class="t">Click <span class="btn">Save</span>.<span class="see">a DRAFT conversion, numbered CNV-2026-0001.</span></div></li>
+    <li><div class="t">A <b>Manager</b> opens it and clicks <span class="btn">Confirm</span>.<span class="see">status CONFIRMED. Stock of the input goes down, stock of the output goes up, and the Inventory tab shows the new cost / MT.</span></div></li>
+  </ol>
+
+  <div class="two">
+    <div class="box tip"><h3>Good to know</h3><ul>
+      <li>The document shows the <b>yield</b> — output MT ÷ input MT.</li>
+      <li>The cost never disappears with the lost weight — it moves onto what comes out.</li>
+      <li>Cancel is blocked once the output was already used on another document.</li>
+    </ul></div>
+    <div class="box stop"><h3>If the app refuses</h3><ul>
+      <li><b>Insufficient stock</b> — an input asks for more MT than is in that warehouse.</li>
+      <li><b>Cost shares must add up to 100</b> — if you set a share on one output, set it on every output, and they must sum to 100.</li>
+      <li><b>Category must be a General expense category</b> — an Invoice-scope category cannot be used here.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Jalil-Jalal user guide · Convert stock</span><span>Page 8 / 17</span></div>
+</section>
+
+<!-- ============================================================ 9 PAYMENT -->
+<section class="page">
+  <div class="head"><h1>9 · Record a payment</h1><span class="num">money in, money out</span></div>
   <div class="goal"><b>Goal:</b> record money you received from a buyer or paid to a supplier, and say which invoices it settles.</div>
 
   <div class="path"><span class="menu">Payments</span><i></i><span class="btn">New invoice payment</span><i></i><span>Header</span><i></i><span class="btn">Add line</span><i></i><span class="btn">Confirm</span><i></i><span class="end">Balance updated</span></div>
@@ -427,7 +459,7 @@
     <tr><th>Tab</th><th>Use it when</th><th>Result</th></tr>
     <tr><td><b>Invoice payments</b></td><td>the money is for one or more specific invoices</td><td>those invoices show as paid (fully or partly)</td></tr>
     <tr><td><b>General payments</b></td><td>money with a person but no invoice — advance, deposit, loan, salary</td><td>sits on the person's account as a balance</td></tr>
-    <tr><td><b>Cheques</b></td><td>see section 9</td><td></td></tr>
+    <tr><td><b>Cheques</b></td><td>see section 10</td><td></td></tr>
   </table>
 
   <h2>Steps — invoice payment</h2>
@@ -455,12 +487,12 @@
       <li>Same steps from the <b>General payments</b> tab, without picking an invoice. Use it for an advance, or money paid to an employee or landlord.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Payments</span><span>Page 8 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Payments</span><span>Page 9 / 17</span></div>
 </section>
 
 <!-- ============================================================ 9 CHEQUES -->
 <section class="page">
-  <div class="head"><h1>9 · Cheques</h1><span class="num">Payments › Cheques</span></div>
+  <div class="head"><h1>10 · Cheques</h1><span class="num">Payments › Cheques</span></div>
   <div class="goal"><b>Goal:</b> keep a list of every cheque you hold or gave, know when each is due, and record when it clears.</div>
 
   <div class="path"><span class="menu">Payments › Cheques</span><i></i><span class="btn">New cheque</span><i></i><span>PENDING</span><i></i><span class="btn">Mark as paid</span><i></i><span class="end">PAID — money in your account</span></div>
@@ -500,12 +532,12 @@
       <li>You can move a cheque from any status to any other, because real life can be corrected. But moving to PAID always needs an account, and moving away from PAID removes it.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Cheques</span><span>Page 9 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Cheques</span><span>Page 10 / 17</span></div>
 </section>
 
 <!-- ============================================================ 10 TRANSFERS + FX -->
 <section class="page">
-  <div class="head"><h1>10 · Transfers · Exchange gain / loss</h1><span class="num">your own accounts</span></div>
+  <div class="head"><h1>11 · Transfers · Exchange gain / loss</h1><span class="num">your own accounts</span></div>
   <div class="goal"><b>Goal:</b> record money moved between your own banks and cash safes, and write down what a currency change cost or earned.</div>
 
   <h2>Move money between your accounts</h2>
@@ -528,19 +560,19 @@
 
   <div class="two">
     <div class="box tip"><h3>Good to know</h3><ul>
-      <li>A transfer is only between YOUR accounts. Money to or from a person is a <b>payment</b> (section 8).</li>
+      <li>A transfer is only between YOUR accounts. Money to or from a person is a <b>payment</b> (section 9).</li>
       <li>A DRAFT transfer can be edited or cancelled; a CONFIRMED one can only be cancelled.</li>
     </ul></div>
     <div class="box warn"><h3>Simple by design</h3><ul>
       <li>The gain / loss record is just a number and a date. It is not tied to an account or a rate. You decide the figure.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Transfers and exchange</span><span>Page 10 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Transfers and exchange</span><span>Page 11 / 17</span></div>
 </section>
 
 <!-- ============================================================ 11 EXPENSES + CLAIMS -->
 <section class="page">
-  <div class="head"><h1>11 · Expenses, revenues and claims</h1><span class="num">costs, extra income, disputes</span></div>
+  <div class="head"><h1>12 · Expenses, revenues and claims</h1><span class="num">costs, extra income, disputes</span></div>
   <div class="goal"><b>Goal:</b> record costs like freight and rent, extra income like commission, and claims about quantity or quality on an invoice.</div>
 
   <h2>Expense or revenue document</h2>
@@ -570,12 +602,12 @@
       <li>A line can only use a category of the same kind: an "Invoice" category on an invoice document, a "General" category on a general document. If the category you need is missing, add it in Base Info.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Expenses and claims</span><span>Page 11 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Expenses and claims</span><span>Page 12 / 17</span></div>
 </section>
 
 <!-- ============================================================ 12 BALANCE -->
 <section class="page">
-  <div class="head"><h1>12 · Check a person's balance</h1><span class="num">who owes what</span></div>
+  <div class="head"><h1>13 · Check a person's balance</h1><span class="num">who owes what</span></div>
   <div class="goal"><b>Goal:</b> answer "how much does this buyer owe us?" or "how much do we owe this supplier?", and see why.</div>
 
   <div class="path"><span class="menu">Persons</span><i></i><span>Click the person</span><i></i><span>Overview</span><i></i><span>Ledger</span><i></i><span class="end">Balance and every movement</span></div>
@@ -615,12 +647,12 @@
       <li>Same numbers at company level — revenue, cash collected, outstanding, collection rate, top customers — without the operational tables.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Balances</span><span>Page 12 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Balances</span><span>Page 13 / 17</span></div>
 </section>
 
 <!-- ============================================================ 13 REPORTS -->
 <section class="page">
-  <div class="head"><h1>13 · Reports and Excel</h1><span class="num">Reports page</span></div>
+  <div class="head"><h1>14 · Reports and Excel</h1><span class="num">Reports page</span></div>
   <div class="goal"><b>Goal:</b> get a report for a date range and take it to Excel.</div>
 
   <div class="path"><span class="menu">Reports</span><i></i><span>Choose date range</span><i></i><span>Choose tab</span><i></i><span class="btn">Export</span><i></i><span class="end">.xlsx file downloaded</span></div>
@@ -653,12 +685,12 @@
       <li>confirmed documents and confirmed payments. Drafts and cancelled records are not included.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Reports</span><span>Page 13 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Reports</span><span>Page 14 / 17</span></div>
 </section>
 
 <!-- ============================================================ 14 PORTAL -->
 <section class="page">
-  <div class="head"><h1>14 · For customers: My Account</h1><span class="num">the customer portal</span></div>
+  <div class="head"><h1>15 · For customers: My Account</h1><span class="num">the customer portal</span></div>
   <div class="goal"><b>Goal:</b> a customer signs in and sees their own account — nothing else.</div>
 
   <div class="path"><span>Customer signs in</span><i></i><span class="menu">My Account</span><i></i><span>Balance · open invoices · payments · contracts</span><i></i><span class="end">Read only</span></div>
@@ -675,7 +707,7 @@
   <h2>What you do to set it up (manager)</h2>
   <ol class="steps">
     <li><div class="t"><span class="where">Persons</span> → open the customer → <span class="btn">Edit person</span> → tick <b>Customer portal access</b> → <span class="btn">Save</span>. The list shows a <b>Portal</b> badge on that person.</div></li>
-    <li><div class="t"><span class="where">Users</span> → make sure there is a user with role <b>Customer</b> (section 15). Give them the email and password.</div></li>
+    <li><div class="t"><span class="where">Users</span> → make sure there is a user with role <b>Customer</b> (section 16). Give them the email and password.</div></li>
   </ol>
 
   <div class="two">
@@ -688,12 +720,12 @@
       <li>If you deactivate that person, the portal access is removed. The customer then sees "Account unavailable".</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Customer portal</span><span>Page 14 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Customer portal</span><span>Page 15 / 17</span></div>
 </section>
 
 <!-- ============================================================ 15 USERS + SETTINGS + ERRORS -->
 <section class="page">
-  <div class="head"><h1>15 · Users, settings, and error messages</h1><span class="num">for managers</span></div>
+  <div class="head"><h1>16 · Users, settings, and error messages</h1><span class="num">for managers</span></div>
 
   <h2>Users</h2>
   <ol class="steps">
@@ -702,7 +734,7 @@
     <li><div class="t">Someone leaves? Open the user → <b>Deactivate</b>. They cannot sign in anymore. You cannot deactivate yourself.</div></li>
     <li><div class="t">Your own password: click your name at the top right → <span class="btn">Change password</span>.</div></li>
   </ol>
-  <p style="font-size:9.5pt"><b>Roles:</b> Staff = daily operations, no money pages · Manager = everything · CEO = Executive, Reports, Settings, Users · Customer = My Account only. The full page-by-page table is in section 16.</p>
+  <p style="font-size:9.5pt"><b>Roles:</b> Staff = daily operations, no money pages · Manager = everything · CEO = Executive, Reports, Settings, Users · Customer = My Account only. The full page-by-page table is in section 17.</p>
 
   <h2>Settings</h2>
   <ol class="steps">
@@ -725,12 +757,12 @@
     <li>DRAFT = you can still change it and it counts for nothing. CONFIRMED = locked and counted.</li>
     <li>Never delete — cancel or deactivate. History stays complete.</li>
   </ul></div>
-  <div class="foot"><span>Jalil-Jalal user guide · Users, settings, errors</span><span>Page 15 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Users, settings, errors</span><span>Page 16 / 17</span></div>
 </section>
 
 <!-- ============================================================ 16 ROLES -->
 <section class="page roles">
-  <div class="head"><h1>16 · Roles — who can see what</h1><span class="num">the permission table</span></div>
+  <div class="head"><h1>17 · Roles — who can see what</h1><span class="num">the permission table</span></div>
   <div class="goal"><b>Goal:</b> know which pages each role can open. This is the same table the server uses, so the menu always matches it.</div>
 
   <table>
@@ -779,7 +811,7 @@
       <li>Roles are fixed — no custom roles, no per-user exceptions. A Manager or the CEO changes a user's role in Users.</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Jalil-Jalal user guide · Roles</span><span>Page 16 / 16</span></div>
+  <div class="foot"><span>Jalil-Jalal user guide · Roles</span><span>Page 17 / 17</span></div>
 </section>
 
 </body>
