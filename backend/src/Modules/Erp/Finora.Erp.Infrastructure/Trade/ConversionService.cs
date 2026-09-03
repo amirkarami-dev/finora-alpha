@@ -71,6 +71,7 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
         RequireDraft(doc);
         await ValidateAsync(input, cancellationToken);
 
+        doc.WarehouseId = input.WarehouseId;
         doc.Date = input.Date.ToUniversalTime();
         doc.Notes = Blank(input.Notes);
         db.ConversionInputs.RemoveRange(doc.Inputs);

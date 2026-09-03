@@ -14,7 +14,7 @@ public sealed class ConversionDocument
     /// <summary>'CNV-2026-0001'.</summary>
     public required string DocNumber { get; set; }
 
-    public required string WarehouseId { get; init; }
+    public required string WarehouseId { get; set; }
     [JsonIgnore] public Warehouse? Warehouse { get; init; }
 
     public DateTimeOffset Date { get; set; }

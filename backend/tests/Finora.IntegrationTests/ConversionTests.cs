@@ -25,13 +25,14 @@ public sealed class ConversionTests(ApiFixture fixture)
     private static Task<HttpClient> AsManagerAsync(ApiFixture f) => LoginAsync(f, "amir@finora.app", "demo1234");
     private static Task<HttpClient> AsStaffAsync(ApiFixture f) => LoginAsync(f, "staff@finora.app", "Staff@2026");
 
-    /// <summary>One warehouse holding 1.000 MT of cable that cost 10,000 USD, a workshop person and a Processing category.</summary>
+    /// <summary>Main warehouse holding 1.000 MT of cable that cost 10,000 USD; a second, empty
+    /// warehouse (Overflow) for the header-edit test; a workshop person and a Processing category.</summary>
     private async Task ResetAsync()
     {
         using var scope = fixture.Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<SnapshotService>().ReplaceAsync(new ErpSnapshot
         {
-            Warehouses = [new Warehouse { Id = "wh-1", Name = "Main", Code = "1" }],
+            Warehouses = [new Warehouse { Id = "wh-1", Name = "Main", Code = "1" }, new Warehouse { Id = "wh-2", Name = "Overflow", Code = "2" }],
             Customers =
             [
                 new Customer { Id = "cust-1", Name = "Cable Supplier", Code = "1", CustomerType = CustomerType.SUPPLIER },
@@ -81,6 +82,52 @@ public sealed class ConversionTests(ApiFixture fixture)
         using var scope = fixture.Services.CreateScope();
         var positions = await scope.ServiceProvider.GetRequiredService<Finora.Erp.Infrastructure.Trade.StockLedger>().PositionsAsync();
         Assert.Equal(1m, positions[Finora.Erp.Infrastructure.Trade.StockLedger.Key("wh-1", "Copper cable")].QuantityMt);
+    }
+
+    [Fact]
+    public async Task Editing_a_draft_replaces_the_header_and_every_line_with_fresh_ids()
+    {
+        await ResetAsync();
+        var manager = await AsManagerAsync(fixture);
+        var created = Entity(await PostAsync(manager, "/api/erp/conversions", Strip()));
+        var id = created.GetProperty("id").GetString()!;
+        var originalInputId = created.GetProperty("inputs")[0].GetProperty("id").GetString();
+        var originalOutputId = created.GetProperty("outputs")[0].GetProperty("id").GetString();
+
+        var edited = new { warehouseId = "wh-2", date = Date, notes = "moved to overflow",
+            inputs = new[] { new { product = "Copper cable", quantityMt = 0.4m } },
+            outputs = new[]
+            {
+                new { product = "Stripped copper", quantityMt = 0.2m, sharePercent = (decimal?)null },
+                new { product = "Insulation scrap", quantityMt = 0.15m, sharePercent = (decimal?)null },
+            },
+            costs = new[] { new { categoryId = "ccat-0001", personId = "cust-2", amount = 50m, currency = "USD", fxRate = (decimal?)null, description = "sorting" } } };
+        var updateResponse = await manager.PutAsJsonAsync(new Uri($"/api/erp/conversions/{id}", UriKind.Relative), edited);
+        updateResponse.EnsureSuccessStatusCode();
+        var updated = Entity(await updateResponse.Content.ReadFromJsonAsync<JsonElement>(Json));
+
+        Assert.Equal("wh-2", updated.GetProperty("warehouseId").GetString());
+        Assert.Equal("moved to overflow", updated.GetProperty("notes").GetString());
+        Assert.Equal(1, updated.GetProperty("inputs").GetArrayLength());
+        Assert.Equal(0.4m, updated.GetProperty("inputs")[0].GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(2, updated.GetProperty("outputs").GetArrayLength());
+        Assert.Equal(1, updated.GetProperty("costs").GetArrayLength());
+        Assert.NotEqual(originalInputId, updated.GetProperty("inputs")[0].GetProperty("id").GetString());
+        Assert.NotEqual(originalOutputId, updated.GetProperty("outputs")[0].GetProperty("id").GetString());
+        Assert.NotEqual(originalOutputId, updated.GetProperty("outputs")[1].GetProperty("id").GetString());
+
+        // Re-read through the list endpoint, not just the write response, so the assertion covers
+        // what actually persisted.
+        var list = await manager.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/conversions", UriKind.Relative), Json);
+        var reread = list.EnumerateArray().Single(d => d.GetProperty("id").GetString() == id);
+        Assert.Equal("wh-2", reread.GetProperty("warehouseId").GetString());
+        Assert.Equal(1, reread.GetProperty("inputs").GetArrayLength());
+        Assert.Equal(0.4m, reread.GetProperty("inputs")[0].GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(2, reread.GetProperty("outputs").GetArrayLength());
+        Assert.Equal(0.2m, reread.GetProperty("outputs")[0].GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(0.15m, reread.GetProperty("outputs")[1].GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(1, reread.GetProperty("costs").GetArrayLength());
+        Assert.Equal(50m, reread.GetProperty("costs")[0].GetProperty("amount").GetDecimal());
     }
 
     [Fact]
@@ -142,6 +189,26 @@ public sealed class ConversionTests(ApiFixture fixture)
         var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.Equal("insufficient-stock", problem.GetProperty("code").GetString());
         Assert.Equal(1m, problem.GetProperty("available").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Two_input_lines_of_the_same_product_are_summed_before_the_stock_check()
+    {
+        await ResetAsync();
+        var manager = await AsManagerAsync(fixture);
+        var body = new { warehouseId = "wh-1", date = Date, notes = (string?)null,
+            inputs = new[]
+            {
+                new { product = "Copper cable", quantityMt = 0.6m },
+                new { product = "Copper cable", quantityMt = 0.6m },
+            },
+            outputs = new[] { new { product = "Stripped copper", quantityMt = 1m, sharePercent = (decimal?)null } },
+            costs = Array.Empty<object>() };
+        var id = Id(await PostAsync(manager, "/api/erp/conversions", body));
+        var refused = await manager.PostAsync(new Uri($"/api/erp/conversions/{id}/confirm", UriKind.Relative), null);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("insufficient-stock", problem.GetProperty("code").GetString());
+        Assert.Equal(0.4m, problem.GetProperty("available").GetDecimal());
     }
 
     [Fact]
