@@ -233,6 +233,12 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const rawContainers: RawContainerSeed[] = [];
   const payments: Payment[] = [];
 
+  // A payment's `reference` sometimes mirrors the invoice it settles — but invoice numbers
+  // aren't final until the global chronological numbering pass runs (once every invoice in the
+  // dataset exists). Payments created before that pass push here instead of writing the
+  // (not-yet-final) invoiceNumber directly; the pass fixes up `.reference` afterwards.
+  const paymentsPendingInvoiceNumberRef: Array<{ payment: Payment; invoice: Invoice }> = [];
+
   function makeContainerRef(): string {
     return `${pick(CONTAINER_PREFIXES)}${intBetween(1000000, 9999999)}`;
   }
@@ -556,8 +562,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * all rnd()-consuming post-passes; earlier values (e.g. cust-am
    * creditLimit 2,750,000) must stay byte-identical.
    * ------------------------------------------------------------------ */
+  // Id stays the literal `wh-mw` — it's referenced elsewhere in this generator (the GRN below)
+  // and isn't derived from the code, unlike goods/partners/customers.
   const warehouses: Warehouse[] = [
-    { id: 'wh-mw', name: 'Main Warehouse', code: 'MW', location: 'Jebel Ali, Dubai', active: true },
+    { id: 'wh-mw', name: 'Main Warehouse', code: nextIntegerCode([]), location: 'Jebel Ali, Dubai', active: true },
   ];
   const invoices: Invoice[] = [];
   const inventoryDocs: InventoryDocument[] = [];
@@ -649,14 +657,12 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const LME_QUOTE_DATE = rel('2026-05-20').toISOString();
   const LME_QUOTE_PRICE = 2450;
 
-  // Server-shaped document numbers: `YYMM` + 4 digits, one shared monthly sequence.
-  // Documents are minted in date order below (PO → PP → PI → SO) so the sequence reads naturally.
-  const documentNumbers: string[] = [];
-  const docNo = (dateIso: string): string => {
-    const n = nextDocumentNumber(dateIso, documentNumbers);
-    documentNumbers.push(n);
-    return n;
-  };
+  // Server-shaped document numbers (`YYMM` + 4 digits, one shared monthly sequence) are NOT
+  // assigned here — every invoice below (these four plus every historical SI/PI further down)
+  // gets a placeholder `invoiceNumber` and is renumbered in one global chronological pass once
+  // every invoice in the dataset exists (search "Server-shaped document numbers" below). That
+  // keeps the monthly sequence correct even though historical invoices, built later in this
+  // function, can be dated earlier than these.
 
   // First PURCHASE contract (array order): full PO → PP → PI chain.
   const firstPurchaseContract = contracts.find((c) => c.contractType === 'PURCHASE');
@@ -670,7 +676,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const poTotals = invoiceTotals(poItems);
     const po: Invoice = {
       id: poId,
-      invoiceNumber: docNo(PURCHASE_ORDER_DATE),
+      invoiceNumber: poId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_ORDER',
       invoiceDate: PURCHASE_ORDER_DATE,
       contractId: contract.id,
@@ -699,7 +705,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const ppTotals = invoiceTotals(ppItems);
     const pp: Invoice = {
       id: ppId,
-      invoiceNumber: docNo(PURCHASE_PROVISIONAL_DATE),
+      invoiceNumber: ppId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_PROVISIONAL',
       invoiceDate: PURCHASE_PROVISIONAL_DATE,
       contractId: contract.id,
@@ -729,7 +735,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const piTotals = invoiceTotals(piItems);
     const pi: Invoice = {
       id: piId,
-      invoiceNumber: docNo(PURCHASE_INVOICE_DATE),
+      invoiceNumber: piId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_INVOICE',
       invoiceDate: PURCHASE_INVOICE_DATE,
       contractId: contract.id,
@@ -771,7 +777,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     // One payment: 50% of PI totalAmount, currency USD, fxRate 1, method 'TT',
     // date 2026-06-01 (relative to anchor), invoiceId = PI id, direction 'OUT', reference = the PI's own number.
     const paymentAmount = round(pi.totalAmount * 0.5, 2);
-    payments.push({
+    const piPayment: Payment = {
       id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
       customerId: pi.customerId,
       date: rel('2026-06-01').toISOString(),
@@ -780,11 +786,13 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       fxRate: 1,
       amountUSD: paymentAmount,
       method: 'TT',
-      reference: pi.invoiceNumber,
+      reference: pi.invoiceNumber, // placeholder — fixed up once numbering is final
       invoiceId: piId,
       direction: 'OUT',
       notes: '',
-    });
+    };
+    payments.push(piPayment);
+    paymentsPendingInvoiceNumberRef.push({ payment: piPayment, invoice: pi });
   }
 
   // First SELL contract (array order): DRAFT SO-2026-0001, first item only, 50% qty.
@@ -798,7 +806,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const soTotals = invoiceTotals(soItems);
     const so: Invoice = {
       id: soId,
-      invoiceNumber: docNo(SALE_ORDER_DATE),
+      invoiceNumber: soId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'SALE_ORDER',
       invoiceDate: SALE_ORDER_DATE,
       contractId: contract.id,
@@ -848,23 +856,21 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   }
 
   const historicalInvoiceIds = new Set(invoices.map((inv) => inv.id));
-  const historicalInvoiceNumbers = new Set(invoices.map((inv) => inv.invoiceNumber));
 
   /**
-   * `<PFX>-<YYYY>-<NNNN>` / `inv-<pfx>-<NNNN>`, scan-until-unused against every invoice id/number
-   * created so far in the seed (identical schemes to api.ts's runtime `nextInvoiceNumber`/
-   * `nextInvoiceId`, reimplemented locally since this module cannot import api.ts).
+   * `inv-<pfx>-<NNNN>`, scan-until-unused against every invoice id created so far in the seed
+   * (identical scheme to api.ts's runtime `nextInvoiceId`, reimplemented locally since this
+   * module cannot import api.ts). `invoiceNumber` is NOT minted here — it's a placeholder until
+   * the global chronological numbering pass (below, after every invoice in the dataset exists)
+   * assigns the real server-shaped `YYMM` + 4-digit number.
    */
-  function nextHistoricalInvoiceIds(prefix: 'SI' | 'PI'): { id: string; number: string } {
-    const year = anchor.format('YYYY');
+  function nextHistoricalInvoiceId(prefix: 'SI' | 'PI'): string {
     let n = 1;
     for (;;) {
-      const number = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
       const id = `inv-${prefix.toLowerCase()}-${String(n).padStart(4, '0')}`;
-      if (!historicalInvoiceIds.has(id) && !historicalInvoiceNumbers.has(number)) {
+      if (!historicalInvoiceIds.has(id)) {
         historicalInvoiceIds.add(id);
-        historicalInvoiceNumbers.add(number);
-        return { id, number };
+        return id;
       }
       n += 1;
     }
@@ -911,7 +917,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
     const invoiceType: InvoiceType = contract.contractType === 'SELL' ? 'SALE_INVOICE' : 'PURCHASE_INVOICE';
     const prefix = invoiceType === 'SALE_INVOICE' ? 'SI' : 'PI';
-    const { id, number } = nextHistoricalInvoiceIds(prefix);
+    const id = nextHistoricalInvoiceId(prefix);
     const items = raws.map((raw) => makeHistoricalInvoiceItem(id, raw));
     const totals = invoiceTotals(items);
     const invoiceDate = raws
@@ -923,7 +929,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
     const invoice: Invoice = {
       id,
-      invoiceNumber: number,
+      invoiceNumber: id, // placeholder — replaced in the global numbering pass below
       invoiceType,
       invoiceDate,
       contractId: contract.id,
@@ -956,7 +962,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         2,
       );
       if (paidAmount > 0) {
-        payments.push({
+        const historicalPayment: Payment = {
           id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
           customerId: invoice.customerId,
           date: invoiceDate,
@@ -965,14 +971,42 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
           fxRate: 1,
           amountUSD: paidAmount,
           method: 'TT',
-          reference: invoice.invoiceNumber,
+          reference: invoice.invoiceNumber, // placeholder — fixed up once numbering is final
           invoiceId: invoice.id,
           direction: 'IN',
           notes: '',
-        });
+        };
+        payments.push(historicalPayment);
+        paymentsPendingInvoiceNumberRef.push({ payment: historicalPayment, invoice });
       }
     }
     // Purchase invoices are payables — no payment seeded here.
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Server-shaped document numbers: `YYMM` + 4 digits, one shared monthly sequence, assigned
+   * ONLY now that every invoice in the dataset exists — the four PO/PP/PI/SO above (each still
+   * carrying its own id as a placeholder `invoiceNumber`) plus every historical SI/PI invoice
+   * just generated. Sorting the full set by `invoiceDate` before numbering means the sequence
+   * is chronologically correct dataset-wide, not just within the group of documents built
+   * together above — a historical invoice dated before the PO can still land number 1 in its
+   * month even though it was built afterward in this function. ZERO PRNG draws.
+   * ------------------------------------------------------------------ */
+  const documentNumbers: string[] = [];
+  const docNo = (dateIso: string): string => {
+    const n = nextDocumentNumber(dateIso, documentNumbers);
+    documentNumbers.push(n);
+    return n;
+  };
+  [...invoices]
+    .sort((a, b) => (a.invoiceDate < b.invoiceDate ? -1 : a.invoiceDate > b.invoiceDate ? 1 : 0))
+    .forEach((inv) => {
+      inv.invoiceNumber = docNo(inv.invoiceDate);
+    });
+  // Payments whose `reference` mirrors an invoice's number were pushed before numbering was
+  // final (see `paymentsPendingInvoiceNumberRef` above) — fix them up now.
+  for (const { payment, invoice } of paymentsPendingInvoiceNumberRef) {
+    payment.reference = invoice.invoiceNumber;
   }
 
   // Recompute every item's remainingMt from the historical invoice lines just created, so the
