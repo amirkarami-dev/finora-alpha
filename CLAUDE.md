@@ -93,7 +93,7 @@ src/
 ├── components/{charts,common,layout}   # UI building blocks
 ├── config/constants.ts                 # enums, route map, brand palette, locales
 ├── hooks/useLocaleEffect.ts            # syncs i18n + dayjs + <html dir/lang>
-├── i18n/{index.ts,locales/*.json}      # en / ar / fa
+├── i18n/{index.ts,locales/*.json}      # en / ar / fa / ku (+ antd-ku, dayjs-ku)
 ├── mock/data.ts                        # client-side store + localStorage persistence
 ├── mock/sampleData.ts                  # demo dataset generator ("Load sample data")
 ├── pages/<feature>/                    # one folder per route
@@ -180,7 +180,7 @@ lookup indexes must not go stale).
   file directly. `mock/data.ts` holds the (empty) seed, the localStorage layer and
   `SCHEMA_VERSION` — bump it when a persisted entity's shape changes.
 - **i18n is mandatory.** No hard-coded user-facing strings — add keys to all
-  three locale files (`en`, `ar`, `fa`) and use `t('...')`. Keep `ar`/`fa` in
+  four locale files (`en`, `ar`, `fa`, `ku`) and use `t('...')`. Keep `ar`/`fa`/`ku` in
   sync with `en`. Layout must stay RTL-safe (use logical CSS:
   `marginInlineStart`, `inset-inline-*`, etc.).
 - **Theming via tokens.** Read colors with `theme.useToken()`; don't hard-code
@@ -198,7 +198,7 @@ Paths relative to `apps/erp-panel/`:
 1. Create `src/pages/<feature>/<Feature>Page.tsx`.
 2. Add a route in `src/routes/index.tsx` and a path in `config/constants.ts:ROUTES`.
 3. Add a nav entry in `src/components/layout/SidebarNav.tsx`.
-4. Add i18n keys in all three locale files.
+4. Add i18n keys in all four locale files.
 5. Read data via a hook in `src/services/queries.ts`.
 
 ## Current status
@@ -208,7 +208,7 @@ persons (+detail +ledger), contracts (+goods +containers), containers, warehouse
 documents, purchase/sale documents (six types with the conversion chain), payments
 (header + lines + allocations), cheques, transfers, expenses/revenues, claims,
 exchange gain/loss, base info, five report tabs with real `.xlsx` export, settings,
-customer portal, executive dashboard; dark/light; en/ar/fa + RTL; responsive; RBAC
+customer portal, executive dashboard; dark/light; en/ar/fa/ku + RTL; responsive; RBAC
 across CEO/Manager/Staff/Customer.
 
 The backend has **landed on `main`**: sign-in, permissions and every domain

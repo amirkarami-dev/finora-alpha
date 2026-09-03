@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Button, Space, Typography, theme } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useUiStore } from '@/store/useUiStore';
+import { useUiStore, isRtl as isRtlLocale } from '@/store/useUiStore';
 
 const { Title, Text } = Typography;
 
@@ -17,7 +17,7 @@ export function PageHeader({ title, subtitle, extra, onBack }: PageHeaderProps) 
   const { token } = theme.useToken();
   const navigate = useNavigate();
   const locale = useUiStore((s) => s.locale);
-  const isRtl = locale === 'ar' || locale === 'fa';
+  const isRtl = isRtlLocale(locale);
 
   const handleBack = () => {
     if (typeof onBack === 'function') onBack();

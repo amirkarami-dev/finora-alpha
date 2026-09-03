@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 import ar from './locales/ar.json';
 import fa from './locales/fa.json';
+import ku from './locales/ku.json';
 import { SUPPORTED_LOCALES } from '@/config/constants';
 
 void i18n
@@ -14,6 +15,7 @@ void i18n
       en: { translation: en },
       ar: { translation: ar },
       fa: { translation: fa },
+      ku: { translation: ku },
     },
     fallbackLng: 'en',
     supportedLngs: SUPPORTED_LOCALES,

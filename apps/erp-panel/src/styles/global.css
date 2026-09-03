@@ -25,9 +25,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Arabic / Persian get a slightly larger, more readable face */
+/* Arabic / Persian / Kurdish (Sorani) get a slightly larger, more readable face */
 html[lang='ar'] body,
-html[lang='fa'] body {
+html[lang='fa'] body,
+html[lang='ku'] body {
   font-family: 'Vazirmatn Variable', 'Vazirmatn', 'Noto Sans Arabic', 'Inter Variable', 'Inter',
     sans-serif;
 }
