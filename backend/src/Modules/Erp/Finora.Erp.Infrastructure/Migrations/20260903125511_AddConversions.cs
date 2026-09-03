@@ -79,6 +79,7 @@ namespace Finora.Erp.Infrastructure.Migrations
                 {
                     table.PrimaryKey("pk_conversion_costs", x => x.id);
                     table.CheckConstraint("ck_conversion_costs_currency", "\"currency\" IN ('USD', 'AED', 'IQD')");
+                    table.CheckConstraint("ck_conversion_costs_fx_rate", "fx_rate > 0");
                     table.ForeignKey(
                         name: "fk_conversion_costs_charge_categories_category_id",
                         column: x => x.category_id,

@@ -73,9 +73,14 @@ internal sealed class ConversionCostConfiguration : IEntityTypeConfiguration<Con
     public void Configure(EntityTypeBuilder<ConversionCost> builder)
     {
         builder.ToTable("conversion_costs", t =>
+        {
             t.HasCheckConstraint(
                 ErpModelBuilderExtensions.CheckName("conversion_costs", "currency"),
-                ErpModelBuilderExtensions.EnumCheck<Currency>("currency")));
+                ErpModelBuilderExtensions.EnumCheck<Currency>("currency"));
+            // An FX rate of zero or negative would silently corrupt AmountUsd, which is derived
+            // from Amount / FxRate — same rule as every other FxRate-bearing table.
+            t.HasCheckConstraint("ck_conversion_costs_fx_rate", "fx_rate > 0");
+        });
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).HasIdColumn();
         builder.Property(c => c.DocumentId).HasIdColumn();

@@ -833,6 +833,8 @@ namespace Finora.Erp.Infrastructure.Migrations
                     b.ToTable("conversion_costs", "erp", t =>
                         {
                             t.HasCheckConstraint("ck_conversion_costs_currency", "\"currency\" IN ('USD', 'AED', 'IQD')");
+
+                            t.HasCheckConstraint("ck_conversion_costs_fx_rate", "fx_rate > 0");
                         });
                 });
 

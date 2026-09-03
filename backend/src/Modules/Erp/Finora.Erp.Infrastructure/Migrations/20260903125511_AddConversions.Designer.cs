@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Finora.Erp.Infrastructure.Migrations
 {
     [DbContext(typeof(ErpDbContext))]
-    [Migration("20260903124459_AddConversions")]
+    [Migration("20260903125511_AddConversions")]
     partial class AddConversions
     {
         /// <inheritdoc />
@@ -836,6 +836,8 @@ namespace Finora.Erp.Infrastructure.Migrations
                     b.ToTable("conversion_costs", "erp", t =>
                         {
                             t.HasCheckConstraint("ck_conversion_costs_currency", "\"currency\" IN ('USD', 'AED', 'IQD')");
+
+                            t.HasCheckConstraint("ck_conversion_costs_fx_rate", "fx_rate > 0");
                         });
                 });
 
