@@ -85,12 +85,14 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
 
         var byRefId = invoice.Items.ToDictionary(i => i.ReferenceDocumentItemId, StringComparer.Ordinal);
         var used = await UsedByReferenceAsync(cancellationToken);
-        var stock = input.Type == InventoryDocType.OUT
-            ? await StockAsync(cancellationToken)
-            : null;
+
+        // One fold for an OUT document, not two: `stock`'s running quantities are derived from
+        // the same `positions` the cost lookup below reads, instead of each calling the ledger
+        // on its own.
         var positions = input.Type == InventoryDocType.OUT
             ? await ledger.PositionsAsync(cancellationToken)
             : null;
+        var stock = positions?.ToDictionary(p => p.Key, p => p.Value.QuantityMt, StringComparer.Ordinal);
 
         var docId = await NextIdAsync(cancellationToken);
         var lines = new List<InventoryDocumentItem>();
