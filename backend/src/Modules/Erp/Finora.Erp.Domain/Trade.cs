@@ -271,4 +271,11 @@ public sealed class InventoryDocumentItem
 
     public required string Product { get; set; }
     public decimal QuantityMt { get; set; }
+
+    /// <summary>USD per MT this line was valued at when confirmed: the invoice price for a
+    /// receipt, the warehouse's average cost for an issue. 0 on lines from before costing.</summary>
+    public decimal UnitCostUsd { get; set; }
+
+    /// <summary>QuantityMt × UnitCostUsd, rounded to cents — the figure the stock value sums.</summary>
+    public decimal CostUsd { get; set; }
 }

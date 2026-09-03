@@ -122,6 +122,17 @@ public sealed class ErrorCodeContractTests
         // A gain/loss record that has already been deleted — the only thing in the module that
         // really deletes, so the only place a stale row can be reached by two people at once.
         "gain-loss-not-found",
+
+        // Conversions. A stale id and an edit on a confirmed document — the screen hides both
+        // paths (the edit button appears on drafts only), so both get the generic message.
+        "conversion-not-found",
+        "conversion-not-draft",
+
+        // A conversion input/output line with no product — the form already blocks submitting
+        // a started row that is missing one (mirrors the cost rows' `common.required`), so this
+        // only guards the endpoint against a caller that skips the screen; the generic message
+        // is honest for that.
+        "product-required",
     ];
 
     /// <summary>

@@ -27,7 +27,10 @@ public static class AccessCatalogue
             ["Manager"] =
             [
                 "dashboard", "customers", "contracts", "partners", "containers", "baseInfo",
-                "purchase", "sale", "warehouse", "payments", "transfers", "exchange",
+                "purchase", "sale", "warehouse",
+                // Not a route key: it gates one endpoint (confirming a conversion) and one button.
+                "conversions.confirm",
+                "payments", "transfers", "exchange",
                 "expenses", "revenues", "claims", "reports", "settings", "develop", "users",
             ],
 

@@ -567,7 +567,7 @@ Example (Alco Metal, contract AM-P-251101156):  11,685 × 94.76 % + 0  ≈  11,0
 <!-- ============================================================ 7 CONTAINERS + WAREHOUSE -->
 <section class="page">
   <div class="head"><h1>7 · Containers and warehouse</h1><span class="num">the physical side</span></div>
-  <p class="lead">A container is pure logistics — it carries goods lines and dates, never money. Warehouse stock moves only when a final invoice is confirmed.</p>
+  <p class="lead">A container is pure logistics — it carries goods lines and dates, never money. Warehouse stock moves when a final invoice is confirmed, or when a conversion is confirmed.</p>
 
   <h2>Container</h2>
   <div class="flow center">
@@ -582,8 +582,8 @@ Example (Alco Metal, contract AM-P-251101156):  11,685 × 94.76 % + 0  ≈  11,0
     <span class="arr"></span><span class="node grey">Status shown from linked invoices: OPEN · PAID · OVERDUE</span>
   </div>
 
-  <h2>Stock movement — triggered by confirming a final invoice</h2>
-  <div class="lanes" style="--n:2">
+  <h2>Stock movement — triggered by confirming a final invoice, or a conversion</h2>
+  <div class="lanes" style="--n:3">
     <div class="lane"><h3>Purchase invoice (PI) confirm</h3><div class="col">
       <span class="node">Modal: choose target warehouse</span><span class="darr"></span>
       <span class="node ok">GRN-2026-0001<small>IN document, CONFIRMED, one line per invoice item</small></span><span class="darr"></span>
@@ -595,11 +595,15 @@ Example (Alco Metal, contract AM-P-251101156):  11,685 × 94.76 % + 0  ≈  11,0
       <span class="node ok">GDN-2026-0001<small>OUT document, CONFIRMED</small></span><span class="darr"></span>
       <span class="node data">Stock −= quantity</span>
     </div></div>
+    <div class="lane"><h3>Conversion (CNV) confirm</h3><div class="col">
+      <span class="node">Inputs OUT → Outputs IN, costs added</span><span class="darr"></span>
+      <span class="node ok">Stock and cost move; expense booked</span>
+    </div></div>
   </div>
   <div class="flow center"><span class="node bad">Shortfall → "insufficient stock" with product + available; nothing changes</span></div>
 
   <h2>Stock rule</h2>
-  <div class="formula">stock(warehouse, product) = Σ IN − Σ OUT   over CONFIRMED warehouse documents
+  <div class="formula">stock(warehouse, product) = Σ IN − Σ OUT   over CONFIRMED warehouse documents and conversions
 product key = name trimmed + lower-cased, so "Copper Cathode" and "copper cathode" are one bucket</div>
 
   <div class="details">
@@ -608,6 +612,7 @@ product key = name trimmed + lower-cased, so "Copper Cathode" and "copper cathod
       <ul>
         <li><b>Warehouse page</b> lists receipts (GRN) and issues (GDN) with their invoice link, warehouse, date and lines; stock per warehouse and product.</li>
         <li><b>Warehouses</b> are master data (name, code, location, active). With zero active warehouses the confirm modal explains and blocks.</li>
+        <li><b>Cost per MT</b> is a moving average, per warehouse and product, over every CONFIRMED movement in order — receipts and conversion outputs add, issues and conversion inputs subtract. <code>StockLedger</code> folds it server-side; nothing recomputes it on read.</li>
       </ul>
       <ul>
         <li><b>Draft sale invoices</b> show a live "available MT" column per line, coloured when the quantity exceeds stock — the real check is still at confirm.</li>

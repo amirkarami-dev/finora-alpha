@@ -436,6 +436,9 @@ export interface Warehouse {
 
 export type InventoryDocType = 'IN' | 'OUT';
 
+/** A conversion is edited as a DRAFT, moves stock and cost when CONFIRMED, cancelled not deleted. */
+export type ConversionStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+
 export interface InventoryDocument {
   id: string;
   docNumber: string;        // 'GRN-2026-0001' (IN) / 'GDN-2026-0001' (OUT)
@@ -459,6 +462,72 @@ export interface InventoryDocumentItem {
   referenceDocumentItemId: string;
   product: string;
   quantityMt: number;
+  /** USD per MT this line was valued at when confirmed (invoice price on a receipt, the
+   *  warehouse average on an issue). 0 on lines from before costing existed. */
+  unitCostUsd: number;
+  costUsd: number;
+}
+
+/** An input line of metal a conversion consumes (e.g. raw copper scrap). */
+export interface ConversionInput {
+  id: string;
+  documentId: string;
+  product: string;
+  quantityMt: number;
+  unitCostUsd: number;
+  costUsd: number;
+}
+
+/** An output line of metal a conversion produces (e.g. copper billets). */
+export interface ConversionOutput {
+  id: string;
+  documentId: string;
+  product: string;
+  quantityMt: number;
+  sharePercent?: number | null;
+  unitCostUsd: number;
+  costUsd: number;
+}
+
+/** An added-cost line (labour, power, …) booked against a conversion. */
+export interface ConversionCost {
+  id: string;
+  documentId: string;
+  categoryId: string;
+  personId: string;
+  amount: number;
+  currency: Currency;
+  fxRate: number;
+  amountUsd: number;
+  description?: string;
+}
+
+/** A warehouse conversion document — inputs of one/more products become outputs of others,
+ *  carrying added costs (labour, power, …) that are folded into the outputs' cost per MT. */
+export interface ConversionDocument {
+  id: string;
+  docNumber: string;
+  warehouseId: string;
+  date: string;
+  status: ConversionStatus;
+  notes?: string;
+  chargeDocId?: string | null;
+  totalInputCostUsd: number;
+  totalAddedCostUsd: number;
+  createdAt: string;
+  inputs: ConversionInput[];
+  outputs: ConversionOutput[];
+  costs: ConversionCost[];
+}
+
+/** Draft/edit payload for a conversion document. */
+export interface ConversionDocInput {
+  warehouseId: string;
+  date: string;
+  notes?: string;
+  inputs: { product: string; quantityMt: number }[];
+  outputs: { product: string; quantityMt: number; sharePercent?: number | null }[];
+  costs: { categoryId: string; personId: string; amount: number; currency: Currency; fxRate?: number | null; description?: string }[];
 }
 
 /** Aggregated, dashboard-ready customer balance. */

@@ -75,24 +75,24 @@
 
     <div class="arrow"></div>
 
-    <div class="step new"><b>2 · Strip</b><small>not in the app yet</small></div>
-    <div class="cell app"><span class="no">Missing:</span> a <b>Conversion document</b> in Warehouse: OUT Copper cable 1.000 MT → IN Stripped copper 0.650 MT.<br>Stripping labour, if any: <span class="where">Expenses</span> → general expense (today) — later, a cost line on the conversion.</div>
+    <div class="step"><b>2 · Strip</b><small>works today</small></div>
+    <div class="cell app"><span class="where">Warehouse › Conversions</span> → <span class="btn">New conversion</span>: input Copper cable 1.000 MT → output Stripped copper 0.650 MT (no extra cost in this simple example — page 3 shows one with workshop costs added). Save, then a Manager clicks <span class="btn">Confirm</span>.</div>
     <div class="cell wh"><span class="t">OUT: Copper cable 1.000 MT</span><span class="t">IN: Stripped copper 0.650 MT</span><span class="lost">Insulation 0.350 MT</span> — waste, not stock</div>
-    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.650 MT = <b>$15,385 / MT</b><br>Yield 65 %.</div>
+    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.650 MT = <b>$15,385 / MT</b><br>Yield 65 %. The Inventory tab shows this cost / MT.</div>
 
     <div class="arrow"></div>
 
-    <div class="step new"><b>3 · Melt</b><small>not in the app yet</small></div>
-    <div class="cell app"><span class="no">Missing:</span> second <b>Conversion document</b>: OUT Stripped copper 0.650 MT → IN Copper ingot 0.600 MT. Gas and labour as a cost line.</div>
+    <div class="step"><b>3 · Melt</b><small>works today</small></div>
+    <div class="cell app">A second <span class="where">Warehouse › Conversions</span> → <span class="btn">New conversion</span>: input Stripped copper 0.650 MT → output Copper ingot 0.600 MT (again, no extra cost in this simple example). Save, then a Manager clicks <span class="btn">Confirm</span>.</div>
     <div class="cell wh"><span class="t">OUT: Stripped copper 0.650 MT</span><span class="t">IN: Copper ingot 0.600 MT</span><span class="lost">Melting loss 0.050 MT</span> — gone</div>
-    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.600 MT = <b>$16,667 / MT</b><br>Yield 92 %.</div>
+    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.600 MT = <b>$16,667 / MT</b><br>Yield 92 %. The Inventory tab shows this cost / MT.</div>
 
     <div class="arrow"></div>
 
     <div class="step"><b>4 · Sell</b><small>works today</small></div>
     <div class="cell app"><span class="where">Contracts</span> → sell contract with the buyer, goods line Copper ingot 0.600 MT, e.g. $20,000 / MT.<br><span class="where">Sale › Invoices</span> → <span class="btn">New invoice</span>, <span class="btn">Confirm</span> → choose Main Warehouse. The app checks the stock of Copper ingot.</div>
     <div class="cell wh"><span class="t">OUT: Copper ingot 0.600 MT</span>Issue <b>GDN-2026-0001</b> made by the confirm. Ingot stock → 0.</div>
-    <div class="cell cost"><span class="t">Sale $12,000</span>Buyer balance: owes you $12,000.<br>Cost of the copper sold: $10,000 → <b>profit $2,000</b>.</div>
+    <div class="cell cost"><span class="t">Sale $12,000</span>Buyer balance: owes you $12,000.<br>The invoice shows cost of sales $10,000 and margin <b>$2,000</b> by itself.</div>
   </div>
 
   <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 1 / 3</span></div>
@@ -110,34 +110,21 @@
     <tr><td>Sold</td><td class="r">0.600</td><td class="r">$10,000 cost</td><td class="r">$16,667</td><td>sold at $20,000 / MT → profit $2,000</td></tr>
   </table>
 
-  <h2>In the app today</h2>
+  <h2>How it works now</h2>
   <table>
     <tr><th>Step</th><th style="white-space:nowrap">App today?</th><th>Detail</th></tr>
     <tr><td>0 · Three goods, persons, warehouse</td><td class="yes">Yes</td><td>Base Info › Goods, Persons, Warehouse › Warehouses.</td></tr>
     <tr><td>1 · Buy cable into the warehouse</td><td class="yes">Yes</td><td>Purchase invoice → Confirm → GRN. The invoice line carries the price per MT.</td></tr>
-    <tr><td>2 · Strip, 3 · Melt</td><td class="no">Not yet</td><td>No conversion document. Warehouse › New receipt / New issue always need a confirmed invoice behind them, so stock cannot change from one item to another, and no cost per MT is kept per stock item.</td></tr>
-    <tr><td>4 · Sell ingot from the warehouse</td><td class="no">Blocked</td><td>Sale invoice → Confirm checks the stock of <b>Copper ingot</b>, which is 0 — the app answers "insufficient stock". It only passes if you sell under the item you bought (Copper cable).</td></tr>
-    <tr><td>Profit per batch</td><td class="no">Partly</td><td>Sale and purchase are on the persons' ledgers; workshop costs can go in as Expenses. But the app cannot say "this ingot cost $16,667 / MT".</td></tr>
+    <tr><td>2 · Strip, 3 · Melt</td><td class="yes">Yes</td><td>Warehouse › Conversions › New conversion, one per step: input(s) OUT, output(s) IN, a cost line for labour or gas. Save, then a Manager confirms — the cost per MT moves onto the output and the labour/gas is booked as an expense by itself.</td></tr>
+    <tr><td>4 · Sell ingot from the warehouse</td><td class="yes">Yes</td><td>Sale invoice → Confirm checks the stock of <b>Copper ingot</b>. Once the two conversions above are confirmed, there is stock to sell — the invoice picks up its cost of sales automatically.</td></tr>
+    <tr><td>Profit per batch</td><td class="yes">Yes</td><td>The sale invoice shows cost of sales and margin by itself — "this ingot cost $16,667 / MT" is the Inventory tab's own number, not a hand calculation.</td></tr>
   </table>
-
-  <h2>Until the feature exists — a safe way to work</h2>
-  <div class="two">
-    <div class="box warn"><h3>In the app</h3><ul>
-      <li>Record the purchase (step 1) exactly as on page 1.</li>
-      <li>Sell under the same item you bought: sale invoice line <b>Copper cable 0.600 MT</b>, description "delivered as ingot". The stock check passes. 0.400 MT of cable stays in stock as a ghost — write it off when the conversion feature arrives.</li>
-      <li>Workshop costs: <span class="where">Expenses › General</span>, category "Processing".</li>
-    </ul></div>
-    <div class="box"><h3>On a sheet, per batch</h3><ul>
-      <li>Cable MT and $, stripped MT, ingot MT, added costs, sale $. The tables on these pages are that sheet.</li>
-      <li>This gives the true cost / MT and the batch profit until the app can do it.</li>
-    </ul></div>
-  </div>
 
   <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 2 / 3</span></div>
 </section>
 
 <section class="page p2">
-  <div class="head"><h1>Extra costs, and the feature to add</h1><span class="num">page 3</span></div>
+  <div class="head"><h1>Extra costs, and how the app does it</h1><span class="num">page 3</span></div>
 
   <h2>If the workshop has its own costs (usual case)</h2>
   <p>Stripping and melting cost money too: workers, electricity, gas. Add them to the copper at the step where they happen — into the stock, not into expenses, until the copper is sold.</p>
@@ -150,20 +137,12 @@
   </table>
   <p>Insulation sold as scrap (say $200)? Take it off the copper: stripped copper = $9,800 → $15,077 / MT. Or book it as a revenue and leave the copper at $10,000. Both are fine — pick one and keep it.</p>
 
-  <h2>The feature to add: a Conversion document</h2>
-  <div class="two">
-    <div class="box tip"><h3>Where and what</h3><ul>
-      <li><span class="where">Warehouse</span> → new tab <b>Conversions</b>, numbers <b>CNV-2026-0001</b>. Fields: warehouse, date, <b>OUT lines</b> (goods, MT), <b>IN lines</b> (goods, MT), <b>added costs</b> (amount, currency, category, person), notes.</li>
-      <li>Status DRAFT → CONFIRMED → CANCELLED, like every other document.</li>
-      <li>Confirm checks the stock of each OUT line; after that, stock = Σ IN − Σ OUT includes conversions.</li>
-      <li>Shows <b>yield</b> (IN MT ÷ OUT MT) and the new <b>cost / MT</b>.</li>
-    </ul></div>
-    <div class="box tip"><h3>What it needs underneath</h3><ul>
-      <li>A <b>cost per MT</b> on every stock item per warehouse (moving average). A purchase invoice sets it from the line price; a conversion moves the whole OUT cost plus added costs onto the IN lines.</li>
-      <li>A sale invoice then reads the cost of the goods it issues → <b>cost of sales</b> and profit per invoice, on the Trade report.</li>
-      <li>Staff can create conversions; a Manager confirms — the same pattern as the money pages.</li>
-    </ul></div>
-  </div>
+  <h2>How the app does it</h2>
+  <div class="box tip"><h3>Warehouse › Conversions</h3><ul>
+    <li><b>Conversion document</b>, numbered CNV-2026-0001: warehouse, date, input lines (goods, MT), output lines (goods, MT), cost lines (category, person, amount). Staff makes the draft; a Manager clicks Confirm. Confirm checks the stock of every input, moves the cost onto the outputs, and books the cost lines as an expense by itself.</li>
+    <li><b>Stored cost per MT</b> on every stock item, per warehouse. A receipt sets it from the purchase invoice's price; a conversion carries it forward onto what comes out. The Inventory tab shows it.</li>
+    <li><b>Cost of sales</b> on the sale invoice: once the goods are confirmed out, the invoice shows what they cost and the margin, by itself.</li>
+  </ul></div>
   <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 3 / 3</span></div>
 </section>
 </body>

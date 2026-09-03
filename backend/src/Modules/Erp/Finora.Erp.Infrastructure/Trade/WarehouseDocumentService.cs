@@ -9,14 +9,14 @@ namespace Finora.Erp.Infrastructure.Trade;
 /// Warehouse receipts and issues, and the stock they add up to.
 ///
 /// <para>
-/// Stock has no table. It is folded on read from every CONFIRMED document — receipts add, issues
-/// subtract — and the key is the warehouse plus the product NAME, lower-cased and trimmed, taken
-/// from the snapshot each document line carries. Not a goods id: two contract lines may name the
-/// same metal, and the desk counts the metal, not the paperwork. Keying stock by id instead reads
-/// as an obvious tidy-up and reproduces none of the numbers.
+/// Stock has no table. <see cref="StockLedger"/> folds it on read from every CONFIRMED document —
+/// receipts add, issues subtract — keyed by the warehouse plus the product NAME, lower-cased and
+/// trimmed, taken from the snapshot each document line carries. Not a goods id: two contract lines
+/// may name the same metal, and the desk counts the metal, not the paperwork. Keying stock by id
+/// instead reads as an obvious tidy-up and reproduces none of the numbers.
 /// </para>
 /// </summary>
-public sealed class WarehouseDocumentService(ErpDbContext db)
+public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger)
 {
     internal static class Codes
     {
@@ -33,10 +33,6 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
         public const string CancelBlockedStock = "cancel-blocked-stock";
     }
 
-    /// <summary>Warehouse plus product name, lower-cased and trimmed — the key stock is counted by.</summary>
-    private static string StockKey(string warehouseId, string product) =>
-        $"{warehouseId}::{product.Trim().ToLowerInvariant()}";
-
     public async Task<List<InventoryDocument>> ListAsync(CancellationToken cancellationToken = default) =>
         await db.InventoryDocuments
             .Include(d => d.Items)
@@ -48,26 +44,9 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
     ///
     /// <para>CONFIRMED only: a cancelled document never moved any metal.</para>
     /// </summary>
-    public async Task<Dictionary<string, decimal>> StockAsync(CancellationToken cancellationToken = default)
-    {
-        var docs = await db.InventoryDocuments
-            .Where(d => d.Status == DocumentStatus.CONFIRMED)
-            .Include(d => d.Items)
-            .ToListAsync(cancellationToken);
-
-        var stock = new Dictionary<string, decimal>(StringComparer.Ordinal);
-        foreach (var doc in docs)
-        {
-            var sign = doc.Type == InventoryDocType.IN ? 1m : -1m;
-            foreach (var item in doc.Items)
-            {
-                var key = StockKey(doc.WarehouseId, item.Product);
-                stock[key] = Rounding.Money(stock.GetValueOrDefault(key) + (sign * item.QuantityMt));
-            }
-        }
-
-        return stock;
-    }
+    public async Task<Dictionary<string, decimal>> StockAsync(CancellationToken cancellationToken = default) =>
+        (await ledger.PositionsAsync(cancellationToken))
+            .ToDictionary(p => p.Key, p => p.Value.QuantityMt, StringComparer.Ordinal);
 
     public async Task<InventoryDocument> CreateAsync(
         InventoryDocInput input, CancellationToken cancellationToken = default)
@@ -106,9 +85,14 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
 
         var byRefId = invoice.Items.ToDictionary(i => i.ReferenceDocumentItemId, StringComparer.Ordinal);
         var used = await UsedByReferenceAsync(cancellationToken);
-        var stock = input.Type == InventoryDocType.OUT
-            ? await StockAsync(cancellationToken)
+
+        // One fold for an OUT document, not two: `stock`'s running quantities are derived from
+        // the same `positions` the cost lookup below reads, instead of each calling the ledger
+        // on its own.
+        var positions = input.Type == InventoryDocType.OUT
+            ? await ledger.PositionsAsync(cancellationToken)
             : null;
+        var stock = positions?.ToDictionary(p => p.Key, p => p.Value.QuantityMt, StringComparer.Ordinal);
 
         var docId = await NextIdAsync(cancellationToken);
         var lines = new List<InventoryDocumentItem>();
@@ -144,19 +128,35 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
 
             if (stock is not null)
             {
-                var key = StockKey(warehouse.Id, invoiceItem.Product);
+                var key = StockLedger.Key(warehouse.Id, invoiceItem.Product);
                 var available = stock.GetValueOrDefault(key);
                 if (line.QuantityMt > available)
                 {
                     throw new DomainException(Codes.InsufficientStock, new Dictionary<string, object?>
                     {
                         ["product"] = invoiceItem.Product,
-                        ["available"] = Rounding.Money(Math.Max(available, 0m)),
+                        ["available"] = Rounding.Quantity(Math.Max(available, 0m)),
                     });
                 }
 
                 // Same running rule, for the same reason.
-                stock[key] = Rounding.Money(available - line.QuantityMt);
+                stock[key] = Rounding.Quantity(available - line.QuantityMt);
+            }
+
+            decimal unitCost;
+            if (input.Type == InventoryDocType.IN)
+            {
+                // What was paid per tonne, in USD: the line's value in invoice currency, divided by
+                // the header rate, divided by the line's quantity. A line priced at 0 (an unpriced
+                // floating line) receives at 0 and shows as "cost unknown" until it is priced.
+                unitCost = invoiceItem.QuantityMt == 0m
+                    ? 0m
+                    : Rounding.Rate(invoiceItem.Amount / invoice.ExchangeRate / invoiceItem.QuantityMt);
+            }
+            else
+            {
+                unitCost = positions!.GetValueOrDefault(
+                    StockLedger.Key(warehouse.Id, invoiceItem.Product), new StockPosition(0m, 0m)).AverageUnitCost;
             }
 
             lines.Add(new InventoryDocumentItem
@@ -169,6 +169,8 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
                 // must not move metal between piles.
                 Product = invoiceItem.Product,
                 QuantityMt = Rounding.Quantity(line.QuantityMt),
+                UnitCostUsd = unitCost,
+                CostUsd = Rounding.Money(unitCost * Rounding.Quantity(line.QuantityMt)),
             });
         }
 
@@ -220,7 +222,7 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
             var stock = await StockAsync(cancellationToken);
             foreach (var item in doc.Items)
             {
-                var key = StockKey(doc.WarehouseId, item.Product);
+                var key = StockLedger.Key(doc.WarehouseId, item.Product);
                 var current = stock.GetValueOrDefault(key);
                 if (current - item.QuantityMt < 0m)
                 {
@@ -230,7 +232,7 @@ public sealed class WarehouseDocumentService(ErpDbContext db)
                     });
                 }
 
-                stock[key] = Rounding.Money(current - item.QuantityMt);
+                stock[key] = Rounding.Quantity(current - item.QuantityMt);
             }
         }
 

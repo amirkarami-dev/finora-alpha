@@ -53,6 +53,10 @@ public sealed class ErpDbContext(DbContextOptions<ErpDbContext> options) : DbCon
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
     public DbSet<InventoryDocument> InventoryDocuments => Set<InventoryDocument>();
     public DbSet<InventoryDocumentItem> InventoryDocumentItems => Set<InventoryDocumentItem>();
+    public DbSet<ConversionDocument> ConversionDocuments => Set<ConversionDocument>();
+    public DbSet<ConversionInput> ConversionInputs => Set<ConversionInput>();
+    public DbSet<ConversionOutput> ConversionOutputs => Set<ConversionOutput>();
+    public DbSet<ConversionCost> ConversionCosts => Set<ConversionCost>();
 
     // Money
     public DbSet<Payment> Payments => Set<Payment>();

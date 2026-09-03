@@ -77,7 +77,9 @@ The session is an **HttpOnly cookie**, not a token — nothing in the browser ca
 nothing is persisted client-side. Permissions come from `/api/identity/me` on every load, so the
 sidebar and route guards show what the server actually granted rather than what a table in the
 bundle claims. The demo passwords only seed in development; production requires
-`Identity:SeedPasswords:<email>` or the account is created unusable.
+`Identity:SeedPasswords:<email>` or the account is created unusable. Not every permission is a
+route key: `conversions.confirm` (Manager only) gates just the Confirm button on a conversion
+document — create/edit/cancel/list stay on the existing `warehouse` key.
 
 ## Tech stack
 
@@ -105,7 +107,7 @@ src/
 │   ├── snapshot.ts                     # boot hydration from /api/erp/snapshot (strangler seam)
 │   ├── identity.ts                     # sign-in, /api/identity/me permissions
 │   └── {contracts,invoices,payments,containers,warehouseDocs,charges,claims,
-│        transfers,exchangeGainLoss,masterData,users}.ts   # per-feature endpoints
+│        transfers,exchangeGainLoss,masterData,users,conversions}.ts   # per-feature endpoints
 ├── store/                              # zustand: useUiStore, useAuthStore, useSettingsStore
 ├── theme/tokens.ts                     # AntD light/dark design tokens
 ├── types/index.ts                      # domain types
@@ -121,6 +123,11 @@ Customer 1─* Payment
 
 An **Item (goods)** carries: `quantityMt`, `lmePercent`, `lmeFixed`,
 `fixedLmePrice`, `premium`, `incoterm`, `status`, `notes`, `remainingMt`.
+
+Conversion documents (Warehouse › Conversions) turn stock of one product into others inside a
+warehouse and carry the cost: every receipt, issue, conversion input and output stores its cost
+per MT; `StockLedger` folds quantity and value per (warehouse, product). See
+`docs/superpowers/specs/2026-09-03-warehouse-conversion-design.md`.
 
 **Pricing** (in `apps/erp-panel/src/utils/calc.ts`, validated against real workbook figures):
 
@@ -205,7 +212,8 @@ Paths relative to `apps/erp-panel/`:
 
 **Done & verified** (build + lint clean, smoke-tested): landing, login, dashboard,
 persons (+detail +ledger), contracts (+goods +containers), containers, warehouse
-documents, purchase/sale documents (six types with the conversion chain), payments
+documents, warehouse conversions (inputs/outputs/costs, stock and cost of sales),
+purchase/sale documents (six types with the conversion chain), payments
 (header + lines + allocations), cheques, transfers, expenses/revenues, claims,
 exchange gain/loss, base info, five report tabs with real `.xlsx` export, settings,
 customer portal, executive dashboard; dark/light; en/ar/fa/ku + RTL; responsive; RBAC

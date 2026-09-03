@@ -52,6 +52,11 @@ public sealed class SnapshotService(ErpDbContext db)
                 .Include(d => d.Items)
                 .ToListAsync(cancellationToken),
 
+            Conversions = await db.ConversionDocuments.AsNoTracking()
+                .Include(c => c.Inputs).Include(c => c.Outputs).Include(c => c.Costs)
+                .OrderBy(c => c.Id)
+                .ToListAsync(cancellationToken),
+
             Payments = LegacyShape(await db.Payments.AsNoTracking()
                 .Include(p => p.Items!).ThenInclude(i => i.Allocations)
                 .ToListAsync(cancellationToken)),
@@ -199,6 +204,7 @@ public sealed class SnapshotService(ErpDbContext db)
         await db.SaveChangesAsync(cancellationToken);
 
         db.InventoryDocuments.AddRange(snapshot.InventoryDocs);
+        db.ConversionDocuments.AddRange(snapshot.Conversions);
         db.Payments.AddRange(snapshot.Payments);
         db.MoneyTransfers.AddRange(snapshot.MoneyTransfers);
         db.ChargeDocs.AddRange(snapshot.ChargeDocs);
@@ -253,6 +259,11 @@ public sealed class SnapshotService(ErpDbContext db)
     {
         // Children first, then parents. ExecuteDelete issues one statement per table rather
         // than loading every row to delete it.
+        //
+        // ConversionDocuments references Warehouse, and ConversionCosts references ChargeCategory
+        // and Customer — all Restrict — so the conversion tables go first; their own children
+        // (Inputs, Outputs, Costs) cascade from the document delete.
+        await db.ConversionDocuments.ExecuteDeleteAsync(cancellationToken);
         await db.ClaimItems.ExecuteDeleteAsync(cancellationToken);
         await db.Claims.ExecuteDeleteAsync(cancellationToken);
         await db.ChargeAllocations.ExecuteDeleteAsync(cancellationToken);
