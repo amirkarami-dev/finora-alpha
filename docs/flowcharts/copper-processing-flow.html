@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copper Processing Flow</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 14mm; }
+  :root { --ink:#222; --muted:#666; --line:#444; --brand:#b87333; --brand-bg:#f6ebe0; --data-bg:#e9f0fb; --ok-bg:#e6f4ec; --warn-bg:#fff6df; --bad-bg:#fdeaea; --grey-bg:#f1f1f1; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body { font-family:"Segoe UI",Arial,Helvetica,sans-serif; color:var(--ink); background:#dedede; font-size:10pt; line-height:1.35; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .page { width:182mm; min-height:273mm; background:#fff; margin:8mm auto; padding:10mm 12mm; box-shadow:0 2px 10px rgba(0,0,0,.18); display:flex; flex-direction:column; page-break-after:always; break-after:page; }
+  .page:last-child { page-break-after:auto; break-after:auto; }
+  @media print { body{background:#fff} .page{width:auto;margin:0;padding:0;box-shadow:none;min-height:0;height:270mm;overflow:hidden} .print-btn{display:none} }
+  .head { display:flex; justify-content:space-between; align-items:baseline; border-bottom:2px solid var(--brand); padding-bottom:3px; margin-bottom:4mm; }
+  .head h1 { font-size:15pt; margin:0; } .head .num { color:var(--muted); font-size:9pt; }
+  .foot { margin-top:auto; padding-top:3mm; border-top:1px solid #ccc; display:flex; justify-content:space-between; color:var(--muted); font-size:8pt; }
+  h2 { font-size:11pt; margin:3.5mm 0 2mm; color:var(--brand); } h2:first-of-type{margin-top:0}
+  p { margin:0 0 2mm; }
+  .goal { background:var(--brand-bg); border-left:4px solid var(--brand); padding:1.5mm 3mm; margin-bottom:3mm; }
+  .goal b { color:var(--brand); }
+
+  /* the flow: rows = steps, columns = what you do in the app / warehouse / cost */
+  .steps { display:grid; grid-template-columns: 24mm 1.45fr 1fr 1fr; gap:1.5mm 2.5mm; align-items:stretch; }
+  .steps .lh { font-size:8.5pt; text-align:center; background:var(--grey-bg); border-radius:4px; padding:2px; font-weight:bold; }
+  .step { border:1.2px solid var(--brand); border-radius:6px; background:var(--brand-bg); padding:1.5mm; text-align:center; display:flex; flex-direction:column; justify-content:center; }
+  .step b { font-size:10.5pt; } .step small { color:var(--muted); font-size:8pt; }
+  .step.new { border-style:dashed; background:var(--bad-bg); border-color:#c0392b; }
+  .cell { border:1px solid #bbb; border-radius:5px; padding:1.2mm 2mm; font-size:8.5pt; background:#fafafa; }
+  .cell.app { background:#fff; } .cell.wh { background:var(--data-bg); } .cell.cost { background:var(--ok-bg); }
+  .cell .t { font-weight:bold; display:block; margin-bottom:1px; }
+  .cell .lost { color:#b3261e; font-weight:bold; }
+  .where { display:inline-block; background:var(--data-bg); border-radius:4px; padding:0 4px; font-size:8.3pt; }
+  .btn { display:inline-block; background:var(--brand-bg); border:1px solid var(--brand); border-radius:4px; padding:0 5px; font-size:8.3pt; font-weight:bold; }
+  .arrow { grid-column:1 / -1; text-align:center; color:#555; font-size:14pt; line-height:1; margin:-1mm 0; }
+  .arrow::after { content:"\2193"; }
+  table { border-collapse:collapse; width:100%; font-size:9pt; margin:2mm 0; }
+  th, td { border:1px solid #ccc; padding:2px 6px; text-align:left; vertical-align:top; }
+  th { background:var(--grey-bg); } td.r, th.r { text-align:right; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:3mm 6mm; }
+  .box { border:1px solid #ccc; border-radius:5px; padding:2.5mm 3.5mm; background:#fcfcfc; font-size:9.2pt; }
+  .box h3 { margin:0 0 1.5mm; font-size:10pt; } .box ul { margin:0; padding-left:4mm; } .box li { margin-bottom:1mm; }
+  .box.tip { background:var(--ok-bg); border-color:#9fcdb0; } .box.warn { background:var(--warn-bg); border-color:#e6c66d; }
+  .p2 table { font-size:8.5pt; } .p2 th, .p2 td { padding:1px 5px; } .p2 .box { font-size:8.8pt; } .p2 h2 { margin:2.5mm 0 1.5mm; } .p2 p { margin-bottom:1.5mm; }
+  .yes { color:#1b7f3b; font-weight:bold; } .no { color:#b3261e; font-weight:bold; }
+  .print-btn { position:fixed; top:10px; right:14px; z-index:9; background:var(--brand); color:#fff; border:0; border-radius:6px; padding:8px 14px; font-size:11pt; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">🖨 Print (A4)</button>
+
+<!-- ============================================================ PAGE 1: THE FLOW IN THE APP -->
+<section class="page">
+  <div class="head"><h1>Copper cable → ingot → sale, in Jalil-Jalal</h1><span class="num">the flow, step by step</span></div>
+  <div class="goal"><b>The one rule:</b> the money you paid never disappears with the lost weight. $10,000 stays $10,000 and moves onto fewer tons, so the cost per MT goes up at every step. The app counts in metric tons (MT): 1,000 kg = 1.000 MT.</div>
+
+  <div class="steps">
+    <div></div>
+    <div class="lh">What you do in the app</div>
+    <div class="lh">Warehouse (MT)</div>
+    <div class="lh">Cost</div>
+
+    <div class="step"><b>0 · Set up</b><small>once</small></div>
+    <div class="cell app"><span class="where">Base Info › Goods</span> → three goods: <b>Copper cable</b>, <b>Stripped copper</b>, <b>Copper ingot</b> (metal COPPER; forms SCRAP / SCRAP / INGOT).<br><span class="where">Persons</span> → the supplier and the buyer. <span class="where">Warehouse</span> → Main Warehouse.</div>
+    <div class="cell wh">Three different stock items. Cable is not copper; copper is not ingot.</div>
+    <div class="cell cost">Each item will carry its own cost per MT.</div>
+
+    <div class="arrow"></div>
+
+    <div class="step"><b>1 · Buy</b><small>works today</small></div>
+    <div class="cell app"><span class="where">Contracts</span> → purchase contract with the supplier, goods line Copper cable 1.000 MT, price $10,000 / MT.<br><span class="where">Purchase › Invoices</span> → <span class="btn">New invoice</span>, add the line, <span class="btn">Confirm</span> → choose Main Warehouse.</div>
+    <div class="cell wh"><span class="t">IN: Copper cable 1.000 MT</span>Receipt <b>GRN-2026-0001</b> made by the confirm.</div>
+    <div class="cell cost"><span class="t">$10,000 total</span>$10,000 / 1.000 MT = <b>$10,000 / MT</b><br>Supplier balance: you owe $10,000.</div>
+
+    <div class="arrow"></div>
+
+    <div class="step new"><b>2 · Strip</b><small>not in the app yet</small></div>
+    <div class="cell app"><span class="no">Missing:</span> a <b>Conversion document</b> in Warehouse: OUT Copper cable 1.000 MT → IN Stripped copper 0.650 MT.<br>Stripping labour, if any: <span class="where">Expenses</span> → general expense (today) — later, a cost line on the conversion.</div>
+    <div class="cell wh"><span class="t">OUT: Copper cable 1.000 MT</span><span class="t">IN: Stripped copper 0.650 MT</span><span class="lost">Insulation 0.350 MT</span> — waste, not stock</div>
+    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.650 MT = <b>$15,385 / MT</b><br>Yield 65 %.</div>
+
+    <div class="arrow"></div>
+
+    <div class="step new"><b>3 · Melt</b><small>not in the app yet</small></div>
+    <div class="cell app"><span class="no">Missing:</span> second <b>Conversion document</b>: OUT Stripped copper 0.650 MT → IN Copper ingot 0.600 MT. Gas and labour as a cost line.</div>
+    <div class="cell wh"><span class="t">OUT: Stripped copper 0.650 MT</span><span class="t">IN: Copper ingot 0.600 MT</span><span class="lost">Melting loss 0.050 MT</span> — gone</div>
+    <div class="cell cost"><span class="t">Still $10,000</span>$10,000 / 0.600 MT = <b>$16,667 / MT</b><br>Yield 92 %.</div>
+
+    <div class="arrow"></div>
+
+    <div class="step"><b>4 · Sell</b><small>works today</small></div>
+    <div class="cell app"><span class="where">Contracts</span> → sell contract with the buyer, goods line Copper ingot 0.600 MT, e.g. $20,000 / MT.<br><span class="where">Sale › Invoices</span> → <span class="btn">New invoice</span>, <span class="btn">Confirm</span> → choose Main Warehouse. The app checks the stock of Copper ingot.</div>
+    <div class="cell wh"><span class="t">OUT: Copper ingot 0.600 MT</span>Issue <b>GDN-2026-0001</b> made by the confirm. Ingot stock → 0.</div>
+    <div class="cell cost"><span class="t">Sale $12,000</span>Buyer balance: owes you $12,000.<br>Cost of the copper sold: $10,000 → <b>profit $2,000</b>.</div>
+  </div>
+
+  <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 1 / 3</span></div>
+</section>
+
+<!-- ============================================================ PAGE 2: TODAY, COSTS, WHAT TO ADD -->
+<section class="page p2">
+  <div class="head"><h1>Stock items, and what works today</h1><span class="num">page 2</span></div>
+  <h2>Three stock items, one cost</h2>
+  <table>
+    <tr><th>Item (Base Info › Goods)</th><th class="r">MT</th><th class="r">Total cost</th><th class="r">Cost / MT</th><th>What happened to the weight</th></tr>
+    <tr><td>Copper cable (bought)</td><td class="r">1.000</td><td class="r">$10,000</td><td class="r">$10,000</td><td>—</td></tr>
+    <tr><td>Stripped copper</td><td class="r">0.650</td><td class="r">$10,000</td><td class="r">$15,385</td><td>0.350 MT insulation removed (35 %)</td></tr>
+    <tr><td>Copper ingot</td><td class="r">0.600</td><td class="r">$10,000</td><td class="r">$16,667</td><td>0.050 MT lost in melting (7.7 %)</td></tr>
+    <tr><td>Sold</td><td class="r">0.600</td><td class="r">$10,000 cost</td><td class="r">$16,667</td><td>sold at $20,000 / MT → profit $2,000</td></tr>
+  </table>
+
+  <h2>In the app today</h2>
+  <table>
+    <tr><th>Step</th><th style="white-space:nowrap">App today?</th><th>Detail</th></tr>
+    <tr><td>0 · Three goods, persons, warehouse</td><td class="yes">Yes</td><td>Base Info › Goods, Persons, Warehouse › Warehouses.</td></tr>
+    <tr><td>1 · Buy cable into the warehouse</td><td class="yes">Yes</td><td>Purchase invoice → Confirm → GRN. The invoice line carries the price per MT.</td></tr>
+    <tr><td>2 · Strip, 3 · Melt</td><td class="no">Not yet</td><td>No conversion document. Warehouse › New receipt / New issue always need a confirmed invoice behind them, so stock cannot change from one item to another, and no cost per MT is kept per stock item.</td></tr>
+    <tr><td>4 · Sell ingot from the warehouse</td><td class="no">Blocked</td><td>Sale invoice → Confirm checks the stock of <b>Copper ingot</b>, which is 0 — the app answers "insufficient stock". It only passes if you sell under the item you bought (Copper cable).</td></tr>
+    <tr><td>Profit per batch</td><td class="no">Partly</td><td>Sale and purchase are on the persons' ledgers; workshop costs can go in as Expenses. But the app cannot say "this ingot cost $16,667 / MT".</td></tr>
+  </table>
+
+  <h2>Until the feature exists — a safe way to work</h2>
+  <div class="two">
+    <div class="box warn"><h3>In the app</h3><ul>
+      <li>Record the purchase (step 1) exactly as on page 1.</li>
+      <li>Sell under the same item you bought: sale invoice line <b>Copper cable 0.600 MT</b>, description "delivered as ingot". The stock check passes. 0.400 MT of cable stays in stock as a ghost — write it off when the conversion feature arrives.</li>
+      <li>Workshop costs: <span class="where">Expenses › General</span>, category "Processing".</li>
+    </ul></div>
+    <div class="box"><h3>On a sheet, per batch</h3><ul>
+      <li>Cable MT and $, stripped MT, ingot MT, added costs, sale $. The tables on these pages are that sheet.</li>
+      <li>This gives the true cost / MT and the batch profit until the app can do it.</li>
+    </ul></div>
+  </div>
+
+  <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 2 / 3</span></div>
+</section>
+
+<section class="page p2">
+  <div class="head"><h1>Extra costs, and the feature to add</h1><span class="num">page 3</span></div>
+
+  <h2>If the workshop has its own costs (usual case)</h2>
+  <p>Stripping and melting cost money too: workers, electricity, gas. Add them to the copper at the step where they happen — into the stock, not into expenses, until the copper is sold.</p>
+  <table>
+    <tr><th>Step</th><th class="r">Cost in</th><th class="r">Added</th><th class="r">Cost out</th><th class="r">MT out</th><th class="r">Cost / MT</th></tr>
+    <tr><td>Buy cable</td><td class="r">—</td><td class="r">$10,000</td><td class="r">$10,000</td><td class="r">1.000</td><td class="r">$10,000</td></tr>
+    <tr><td>Strip (labour $500)</td><td class="r">$10,000</td><td class="r">$500</td><td class="r">$10,500</td><td class="r">0.650</td><td class="r">$16,154</td></tr>
+    <tr><td>Melt (gas + labour $800)</td><td class="r">$10,500</td><td class="r">$800</td><td class="r">$11,300</td><td class="r">0.600</td><td class="r">$18,833</td></tr>
+    <tr><td>Sell 0.600 MT at $20,000</td><td class="r">$11,300</td><td class="r">—</td><td class="r">$12,000 sale</td><td class="r">0.600</td><td class="r"><b>profit $700</b></td></tr>
+  </table>
+  <p>Insulation sold as scrap (say $200)? Take it off the copper: stripped copper = $9,800 → $15,077 / MT. Or book it as a revenue and leave the copper at $10,000. Both are fine — pick one and keep it.</p>
+
+  <h2>The feature to add: a Conversion document</h2>
+  <div class="two">
+    <div class="box tip"><h3>Where and what</h3><ul>
+      <li><span class="where">Warehouse</span> → new tab <b>Conversions</b>, numbers <b>CNV-2026-0001</b>. Fields: warehouse, date, <b>OUT lines</b> (goods, MT), <b>IN lines</b> (goods, MT), <b>added costs</b> (amount, currency, category, person), notes.</li>
+      <li>Status DRAFT → CONFIRMED → CANCELLED, like every other document.</li>
+      <li>Confirm checks the stock of each OUT line; after that, stock = Σ IN − Σ OUT includes conversions.</li>
+      <li>Shows <b>yield</b> (IN MT ÷ OUT MT) and the new <b>cost / MT</b>.</li>
+    </ul></div>
+    <div class="box tip"><h3>What it needs underneath</h3><ul>
+      <li>A <b>cost per MT</b> on every stock item per warehouse (moving average). A purchase invoice sets it from the line price; a conversion moves the whole OUT cost plus added costs onto the IN lines.</li>
+      <li>A sale invoice then reads the cost of the goods it issues → <b>cost of sales</b> and profit per invoice, on the Trade report.</li>
+      <li>Staff can create conversions; a Manager confirms — the same pattern as the money pages.</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>Jalil-Jalal · Copper processing flow</span><span>Page 3 / 3</span></div>
+</section>
+</body>
+</html>
