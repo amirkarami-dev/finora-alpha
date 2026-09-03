@@ -436,6 +436,9 @@ export interface Warehouse {
 
 export type InventoryDocType = 'IN' | 'OUT';
 
+/** A conversion is edited as a DRAFT, moves stock and cost when CONFIRMED, cancelled not deleted. */
+export type ConversionStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+
 export interface InventoryDocument {
   id: string;
   docNumber: string;        // 'GRN-2026-0001' (IN) / 'GDN-2026-0001' (OUT)

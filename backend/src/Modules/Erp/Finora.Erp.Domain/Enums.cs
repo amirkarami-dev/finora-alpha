@@ -207,6 +207,17 @@ public enum DocumentStatus
     CANCELLED,
 }
 
+/// <summary>A conversion is edited as a DRAFT, moves stock and cost when CONFIRMED, and is
+/// CANCELLED rather than deleted. Its own enum: <see cref="DocumentStatus"/> has no DRAFT and
+/// backs a CHECK constraint on receipts and issues that must not widen.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ConversionStatus>))]
+public enum ConversionStatus
+{
+    DRAFT,
+    CONFIRMED,
+    CANCELLED,
+}
+
 /// <summary>Shared by charge documents and claims — both are ACTIVE until cancelled, and neither
 /// is ever deleted, because a financial record that vanishes is worse than one marked void.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<RecordStatus>))]

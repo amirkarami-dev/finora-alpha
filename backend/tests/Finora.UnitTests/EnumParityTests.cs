@@ -38,6 +38,7 @@ public sealed partial class EnumParityTests
         { "ChequeStatus", EnumNames.Of<ChequeStatus>().ToArray() },
         { "InvoiceType", EnumNames.Of<InvoiceType>().ToArray() },
         { "InvoiceStatus", EnumNames.Of<InvoiceStatus>().ToArray() },
+        { "ConversionStatus", EnumNames.Of<ConversionStatus>().ToArray() },
         { "InvoiceSide", EnumNames.Of<InvoiceSide>().ToArray() },
         { "InventoryDocType", EnumNames.Of<InventoryDocType>().ToArray() },
         { "FinancialAccountType", EnumNames.Of<FinancialAccountType>().ToArray() },
