@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Finora.Erp.Domain;
 using Finora.Erp.Infrastructure.Snapshot;
+using Finora.Erp.Infrastructure.Trade;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,7 +53,9 @@ public sealed class WarehouseDocumentTests(ApiFixture fixture)
             ],
             Invoices =
             [
-                Doc("inv-pi-0001", "PI-2026-0001", InvoiceType.PURCHASE_INVOICE, "pref-1"),
+                // Priced at 1,000,000 USD for the 100 MT line — 10,000 USD/MT — so a receipt
+                // against it has a price to read.
+                Doc("inv-pi-0001", "PI-2026-0001", InvoiceType.PURCHASE_INVOICE, "pref-1", amount: 1_000_000m),
                 Doc("inv-si-0001", "SI-2026-0001", InvoiceType.SALE_INVOICE, "sref-1"),
                 // An ORDER is a promise, not a shipment — nothing may be received against it.
                 Doc("inv-po-0001", "PO-2026-0001", InvoiceType.PURCHASE_ORDER, "oref-1"),
@@ -60,16 +63,18 @@ public sealed class WarehouseDocumentTests(ApiFixture fixture)
         });
     }
 
-    private static Invoice Doc(string id, string number, InvoiceType type, string refId) => new()
+    private static Invoice Doc(string id, string number, InvoiceType type, string refId, decimal amount = 0m) => new()
     {
         Id = id, InvoiceNumber = number, InvoiceType = type,
         Status = InvoiceStatus.CONFIRMED, ContractId = "ctr-1", CustomerId = "cust-am",
+        Currency = Currency.USD, ExchangeRate = 1m,
         Items =
         [
             new InvoiceItem
             {
                 Id = $"invitem-{refId}", InvoiceId = id, ContractItemId = "item-1",
                 Product = Copper, QuantityMt = 100m, ReferenceDocumentItemId = refId,
+                Amount = amount,
             },
         ],
     };
@@ -332,5 +337,56 @@ public sealed class WarehouseDocumentTests(ApiFixture fixture)
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         client.Dispose();
+    }
+
+    /* ---------------------------------- Cost ----------------------------------- */
+
+    [Fact]
+    public async Task A_receipt_stores_the_invoice_price_per_mt_and_an_issue_stores_the_average()
+    {
+        await ResetAsync();
+        var c = await AsManagerAsync(fixture);
+
+        var receipt = await c.PostAsJsonAsync(new Uri("/api/erp/inventory-documents", UriKind.Relative), new
+        {
+            type = "IN", warehouseId = "wh-1", invoiceId = "inv-pi-0001", date = Date,
+            items = new[] { new { referenceDocumentItemId = "pref-1", quantityMt = 100m } },
+        });
+        receipt.EnsureSuccessStatusCode();
+        var grn = (await receipt.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity");
+        var grnLine = grn.GetProperty("items")[0];
+        Assert.Equal(10000m, grnLine.GetProperty("unitCostUsd").GetDecimal());
+        Assert.Equal(1_000_000m, grnLine.GetProperty("costUsd").GetDecimal());
+
+        var issue = await c.PostAsJsonAsync(new Uri("/api/erp/inventory-documents", UriKind.Relative), new
+        {
+            type = "OUT", warehouseId = "wh-1", invoiceId = "inv-si-0001", date = Date,
+            items = new[] { new { referenceDocumentItemId = "sref-1", quantityMt = 40m } },
+        });
+        issue.EnsureSuccessStatusCode();
+        var gdnLine = (await issue.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(10000m, gdnLine.GetProperty("unitCostUsd").GetDecimal());
+        Assert.Equal(400_000m, gdnLine.GetProperty("costUsd").GetDecimal());
+    }
+
+    [Fact]
+    public async Task The_ledger_folds_value_as_well_as_quantity()
+    {
+        await ResetAsync();
+        var c = await AsManagerAsync(fixture);
+        (await c.PostAsJsonAsync(new Uri("/api/erp/inventory-documents", UriKind.Relative), new
+        {
+            type = "IN", warehouseId = "wh-1", invoiceId = "inv-pi-0001", date = Date,
+            items = new[] { new { referenceDocumentItemId = "pref-1", quantityMt = 100m } },
+        })).EnsureSuccessStatusCode();
+
+        using var scope = fixture.Services.CreateScope();
+        var ledger = scope.ServiceProvider.GetRequiredService<StockLedger>();
+        var positions = await ledger.PositionsAsync();
+        var position = positions[StockLedger.Key("wh-1", Copper)];
+
+        Assert.Equal(100m, position.QuantityMt);
+        Assert.Equal(1_000_000m, position.ValueUsd);
+        Assert.Equal(10000m, position.AverageUnitCost);
     }
 }
