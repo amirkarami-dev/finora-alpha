@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ar';
 import 'dayjs/locale/fa';
+import '@/i18n/dayjs-ku';
 import { useUiStore } from '@/store/useUiStore';
 import { LOCALES } from '@/config/constants';
 

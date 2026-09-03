@@ -141,6 +141,18 @@ export const LOCALES: Record<Locale, LocaleMeta> = {
     antdLocale: 'fa_IR',
     dayjsLocale: 'fa',
   },
+  ku: {
+    code: 'ku',
+    label: 'کوردی',
+    englishLabel: 'Kurdish (Sorani)',
+    dir: 'rtl',
+    // No Kurdistan flag emoji exists; the Kurdish sun stands in.
+    flag: '☀️',
+    // Neither AntD nor dayjs ships a Sorani locale (their `ku` is Kurmanji in Latin script), so
+    // both are app-defined: `src/i18n/antd-ku.ts` and `src/i18n/dayjs-ku.ts` register 'ku'.
+    antdLocale: 'ku',
+    dayjsLocale: 'ku',
+  },
 };
 
 export const SUPPORTED_LOCALES = Object.keys(LOCALES) as Locale[];

@@ -4,7 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarNav } from './SidebarNav';
 import { AppHeader } from './AppHeader';
 import { SyncAlert } from './SyncAlert';
-import { useUiStore } from '@/store/useUiStore';
+import { useUiStore, isRtl as isRtlLocale } from '@/store/useUiStore';
 
 const { Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -19,7 +19,7 @@ export function AppLayout() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const locale = useUiStore((s) => s.locale);
   const themeMode = useUiStore((s) => s.theme);
-  const isRtl = locale === 'ar' || locale === 'fa';
+  const isRtl = isRtlLocale(locale);
   // The sidebar follows the theme: white rail in light, dark navy in dark.
   const siderBg = themeMode === 'dark' ? '#0d1626' : '#ffffff';
 

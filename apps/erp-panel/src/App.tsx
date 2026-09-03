@@ -4,6 +4,7 @@ import { ConfigProvider, App as AntdApp } from 'antd';
 import enUS from 'antd/locale/en_US';
 import arEG from 'antd/locale/ar_EG';
 import faIR from 'antd/locale/fa_IR';
+import kuIQ from '@/i18n/antd-ku';
 import type { Locale as AntdLocale } from 'antd/es/locale';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes';
@@ -19,6 +20,7 @@ const ANTD_LOCALES: Record<string, AntdLocale> = {
   en: enUS,
   ar: arEG,
   fa: faIR,
+  ku: kuIQ,
 };
 
 function ThemedApp() {
