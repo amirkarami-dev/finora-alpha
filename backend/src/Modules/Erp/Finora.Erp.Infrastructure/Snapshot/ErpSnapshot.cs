@@ -34,6 +34,8 @@ public sealed record ErpSnapshot
     /// <summary>Named <c>inventoryDocs</c> on the client, not <c>inventoryDocuments</c>.</summary>
     public IReadOnlyList<InventoryDocument> InventoryDocs { get; init; } = [];
 
+    public IReadOnlyList<ConversionDocument> Conversions { get; init; } = [];
+
     public IReadOnlyList<CostCentre> CostCentres { get; init; } = [];
     public IReadOnlyList<ChargeCategory> ChargeCategories { get; init; } = [];
     public IReadOnlyList<ChargeDoc> ChargeDocs { get; init; } = [];

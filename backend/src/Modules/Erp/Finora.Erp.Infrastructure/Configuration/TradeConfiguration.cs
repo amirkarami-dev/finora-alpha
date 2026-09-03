@@ -261,6 +261,8 @@ internal sealed class InventoryDocumentItemConfiguration : IEntityTypeConfigurat
         builder.Property(i => i.ReferenceDocumentItemId).HasIdColumn();
         builder.Property(i => i.Product).HasMaxLength(200).IsRequired();
         builder.Property(i => i.QuantityMt).HasQuantityColumn();
+        builder.Property(i => i.UnitCostUsd).HasUnitPriceColumn();
+        // CostUsd is money: the (18, 2) convention default applies.
 
         builder.HasOne(i => i.Document).WithMany(d => d!.Items)
             .HasForeignKey(i => i.DocumentId).OnDelete(DeleteBehavior.Cascade);

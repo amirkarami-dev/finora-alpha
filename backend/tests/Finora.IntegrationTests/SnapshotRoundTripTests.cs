@@ -139,6 +139,43 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task A_conversion_survives_the_round_trip_with_its_three_line_kinds()
+    {
+        using var scope = fixture.Services.CreateScope();
+        var snapshots = scope.ServiceProvider.GetRequiredService<SnapshotService>();
+
+        var snapshot = new ErpSnapshot
+        {
+            Warehouses = [new Warehouse { Id = "wh-1", Name = "Main", Code = "1" }],
+            Customers = [new Customer { Id = "cust-1", Name = "Workshop", Code = "1" }],
+            ChargeCategories = [new ChargeCategory { Id = "ccat-0001", Name = "Processing", Code = "1", Direction = ChargeDirection.EXPENSE, Scope = ChargeScope.GENERAL }],
+            Conversions =
+            [
+                new ConversionDocument
+                {
+                    Id = "cnv-0001", DocNumber = "CNV-2026-0001", WarehouseId = "wh-1",
+                    Date = DateTimeOffset.Parse("2026-09-03T00:00:00Z"), Status = ConversionStatus.CONFIRMED,
+                    TotalInputCostUsd = 10000m, TotalAddedCostUsd = 500m,
+                    CreatedAt = DateTimeOffset.Parse("2026-09-03T00:00:00Z"),
+                    Inputs = [new ConversionInput { Id = "cnvin-1", DocumentId = "cnv-0001", Product = "Copper cable", QuantityMt = 1m, UnitCostUsd = 10000m, CostUsd = 10000m }],
+                    Outputs = [new ConversionOutput { Id = "cnvout-1", DocumentId = "cnv-0001", Product = "Stripped copper", QuantityMt = 0.65m, UnitCostUsd = 16153.85m, CostUsd = 10500m }],
+                    Costs = [new ConversionCost { Id = "cnvcost-1", DocumentId = "cnv-0001", CategoryId = "ccat-0001", PersonId = "cust-1", Amount = 500m, Currency = Currency.USD, FxRate = 1m, AmountUsd = 500m }],
+                },
+            ],
+        };
+
+        await snapshots.ReplaceAsync(snapshot);
+        var back = await snapshots.ReadAsync();
+
+        var cnv = Assert.Single(back.Conversions);
+        Assert.Equal("CNV-2026-0001", cnv.DocNumber);
+        Assert.Single(cnv.Inputs);
+        Assert.Single(cnv.Outputs);
+        Assert.Single(cnv.Costs);
+        Assert.Equal(10500m, cnv.Outputs.Single().CostUsd);
+    }
+
+    [Fact]
     public async Task Replacing_with_nothing_empties_every_table()
     {
         using var scope = fixture.Services.CreateScope();
