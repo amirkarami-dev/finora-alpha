@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type MouseEvent } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { App, Button, Empty, Popconfirm, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined } from '@ant-design/icons';
@@ -258,7 +258,6 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
       key: 'actions',
       width: 230,
       align: 'right',
-      onCell: () => ({ onClick: (e: MouseEvent) => e.stopPropagation() }),
       render: (_, r) => (
         <Space size={4}>
           {r.status === 'DRAFT' && (
@@ -273,7 +272,7 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
               cancelText={t('common.no')}
               onConfirm={() => handleConfirm(r.id)}
             >
-              <Button type="link" size="small">
+              <Button type="link" size="small" loading={confirmMut.isPending} disabled={confirmMut.isPending}>
                 {t('conversions.confirm')}
               </Button>
             </Popconfirm>
@@ -285,7 +284,7 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
               cancelText={t('common.no')}
               onConfirm={() => handleCancel(r.id)}
             >
-              <Button type="link" size="small" danger>
+              <Button type="link" size="small" danger loading={cancelMut.isPending} disabled={cancelMut.isPending}>
                 {t('conversions.cancel')}
               </Button>
             </Popconfirm>

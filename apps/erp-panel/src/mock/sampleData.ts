@@ -772,9 +772,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         quantityMt: it.quantityMt,
         // A receipt's unit cost is the invoice line's own price per MT (warehouse spec §2.2) —
         // the same figure the PI line itself was priced at, since PI-2026-0001 is CONFIRMED with
-        // a real LME quote already applied above.
+        // a real LME quote already applied above. costUsd is unitCostUsd * quantityMt (spec §2.2),
+        // not the invoice line's own amount (which can differ once a discount is applied).
         unitCostUsd: invoiceItemUnitPrice(it) ?? 0,
-        costUsd: invoiceItemAmount(it),
+        costUsd: round((invoiceItemUnitPrice(it) ?? 0) * it.quantityMt),
       })),
     };
     inventoryDocs.push(grn);

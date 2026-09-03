@@ -28,6 +28,7 @@ import {
   useWarehouses,
 } from '@/services/queries';
 import { aedToUsd } from '@/utils/calc';
+import { formatMt } from '@/utils/format';
 import { useDefaultFxRate } from '@/store/useSettingsStore';
 import type { ConversionDocInput, ConversionDocument, Currency } from '@/types';
 
@@ -66,7 +67,9 @@ interface CostRow {
   personId?: string;
   amount?: number;
   currency: Currency;
-  fxRate: number;
+  /** Optional so a cleared `InputNumber` (which reports `null`) never silently becomes 1 on a
+   *  non-USD row — submit refuses an incomplete row instead of guessing a rate. */
+  fxRate?: number;
   description?: string;
 }
 
@@ -178,11 +181,21 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
     [activeWarehouses, warehouses, conversion, t],
   );
 
-  const productOptions = useMemo(() => (goods ?? []).map((g) => ({ value: g.name })), [goods]);
+  const productOptions = useMemo(
+    () => (goods ?? []).filter((g) => g.active).map((g) => ({ value: g.name })),
+    [goods],
+  );
 
-  const activeCategories = useMemo(
-    () => (categoriesRaw ?? []).filter((c) => c.scope === 'GENERAL' && c.active),
+  // The saved-but-since-deactivated fallback pool for the category picker must itself stay
+  // scoped to GENERAL — otherwise an active category outside that scope (never a selectable
+  // option here) would fall into the "(inactive)" branch and be mislabelled.
+  const generalCategories = useMemo(
+    () => (categoriesRaw ?? []).filter((c) => c.scope === 'GENERAL'),
     [categoriesRaw],
+  );
+  const activeCategories = useMemo(
+    () => generalCategories.filter((c) => c.active),
+    [generalCategories],
   );
   const activePersons = useMemo(() => (customersRaw ?? []).filter((c) => c.active), [customersRaw]);
 
@@ -215,19 +228,28 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
     }
 
     const sharesGiven = validOutputs.filter((r) => r.sharePercent !== null && r.sharePercent !== undefined);
-    if (sharesGiven.length > 0 && sharesGiven.length !== validOutputs.length) {
-      message.error(t('conversions.invalidShares'));
-      return;
-    }
-    if (sharesGiven.length > 0 && sharesGiven.length === validOutputs.length) {
+    if (sharesGiven.length > 0) {
       const sum = sharesGiven.reduce((s, r) => s + (r.sharePercent ?? 0), 0);
-      if (Math.abs(sum - 100) > 0.01) {
+      if (sharesGiven.length !== validOutputs.length || Math.abs(sum - 100) > 0.01) {
         message.error(t('conversions.invalidShares'));
         return;
       }
     }
 
-    const validCosts = costRows.filter((r) => r.categoryId && r.personId && (r.amount ?? 0) > 0);
+    // A cost row with nothing filled in is just an unused blank line — drop it. A cost row
+    // that has been *started* (any of category/person/amount set) must be complete, fxRate
+    // included: silently dropping half-filled rows, or letting a cleared non-USD fxRate fall
+    // back to 1, would both quietly change what gets booked.
+    const startedCosts = costRows.filter((r) => r.categoryId || r.personId || (r.amount ?? 0) > 0);
+    for (const r of startedCosts) {
+      const missingCore = !r.categoryId || !r.personId || !((r.amount ?? 0) > 0);
+      const missingFx = r.currency !== 'USD' && !((r.fxRate ?? 0) > 0);
+      if (missingCore || missingFx) {
+        message.error(t('common.required'));
+        return;
+      }
+    }
+    const validCosts = startedCosts;
 
     const input: ConversionDocInput = {
       warehouseId: header.warehouseId!,
@@ -244,7 +266,7 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
         personId: r.personId!,
         amount: r.amount!,
         currency: r.currency,
-        fxRate: r.currency === 'USD' ? 1 : r.fxRate,
+        fxRate: r.currency === 'USD' ? 1 : r.fxRate!,
         description: r.description?.trim() || undefined,
       })),
     };
@@ -265,7 +287,12 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
       else if (code === 'invalid-shares') message.error(t('conversions.invalidShares'));
       else if (code === 'cost-category-invalid') message.error(t('conversions.costCategoryInvalid'));
       else if (code === 'insufficient-stock') {
-        message.error(t('conversions.insufficientStock', { product: error.product, available: error.available }));
+        message.error(
+          t('conversions.insufficientStock', {
+            product: error.product ?? '',
+            available: formatMt(error.available ?? 0),
+          }),
+        );
       } else message.error(t('common.saveFailed'));
     }
   };
@@ -391,7 +418,7 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
           optionFilterProp="label"
           style={{ width: '100%' }}
           placeholder={t('conversions.category')}
-          options={withInactiveFallback(activeCategories, categoriesRaw ?? [], r.categoryId, t('common.inactive'))}
+          options={withInactiveFallback(activeCategories, generalCategories, r.categoryId, t('common.inactive'))}
           value={r.categoryId}
           onChange={(v) => updateCost(r.key, { categoryId: v })}
         />
@@ -452,7 +479,7 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
           style={{ width: '100%' }}
           disabled={r.currency === 'USD'}
           value={r.fxRate}
-          onChange={(v) => updateCost(r.key, { fxRate: v ?? 1 })}
+          onChange={(v) => updateCost(r.key, { fxRate: v ?? undefined })}
         />
       ),
     },
