@@ -67,6 +67,7 @@ import { claimsApi, type ClaimResult } from '@/services/claims';
 import { transfersApi, type TransferResult } from '@/services/transfers';
 import { exchangeGainLossApi, type GainLossResult } from '@/services/exchangeGainLoss';
 import { isServerBacked } from '@/services/snapshot';
+import { nextGoodCode, nextIntegerCode } from '@/utils/numbering';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
 
@@ -1254,7 +1255,6 @@ export async function updateContainer(id: string, input: ContainerInput): Promis
 /* ----------------------------- Customer CRUD ------------------------ */
 export interface CustomerInput {
   name: string;
-  code: string;
   defaultCurrency: Currency;
   customerType: CustomerType;
   contactName?: string;
@@ -1286,9 +1286,8 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
 /** The in-browser implementation, kept as the offline path — see `masterWrite`. */
 async function createCustomerLocal(input: CustomerInput): Promise<Customer> {
   await delay(200);
-  const code = input.code.trim().toUpperCase();
-  const id = `cust-${code.toLowerCase()}`;
-  if (db.customers.some((c) => c.id === id)) throw new Error('duplicate-code');
+  const code = nextIntegerCode(db.customers.map((c) => c.code));
+  const id = `cust-${code}`;
   assignPortalAccount(db.customers, id, input.portalAccount);
   const customer: Customer = {
     id,
@@ -1366,7 +1365,6 @@ async function setCustomerActiveLocal(id: string, active: boolean): Promise<Cust
 /* ----------------------------- Partner CRUD ------------------------- */
 export interface PartnerInput {
   name: string;
-  code: string;
 }
 
 export async function createPartner(input: PartnerInput): Promise<Partner> {
@@ -1380,9 +1378,8 @@ export async function createPartner(input: PartnerInput): Promise<Partner> {
 /** The in-browser implementation, kept as the offline path — see `masterWrite`. */
 async function createPartnerLocal(input: PartnerInput): Promise<Partner> {
   await delay(180);
-  const code = input.code.trim().toUpperCase();
-  const id = `ptnr-${code.toLowerCase()}`;
-  if (db.partners.some((p) => p.id === id)) throw new Error('duplicate-code');
+  const code = nextIntegerCode(db.partners.map((p) => p.code));
+  const id = `ptnr-${code}`;
   const partner: Partner = { id, name: input.name.trim(), code, active: true };
   db.partners.push(partner);
   persistDb();
@@ -1582,35 +1579,6 @@ function findInvoiceOrThrow(id: string): Invoice {
   const invoice = findInvoice(id);
   if (!invoice) throw new Error(`Invoice ${id} not found`);
   return invoice;
-}
-
-const INVOICE_NUMBER_PREFIX: Record<InvoiceType, string> = {
-  PURCHASE_ORDER: 'PO',
-  PURCHASE_PROVISIONAL: 'PP',
-  PURCHASE_INVOICE: 'PI',
-  SALE_ORDER: 'SO',
-  SALE_PROVISIONAL: 'SP',
-  SALE_INVOICE: 'SI',
-};
-
-/** `<PFX>-<YYYY>-<NNNN>`, scan-until-unused against existing numbers of that type (spec §4). */
-function nextInvoiceNumber(type: InvoiceType): string {
-  const prefix = INVOICE_NUMBER_PREFIX[type];
-  const year = TODAY.format('YYYY');
-  const taken = new Set(
-    db.invoices.filter((inv) => inv.invoiceType === type).map((inv) => inv.invoiceNumber),
-  );
-  for (let n = 1; n <= 9999; n++) {
-    const candidate = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${prefix}-${year}-${db.invoices.length + 1}`;
-}
-
-/** Preview the next auto-generated number for a type (used by the create-invoice form). */
-export async function previewInvoiceNumber(type: InvoiceType): Promise<string> {
-  await delay(80);
-  return nextInvoiceNumber(type);
 }
 
 /* --------------------------- Chain helpers --------------------------- */
@@ -1864,7 +1832,6 @@ export interface InvoiceInput {
   invoiceType: InvoiceType;
   contractId: string;
   invoiceDate: string;
-  invoiceNumber?: string;
   currency?: Currency;
   exchangeRate?: number;
   description?: string;
@@ -1875,14 +1842,13 @@ export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
 }
 
 export interface InvoiceHeaderPatch {
-  invoiceNumber?: string;
   invoiceDate?: string;
   currency?: Currency;
   exchangeRate?: number;
   description?: string;
 }
 
-/** DRAFT only. Throws `'duplicate-number'` when the number collides within the same type. */
+/** DRAFT only. The number is assigned by the server and cannot be changed. */
 export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch): Promise<Invoice> {
   return invoiceWrite(() => invoicesApi.updateHeader(id, patch));
 }
@@ -2152,7 +2118,6 @@ export async function markInvoiceSent(id: string): Promise<Invoice> {
 
 export interface WarehouseInput {
   name: string;
-  code: string;
   location?: string;
 }
 
@@ -2167,9 +2132,8 @@ export async function createWarehouse(input: WarehouseInput): Promise<Warehouse>
 /** The in-browser implementation, kept as the offline path — see `masterWrite`. */
 async function createWarehouseLocal(input: WarehouseInput): Promise<Warehouse> {
   await delay(180);
-  const code = input.code.trim().toUpperCase();
-  const id = `wh-${code.toLowerCase()}`;
-  if (db.warehouses.some((w) => w.id === id)) throw new Error('duplicate-code');
+  const code = nextIntegerCode(db.warehouses.map((w) => w.code));
+  const id = `wh-${code}`;
   const warehouse: Warehouse = {
     id,
     name: input.name.trim(),
@@ -2228,7 +2192,6 @@ async function setWarehouseActiveLocal(id: string, active: boolean): Promise<War
 
 export interface CostCentreInput {
   name: string;
-  code: string;
   description?: string;
 }
 
@@ -2257,8 +2220,7 @@ export async function createCostCentre(input: CostCentreInput): Promise<CostCent
 /** The in-browser implementation, kept as the offline path — see `masterWrite`. */
 async function createCostCentreLocal(input: CostCentreInput): Promise<CostCentre> {
   await delay(180);
-  const code = input.code.trim().toUpperCase();
-  if (db.costCentres.some((cc) => cc.code === code)) throw new Error('duplicate-code');
+  const code = nextIntegerCode(db.costCentres.map((cc) => cc.code));
   const costCentre: CostCentre = {
     id: nextCostCentreId(),
     name: input.name.trim(),
@@ -2319,7 +2281,6 @@ async function setCostCentreActiveLocal(id: string, active: boolean): Promise<Co
 
 export interface GoodInput {
   name: string;
-  code: string;
   metalType: MetalType;
   form?: GoodForm;
   unit: GoodUnit;
@@ -2341,7 +2302,7 @@ export async function getGoods(): Promise<Good[]> {
   return [...db.goods];
 }
 
-/** Guards IN ORDER: `name-required` → `code-required` → `duplicate-code` → `duplicate-name`.
+/** Guards IN ORDER: `name-required` → `duplicate-name`.
  *  Name is checked too, not just code: the whole point of this list is one spelling per
  *  product, and `Item.product` matches on the NAME, so two goods named the same defeat it. */
 export async function createGood(input: GoodInput): Promise<Good> {
@@ -2357,12 +2318,10 @@ async function createGoodLocal(input: GoodInput): Promise<Good> {
   await delay(180);
   const name = input.name.trim();
   if (!name) throw new Error('name-required');
-  const code = input.code.trim().toUpperCase();
-  if (!code) throw new Error('code-required');
-  if (db.goods.some((g) => g.code === code)) throw new Error('duplicate-code');
   if (db.goods.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
     throw new Error('duplicate-name');
   }
+  const code = nextGoodCode(input.metalType, db.goods.map((g) => g.code));
   const good: Good = {
     id: nextGoodId(),
     name,
@@ -2380,7 +2339,8 @@ async function createGoodLocal(input: GoodInput): Promise<Good> {
 }
 
 /** Guards IN ORDER: not-found → `name-required` → `duplicate-name` (excluding itself).
- *  `code` is immutable after create, matching `updateCostCentre`/`updateChargeCategory`. */
+ *  `code` and `metalType` are immutable after create, matching
+ *  `updateCostCentre`/`updateChargeCategory`. */
 export async function updateGood(id: string, input: GoodInput): Promise<Good> {
   return masterWrite(
     () => masterData.update<Good>('goods', id, input),
@@ -2400,7 +2360,6 @@ async function updateGoodLocal(id: string, input: GoodInput): Promise<Good> {
     throw new Error('duplicate-name');
   }
   good.name = name;
-  good.metalType = input.metalType;
   good.form = input.form;
   good.unit = input.unit;
   good.hsCode = input.hsCode?.trim() || undefined;
@@ -2597,7 +2556,6 @@ async function setFinancialAccountActiveLocal(id: string, active: boolean): Prom
 
 export interface ChargeCategoryInput {
   name: string;
-  code: string;
   direction: ChargeDirection;
   scope: ChargeScope;
   description?: string;
@@ -2622,11 +2580,9 @@ export async function getChargeCategories(
   );
 }
 
-/** Guards IN ORDER (spec §4): `name-required` → `code-required` → `duplicate-code` (within the
- *  direction). The two required-checks are server-side on purpose — the modal marks both fields
- *  required, but every other master-data guard in this file validates independently of the form,
- *  and without them a blank code stores `code: ''` and the NEXT blank one reports `duplicate-code`
- *  ("this code is already in use") against an empty field. */
+/** Guards IN ORDER (spec §4): `name-required`. The check is server-side on purpose — the modal
+ *  marks the field required, but every other master-data guard in this file validates
+ *  independently of the form. `code` is assigned here, not taken from the input. */
 export async function createChargeCategory(input: ChargeCategoryInput): Promise<ChargeCategory> {
   return masterWrite(
     () => masterData.create<ChargeCategory>('charge-categories', input),
@@ -2640,11 +2596,9 @@ async function createChargeCategoryLocal(input: ChargeCategoryInput): Promise<Ch
   await delay(180);
   const name = input.name.trim();
   if (!name) throw new Error('name-required');
-  const code = input.code.trim().toUpperCase();
-  if (!code) throw new Error('code-required');
-  if (db.chargeCategories.some((c) => c.code === code && c.direction === input.direction)) {
-    throw new Error('duplicate-code');
-  }
+  const code = nextIntegerCode(
+    db.chargeCategories.filter((c) => c.direction === input.direction).map((c) => c.code),
+  );
   const category: ChargeCategory = {
     id: nextChargeCategoryId(),
     name,
@@ -2659,9 +2613,8 @@ async function createChargeCategoryLocal(input: ChargeCategoryInput): Promise<Ch
   return category;
 }
 
-/** Guards IN ORDER (spec §4): not-found → `name-required` → `code-required`. `code` is immutable
- *  on edit and therefore ignored, but a blank one still rejects the whole payload rather than
- *  half-applying it — same reasoning as `createChargeCategory` above. */
+/** Guards IN ORDER (spec §4): not-found → `name-required`. `code` is server-assigned and
+ *  immutable on edit. */
 export async function updateChargeCategory(id: string, input: ChargeCategoryInput): Promise<ChargeCategory> {
   return masterWrite(
     () => masterData.update<ChargeCategory>('charge-categories', id, input),
@@ -2677,7 +2630,6 @@ async function updateChargeCategoryLocal(id: string, input: ChargeCategoryInput)
   if (!category) throw new Error(`Charge category ${id} not found`);
   const name = input.name.trim();
   if (!name) throw new Error('name-required');
-  if (!input.code.trim()) throw new Error('code-required');
   category.name = name; // code/direction/scope immutable on edit
   category.description = input.description?.trim() || undefined;
   persistDb();
