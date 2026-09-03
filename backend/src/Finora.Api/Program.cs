@@ -55,6 +55,7 @@ app.MapInvoiceEndpoints();
 app.MapPaymentEndpoints();
 app.MapContainerEndpoints();
 app.MapWarehouseDocumentEndpoints();
+app.MapConversionEndpoints();
 app.MapChargeEndpoints();
 app.MapClaimEndpoints();
 app.MapMoneyTransferEndpoints();

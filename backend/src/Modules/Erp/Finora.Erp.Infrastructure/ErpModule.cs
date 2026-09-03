@@ -44,6 +44,7 @@ public static class ErpModule
         builder.Services.AddScoped<ContainerService>();
         builder.Services.AddScoped<StockLedger>();
         builder.Services.AddScoped<WarehouseDocumentService>();
+        builder.Services.AddScoped<ConversionService>();
         builder.Services.AddScoped<Money.ChargeService>();
         builder.Services.AddScoped<ClaimService>();
         builder.Services.AddScoped<Money.MoneyTransferService>();
