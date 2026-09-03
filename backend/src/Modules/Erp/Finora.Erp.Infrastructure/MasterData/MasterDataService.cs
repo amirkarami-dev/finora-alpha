@@ -20,10 +20,10 @@ namespace Finora.Erp.Infrastructure.MasterData;
 /// </para>
 ///
 /// <para>
-/// Ids are minted the way the mock minted them: derived from the code where the code is unique
-/// (<c>cust-am</c>, <c>ptnr-cc</c>, <c>wh-dxb</c>) and sequential otherwise (<c>cc-0001</c>).
-/// They are readable, they appear in the sample data, and the reference contract is identified by
-/// its literal number — a Guid here would break all of that.
+/// Ids are derived from the code the server assigns (<c>cust-1</c>, <c>ptnr-1</c>, <c>wh-1</c>)
+/// where the code is unique, and sequential otherwise (<c>cc-0001</c>). They are readable, they
+/// appear in the sample data, and the reference contract is identified by its literal number — a
+/// Guid here would break all of that.
 /// </para>
 /// </summary>
 public sealed partial class MasterDataService(ErpDbContext db)
@@ -35,25 +35,25 @@ public sealed partial class MasterDataService(ErpDbContext db)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        var id = $"cust-{code.ToLowerInvariant()}";
-        if (await db.Customers.AnyAsync(c => c.Id == id, cancellationToken))
+        Customer customer = null!;
+        await SaveWithOneRetryAsync(async () =>
         {
-            throw new DomainException(Codes.DuplicateCode);
-        }
+            var code = Numbering.NextIntegerCode(
+                await db.Customers.Select(c => c.Code).ToListAsync(cancellationToken));
+            var id = $"cust-{code}";
 
-        var customer = new Customer
-        {
-            Id = id,
-            Name = input.Name.Trim(),
-            Code = code,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
+            customer = new Customer
+            {
+                Id = id,
+                Name = input.Name.Trim(),
+                Code = code,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
 
-        Apply(customer, input);
-        db.Customers.Add(customer);
-        await AssignPortalAccountAsync(id, input.PortalAccount, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+            Apply(customer, input);
+            db.Customers.Add(customer);
+            await AssignPortalAccountAsync(id, input.PortalAccount, cancellationToken);
+        }, cancellationToken);
 
         return await ResultAsync(db.Customers, c => c.Id, customer.Id, cancellationToken);
     }
@@ -131,15 +131,14 @@ public sealed partial class MasterDataService(ErpDbContext db)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        var id = $"ptnr-{code.ToLowerInvariant()}";
-        if (await db.Partners.AnyAsync(p => p.Id == id, cancellationToken))
+        var id = "";
+        await SaveWithOneRetryAsync(async () =>
         {
-            throw new DomainException(Codes.DuplicateCode);
-        }
-
-        db.Partners.Add(new Partner { Id = id, Name = input.Name.Trim(), Code = code });
-        await db.SaveChangesAsync(cancellationToken);
+            var code = Numbering.NextIntegerCode(
+                await db.Partners.Select(p => p.Code).ToListAsync(cancellationToken));
+            id = $"ptnr-{code}";
+            db.Partners.Add(new Partner { Id = id, Name = input.Name.Trim(), Code = code });
+        }, cancellationToken);
 
         return await ResultAsync(db.Partners, p => p.Id, id, cancellationToken);
     }
@@ -173,21 +172,20 @@ public sealed partial class MasterDataService(ErpDbContext db)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        var id = $"wh-{code.ToLowerInvariant()}";
-        if (await db.Warehouses.AnyAsync(w => w.Id == id, cancellationToken))
+        var id = "";
+        await SaveWithOneRetryAsync(async () =>
         {
-            throw new DomainException(Codes.DuplicateCode);
-        }
-
-        db.Warehouses.Add(new Warehouse
-        {
-            Id = id,
-            Name = input.Name.Trim(),
-            Code = code,
-            Location = Blank(input.Location),
-        });
-        await db.SaveChangesAsync(cancellationToken);
+            var code = Numbering.NextIntegerCode(
+                await db.Warehouses.Select(w => w.Code).ToListAsync(cancellationToken));
+            id = $"wh-{code}";
+            db.Warehouses.Add(new Warehouse
+            {
+                Id = id,
+                Name = input.Name.Trim(),
+                Code = code,
+                Location = Blank(input.Location),
+            });
+        }, cancellationToken);
 
         return await ResultAsync(db.Warehouses, w => w.Id, id, cancellationToken);
     }
@@ -222,23 +220,22 @@ public sealed partial class MasterDataService(ErpDbContext db)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        if (await db.CostCentres.AnyAsync(c => c.Code == code, cancellationToken))
+        var id = "";
+        await SaveWithOneRetryAsync(async () =>
         {
-            throw new DomainException(Codes.DuplicateCode);
-        }
+            var code = Numbering.NextIntegerCode(
+                await db.CostCentres.Select(c => c.Code).ToListAsync(cancellationToken));
+            id = NextSequentialId(
+                await db.CostCentres.Select(c => c.Id).ToListAsync(cancellationToken), "cc");
 
-        var id = NextSequentialId(
-            await db.CostCentres.Select(c => c.Id).ToListAsync(cancellationToken), "cc");
-
-        db.CostCentres.Add(new CostCentre
-        {
-            Id = id,
-            Name = input.Name.Trim(),
-            Code = code,
-            Description = Blank(input.Description),
-        });
-        await db.SaveChangesAsync(cancellationToken);
+            db.CostCentres.Add(new CostCentre
+            {
+                Id = id,
+                Name = input.Name.Trim(),
+                Code = code,
+                Description = Blank(input.Description),
+            });
+        }, cancellationToken);
 
         return await ResultAsync(db.CostCentres, c => c.Id, id, cancellationToken);
     }
@@ -268,9 +265,9 @@ public sealed partial class MasterDataService(ErpDbContext db)
 
     /* ----------------------------------- Goods ---------------------------------- */
 
-    /// <summary>Guards in order: name-required, code-required, duplicate-code, duplicate-name.
-    /// The name is checked as well as the code because a contract line matches a good by NAME —
-    /// two goods sharing one defeat the entire point of the list.</summary>
+    /// <summary>Guards in order: name-required, duplicate-name. The code is minted from the metal
+    /// type. The name is checked because a contract line matches a good by NAME — two goods
+    /// sharing one defeat the entire point of the list.</summary>
     public async Task<MasterDataResult<Good>> CreateGoodAsync(
         GoodInput input, CancellationToken cancellationToken = default)
     {
@@ -282,17 +279,6 @@ public sealed partial class MasterDataService(ErpDbContext db)
             throw new DomainException(Codes.NameRequired);
         }
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        if (code.Length == 0)
-        {
-            throw new DomainException(Codes.CodeRequired);
-        }
-
-        if (await db.Goods.AnyAsync(g => g.Code == code, cancellationToken))
-        {
-            throw new DomainException(Codes.DuplicateCode);
-        }
-
         // Lowered here rather than inside the expression: EF translates `g.Name.ToLower()` to
         // PostgreSQL's `lower()`, but the comparand has to arrive as a plain parameter.
         var lowered = name.ToLowerInvariant();
@@ -301,15 +287,20 @@ public sealed partial class MasterDataService(ErpDbContext db)
             throw new DomainException(Codes.DuplicateName);
         }
 
-        var id = NextSequentialId(
-            await db.Goods.Select(g => g.Id).ToListAsync(cancellationToken), "good");
+        Good good = null!;
+        await SaveWithOneRetryAsync(async () =>
+        {
+            var code = Numbering.NextGoodCode(
+                input.MetalType, await db.Goods.Select(g => g.Code).ToListAsync(cancellationToken));
+            var id = NextSequentialId(
+                await db.Goods.Select(g => g.Id).ToListAsync(cancellationToken), "good");
 
-        var good = new Good { Id = id, Name = name, Code = code };
-        Apply(good, input);
-        db.Goods.Add(good);
-        await db.SaveChangesAsync(cancellationToken);
+            good = new Good { Id = id, Name = name, Code = code };
+            Apply(good, input);
+            db.Goods.Add(good);
+        }, cancellationToken);
 
-        return await ResultAsync(db.Goods, g => g.Id, id, cancellationToken);
+        return await ResultAsync(db.Goods, g => g.Id, good.Id, cancellationToken);
     }
 
     /// <summary>Guards in order: not-found, name-required, duplicate-name (excluding itself).
@@ -335,7 +326,7 @@ public sealed partial class MasterDataService(ErpDbContext db)
         }
 
         good.Name = name;
-        Apply(good, input);
+        ApplyEditable(good, input);
         await db.SaveChangesAsync(cancellationToken);
 
         return await ResultAsync(db.Goods, g => g.Id, id, cancellationToken);
@@ -354,6 +345,14 @@ public sealed partial class MasterDataService(ErpDbContext db)
     private static void Apply(Good good, GoodInput input)
     {
         good.MetalType = input.MetalType;
+        ApplyEditable(good, input);
+    }
+
+    /// <summary>Everything a good may change after creation. The metal type stays: the code
+    /// carries it (<c>copper-001</c>), and a code that lies about its metal is worse than a
+    /// second good.</summary>
+    private static void ApplyEditable(Good good, GoodInput input)
+    {
         good.Form = input.Form;
         good.Unit = input.Unit;
         good.HsCode = Blank(input.HsCode);
@@ -487,9 +486,8 @@ public sealed partial class MasterDataService(ErpDbContext db)
 
     /* ----------------------------- Charge categories ---------------------------- */
 
-    /// <summary>Guards in order: name-required, code-required, duplicate-code within the
-    /// direction. EXPENSE and REVENUE are maintained as independent lists, so each may hold its
-    /// own "FRT".</summary>
+    /// <summary>Guards in order: name-required. The code is minted per direction — EXPENSE and
+    /// REVENUE are maintained as independent lists, so each counts its own codes from one.</summary>
     public async Task<MasterDataResult<ChargeCategory>> CreateChargeCategoryAsync(
         ChargeCategoryInput input, CancellationToken cancellationToken = default)
     {
@@ -501,39 +499,35 @@ public sealed partial class MasterDataService(ErpDbContext db)
             throw new DomainException(Codes.NameRequired);
         }
 
-        var code = input.Code.Trim().ToUpperInvariant();
-        if (code.Length == 0)
+        var id = "";
+        await SaveWithOneRetryAsync(async () =>
         {
-            throw new DomainException(Codes.CodeRequired);
-        }
+            var direction = input.Direction;
+            var code = Numbering.NextIntegerCode(
+                await db.ChargeCategories
+                    .Where(c => c.Direction == direction)
+                    .Select(c => c.Code)
+                    .ToListAsync(cancellationToken));
 
-        var direction = input.Direction;
-        if (await db.ChargeCategories.AnyAsync(
-                c => c.Code == code && c.Direction == direction, cancellationToken))
-        {
-            throw new DomainException(Codes.DuplicateCode);
-        }
+            id = NextSequentialId(
+                await db.ChargeCategories.Select(c => c.Id).ToListAsync(cancellationToken), "ccat");
 
-        var id = NextSequentialId(
-            await db.ChargeCategories.Select(c => c.Id).ToListAsync(cancellationToken), "ccat");
-
-        db.ChargeCategories.Add(new ChargeCategory
-        {
-            Id = id,
-            Name = name,
-            Code = code,
-            Direction = direction,
-            Scope = input.Scope,
-            Description = Blank(input.Description),
-        });
-        await db.SaveChangesAsync(cancellationToken);
+            db.ChargeCategories.Add(new ChargeCategory
+            {
+                Id = id,
+                Name = name,
+                Code = code,
+                Direction = direction,
+                Scope = input.Scope,
+                Description = Blank(input.Description),
+            });
+        }, cancellationToken);
 
         return await ResultAsync(db.ChargeCategories, c => c.Id, id, cancellationToken);
     }
 
-    /// <summary>Guards in order: not-found, name-required, code-required. The code is immutable
-    /// and therefore ignored, but a blank one still rejects the whole payload rather than
-    /// half-applying it.</summary>
+    /// <summary>Guards in order: not-found, name-required. Code, direction and scope are
+    /// immutable.</summary>
     public async Task<MasterDataResult<ChargeCategory>> UpdateChargeCategoryAsync(
         string id, ChargeCategoryInput input, CancellationToken cancellationToken = default)
     {
@@ -546,11 +540,6 @@ public sealed partial class MasterDataService(ErpDbContext db)
         if (name.Length == 0)
         {
             throw new DomainException(Codes.NameRequired);
-        }
-
-        if (input.Code.Trim().Length == 0)
-        {
-            throw new DomainException(Codes.CodeRequired);
         }
 
         // code, direction and scope are immutable on edit.
@@ -583,7 +572,6 @@ public sealed partial class MasterDataService(ErpDbContext db)
         public const string DuplicateName = "duplicate-name";
         public const string DuplicateAccountNumber = "duplicate-account-number";
         public const string NameRequired = "name-required";
-        public const string CodeRequired = "code-required";
         public const string AccountNumberRequired = "account-number-required";
         public const string IbanRequired = "iban-required";
         public const string PersonNotFound = "person-not-found";
@@ -594,6 +582,36 @@ public sealed partial class MasterDataService(ErpDbContext db)
         public const string BankAccountNotFound = "bank-account-not-found";
         public const string CategoryNotFound = "category-not-found";
     }
+
+    /// <summary>
+    /// Saves, and on a unique-index collision (two users minted the same code in the same second)
+    /// lets the caller mint again — once. A second collision is reported as duplicate-code rather
+    /// than looped on, because two collisions in a row means something other than timing.
+    /// </summary>
+    private async Task SaveWithOneRetryAsync(Func<Task> mintAndAdd, CancellationToken cancellationToken)
+    {
+        await mintAndAdd();
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException first) when (IsUniqueViolation(first))
+        {
+            db.ChangeTracker.Clear();
+            await mintAndAdd();
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException second) when (IsUniqueViolation(second))
+            {
+                throw new DomainException(Codes.DuplicateCode);
+            }
+        }
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException is Npgsql.PostgresException { SqlState: "23505" };
 
     /// <summary>An empty or whitespace-only string means "not given" here, exactly as the SPA's
     /// <c>input.x?.trim() || undefined</c> does. Storing "" instead would make a blank field

@@ -15,14 +15,13 @@ namespace Finora.Erp.Infrastructure.MasterData;
 /// </summary>
 public sealed record MasterDataResult<T>(T Entity, IReadOnlyList<T> All);
 
-// The inputs below mirror the `*Input` interfaces in the SPA's api.ts field for field. Where a
-// field is immutable after create the server re-reads it from the stored record and ignores what
-// arrived, exactly as the mock did — the property stays on the DTO so the existing forms, which
-// post the whole model back, keep working.
+// The inputs below mirror the `*Input` interfaces in the SPA's api.ts field for field. Codes are
+// NOT here: the server assigns them (see Finora.Erp.Domain.Numbering) and a client that still
+// posts one is ignored by System.Text.Json, so an older bundle keeps working. Where a field is
+// immutable after create the server re-reads it from the stored record and ignores what arrived.
 
 public sealed record CustomerInput(
     string Name,
-    string Code,
     Currency DefaultCurrency,
     CustomerType CustomerType,
     string? ContactName,
@@ -33,15 +32,14 @@ public sealed record CustomerInput(
     decimal CreditLimit,
     bool? PortalAccount);
 
-public sealed record PartnerInput(string Name, string Code);
+public sealed record PartnerInput(string Name);
 
-public sealed record WarehouseInput(string Name, string Code, string? Location);
+public sealed record WarehouseInput(string Name, string? Location);
 
-public sealed record CostCentreInput(string Name, string Code, string? Description);
+public sealed record CostCentreInput(string Name, string? Description);
 
 public sealed record GoodInput(
     string Name,
-    string Code,
     MetalType MetalType,
     GoodForm? Form,
     GoodUnit Unit,
@@ -60,7 +58,6 @@ public sealed record FinancialAccountInput(
 
 public sealed record ChargeCategoryInput(
     string Name,
-    string Code,
     ChargeDirection Direction,
     ChargeScope Scope,
     string? Description);

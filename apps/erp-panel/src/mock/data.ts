@@ -64,8 +64,12 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  * and `Item.product` stays a plain string (the goods list only feeds autocomplete). Bumping
  * would have discarded live production data for zero benefit, so `goods` gets a SOFT probe
  * plus a `loadDb` backfill instead of a hard `Array.isArray` requirement.
+ *
+ * Schema v7 (2026-09-03): codes and document numbers are assigned by the server
+ * (docs/superpowers/specs/2026-09-03-auto-codes-design.md). No field changed shape, but the
+ * demo dataset's codes did, and a v6 blob would mix `AM`-style codes with `1`-style ones.
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {

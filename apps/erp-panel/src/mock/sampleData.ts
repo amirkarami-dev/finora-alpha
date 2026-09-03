@@ -38,6 +38,7 @@ import type {
 } from '@/types';
 import { DEFAULT_FX_AED_PER_USD, DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { invoiceItemAmount, invoiceItemUnitPrice, splitEqually, unitPrice } from '@/utils/calc';
+import { nextDocumentNumber, nextGoodCode, nextIntegerCode } from '@/utils/numbering';
 import type { Db } from './data';
 
 /**
@@ -108,7 +109,6 @@ function mulberry32(seed: number) {
  */
 interface ProductRef {
   name: string;
-  code: string;
   metalType: MetalType;
   form: GoodFormType;
   hsCode: string;
@@ -117,16 +117,16 @@ interface ProductRef {
 }
 
 const PRODUCTS: ProductRef[] = [
-  { name: '98% Copper Ingots', code: 'CU-ING98', metalType: 'COPPER', form: 'INGOT', hsCode: '7403.19', lme: 11685, lmePct: 94.76 },
-  { name: 'Copper Cathode', code: 'CU-CATH', metalType: 'COPPER', form: 'CATHODE', hsCode: '7403.11', lme: 11820, lmePct: 100 },
-  { name: 'Copper Scrap (Berry)', code: 'CU-BERRY', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 88 },
-  { name: 'Copper Scrap (Birch/Cliff)', code: 'CU-BIRCH', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 84 },
-  { name: 'Aluminum Ingots', code: 'AL-ING', metalType: 'ALUMINIUM', form: 'INGOT', hsCode: '7601.10', lme: 2485, lmePct: 98 },
-  { name: 'Aluminum Scrap (Tense)', code: 'AL-TENSE', metalType: 'ALUMINIUM', form: 'SCRAP', hsCode: '7602.00', lme: 2420, lmePct: 86 },
-  { name: 'Brass Ingots', code: 'BR-ING', metalType: 'BRASS', form: 'INGOT', hsCode: '7403.21', lme: 6250, lmePct: 92 },
-  { name: 'Brass Honey Scrap', code: 'BR-HONEY', metalType: 'BRASS', form: 'SCRAP', hsCode: '7404.00', lme: 6100, lmePct: 85 },
-  { name: 'Zinc Ingots', code: 'ZN-ING', metalType: 'ZINC', form: 'INGOT', hsCode: '7901.11', lme: 2880, lmePct: 96 },
-  { name: 'Lead Ingots', code: 'PB-ING', metalType: 'LEAD', form: 'INGOT', hsCode: '7801.10', lme: 2095, lmePct: 97 },
+  { name: '98% Copper Ingots', metalType: 'COPPER', form: 'INGOT', hsCode: '7403.19', lme: 11685, lmePct: 94.76 },
+  { name: 'Copper Cathode', metalType: 'COPPER', form: 'CATHODE', hsCode: '7403.11', lme: 11820, lmePct: 100 },
+  { name: 'Copper Scrap (Berry)', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 88 },
+  { name: 'Copper Scrap (Birch/Cliff)', metalType: 'COPPER', form: 'SCRAP', hsCode: '7404.00', lme: 11200, lmePct: 84 },
+  { name: 'Aluminum Ingots', metalType: 'ALUMINIUM', form: 'INGOT', hsCode: '7601.10', lme: 2485, lmePct: 98 },
+  { name: 'Aluminum Scrap (Tense)', metalType: 'ALUMINIUM', form: 'SCRAP', hsCode: '7602.00', lme: 2420, lmePct: 86 },
+  { name: 'Brass Ingots', metalType: 'BRASS', form: 'INGOT', hsCode: '7403.21', lme: 6250, lmePct: 92 },
+  { name: 'Brass Honey Scrap', metalType: 'BRASS', form: 'SCRAP', hsCode: '7404.00', lme: 6100, lmePct: 85 },
+  { name: 'Zinc Ingots', metalType: 'ZINC', form: 'INGOT', hsCode: '7901.11', lme: 2880, lmePct: 96 },
+  { name: 'Lead Ingots', metalType: 'LEAD', form: 'INGOT', hsCode: '7801.10', lme: 2095, lmePct: 97 },
 ];
 
 const DESTINATIONS = [
@@ -147,17 +147,16 @@ const CONTAINER_PREFIXES = ['MSNU', 'DFSU', 'TGHU', 'CAIU', 'TCNU', 'BMOU', 'FCI
 const BL_PREFIXES = ['MAEU', 'MSCU', 'COSU', 'HLCU', 'ONEY'];
 const SEAL_PREFIXES = ['SL', 'CN', 'ML'];
 
-const PARTNER_SEEDS: Array<{ name: string; code: string }> = [
-  { name: 'Crescent Capital Partners', code: 'CC' },
-  { name: 'Gulf Metals JV', code: 'GM' },
-  { name: 'Orion Commodities', code: 'OR' },
-  { name: 'Meridian Trading Co', code: 'MT' },
-  { name: 'Apex Resource Partners', code: 'AX' },
+const PARTNER_SEEDS: Array<{ name: string }> = [
+  { name: 'Crescent Capital Partners' },
+  { name: 'Gulf Metals JV' },
+  { name: 'Orion Commodities' },
+  { name: 'Meridian Trading Co' },
+  { name: 'Apex Resource Partners' },
 ];
 
 interface CustomerSeed {
   name: string;
-  code: string;
   currency: Currency;
   country: string;
   contact: string;
@@ -166,21 +165,23 @@ interface CustomerSeed {
   type: CustomerType;
 }
 
+// Order matters: Alco Metal Trading is first so it lands the code the reference contract
+// `AM-P-251101156` (below) is pinned to — Alco's customerId is `cust-1`.
 const CUSTOMER_SEEDS: CustomerSeed[] = [
-  { name: 'Alco Metal Trading', code: 'AM', currency: 'AED', country: 'UAE', contact: 'Khalid Nasser', terms: 7, contracts: 4, type: 'BUYER' },
-  { name: 'Million Gen Tr', code: 'MG', currency: 'AED', country: 'UAE', contact: 'Rashid Al Falasi', terms: 15, contracts: 5, type: 'BUYER' },
-  { name: 'Al Jesr Scrap Metal Tr', code: 'AJ', currency: 'AED', country: 'UAE', contact: 'Yousef Karim', terms: 10, contracts: 3, type: 'SUPPLIER' },
-  { name: 'Sun Metals Casting LLC', code: 'SM', currency: 'AED', country: 'UAE', contact: 'Imran Sheikh', terms: 30, contracts: 4, type: 'BOTH' },
-  { name: 'Zurich Metal', code: 'ZM', currency: 'USD', country: 'Switzerland', contact: 'Lukas Meier', terms: 30, contracts: 3, type: 'BUYER' },
-  { name: 'Transmetals Trading DMCC', code: 'TM', currency: 'USD', country: 'UAE', contact: 'Daniel Costa', terms: 21, contracts: 5, type: 'BOTH' },
-  { name: 'Ningbo Goosen International', code: 'NG', currency: 'USD', country: 'China', contact: 'Wei Zhang', terms: 14, contracts: 6, type: 'BUYER' },
-  { name: 'Shar International TL', code: 'SH', currency: 'USD', country: 'Turkey', contact: 'Emre Demir', terms: 21, contracts: 3, type: 'SUPPLIER' },
-  { name: 'Abdul Rahman Lobnani', code: 'AR', currency: 'AED', country: 'Lebanon', contact: 'Abdul Rahman', terms: 7, contracts: 2, type: 'SUPPLIER' },
-  { name: 'The Nile Metals', code: 'NM', currency: 'USD', country: 'Egypt', contact: 'Tarek Fouad', terms: 30, contracts: 3, type: 'BUYER' },
-  { name: 'Quick Sea Freight', code: 'QS', currency: 'USD', country: 'India', contact: 'Anil Mehta', terms: 14, contracts: 2, type: 'BOTH' },
-  { name: 'Advanced Cargo & Shipping', code: 'AC', currency: 'USD', country: 'India', contact: 'Vikram Rao', terms: 14, contracts: 2, type: 'BUYER' },
-  { name: 'Goldline Recyclers FZE', code: 'GL', currency: 'AED', country: 'UAE', contact: 'Sara Haddad', terms: 30, contracts: 3, type: 'SUPPLIER' },
-  { name: 'Eurasia Metals GmbH', code: 'EM', currency: 'USD', country: 'Germany', contact: 'Hannah Vogel', terms: 45, contracts: 3, type: 'BOTH' },
+  { name: 'Alco Metal Trading', currency: 'AED', country: 'UAE', contact: 'Khalid Nasser', terms: 7, contracts: 4, type: 'BUYER' },
+  { name: 'Million Gen Tr', currency: 'AED', country: 'UAE', contact: 'Rashid Al Falasi', terms: 15, contracts: 5, type: 'BUYER' },
+  { name: 'Al Jesr Scrap Metal Tr', currency: 'AED', country: 'UAE', contact: 'Yousef Karim', terms: 10, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Sun Metals Casting LLC', currency: 'AED', country: 'UAE', contact: 'Imran Sheikh', terms: 30, contracts: 4, type: 'BOTH' },
+  { name: 'Zurich Metal', currency: 'USD', country: 'Switzerland', contact: 'Lukas Meier', terms: 30, contracts: 3, type: 'BUYER' },
+  { name: 'Transmetals Trading DMCC', currency: 'USD', country: 'UAE', contact: 'Daniel Costa', terms: 21, contracts: 5, type: 'BOTH' },
+  { name: 'Ningbo Goosen International', currency: 'USD', country: 'China', contact: 'Wei Zhang', terms: 14, contracts: 6, type: 'BUYER' },
+  { name: 'Shar International TL', currency: 'USD', country: 'Turkey', contact: 'Emre Demir', terms: 21, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Abdul Rahman Lobnani', currency: 'AED', country: 'Lebanon', contact: 'Abdul Rahman', terms: 7, contracts: 2, type: 'SUPPLIER' },
+  { name: 'The Nile Metals', currency: 'USD', country: 'Egypt', contact: 'Tarek Fouad', terms: 30, contracts: 3, type: 'BUYER' },
+  { name: 'Quick Sea Freight', currency: 'USD', country: 'India', contact: 'Anil Mehta', terms: 14, contracts: 2, type: 'BOTH' },
+  { name: 'Advanced Cargo & Shipping', currency: 'USD', country: 'India', contact: 'Vikram Rao', terms: 14, contracts: 2, type: 'BUYER' },
+  { name: 'Goldline Recyclers FZE', currency: 'AED', country: 'UAE', contact: 'Sara Haddad', terms: 30, contracts: 3, type: 'SUPPLIER' },
+  { name: 'Eurasia Metals GmbH', currency: 'USD', country: 'Germany', contact: 'Hannah Vogel', terms: 45, contracts: 3, type: 'BOTH' },
 ];
 
 /**
@@ -217,12 +218,12 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     return Math.round(n * f) / f;
   };
 
-  const partners: Partner[] = PARTNER_SEEDS.map((p) => ({
-    id: `ptnr-${p.code.toLowerCase()}`,
-    name: p.name,
-    code: p.code,
-    active: true,
-  }));
+  const partnerCodes: string[] = [];
+  const partners: Partner[] = PARTNER_SEEDS.map((p) => {
+    const code = nextIntegerCode(partnerCodes);
+    partnerCodes.push(code);
+    return { id: `ptnr-${code}`, name: p.name, code, active: true };
+  });
 
   /* ------------------------------------------------------------------ *
    * Generation
@@ -231,6 +232,12 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const contracts: Contract[] = [];
   const rawContainers: RawContainerSeed[] = [];
   const payments: Payment[] = [];
+
+  // A payment's `reference` sometimes mirrors the invoice it settles — but invoice numbers
+  // aren't final until the global chronological numbering pass runs (once every invoice in the
+  // dataset exists). Payments created before that pass push here instead of writing the
+  // (not-yet-final) invoiceNumber directly; the pass fixes up `.reference` afterwards.
+  const paymentsPendingInvoiceNumberRef: Array<{ payment: Payment; invoice: Invoice }> = [];
 
   function makeContainerRef(): string {
     return `${pick(CONTAINER_PREFIXES)}${intBetween(1000000, 9999999)}`;
@@ -254,14 +261,18 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     return 'ACTIVE';
   }
 
+  const customerCodes: string[] = [];
   CUSTOMER_SEEDS.forEach((seed, ci) => {
+    const code = nextIntegerCode(customerCodes);
+    customerCodes.push(code);
+    const emailLocal = seed.name.split(' ')[0].toLowerCase().replace(/[^a-z]/g, '');
     const customer: Customer = {
-      id: `cust-${seed.code.toLowerCase()}`,
+      id: `cust-${code}`,
       name: seed.name,
-      code: seed.code,
+      code,
       defaultCurrency: seed.currency,
       contactName: seed.contact,
-      email: `${seed.code.toLowerCase()}@${seed.name.toLowerCase().replace(/[^a-z]+/g, '')}.com`,
+      email: `${emailLocal}@${seed.name.toLowerCase().replace(/[^a-z]+/g, '')}.com`,
       phone: `+971 5${intBetween(0, 9)} ${intBetween(100, 999)} ${intBetween(1000, 9999)}`,
       country: seed.country,
       paymentTermsDays: seed.terms,
@@ -282,7 +293,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
               ? 'SELL'
               : 'PURCHASE';
       const contractDate = anchor.subtract(intBetween(5, 420), 'day');
-      const contractId = `${seed.code}-P-${contractDate.format('YYMMDD')}${intBetween(100, 999)}`;
+      const contractId = `${code}-P-${contractDate.format('YYMMDD')}${intBetween(100, 999)}`;
       const destination = pick(DESTINATIONS);
       const itemCount = intBetween(1, 4);
       const items: Item[] = [];
@@ -407,7 +418,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * Authentic anchor: the real Alco Metal contract from the workbook.
    * ------------------------------------------------------------------ */
   (() => {
-    const alco = customers.find((c) => c.code === 'AM')!;
+    const alco = customers.find((c) => c.id === 'cust-1')!;
     const contractId = 'AM-P-251101156';
     const item: Item = {
       id: `${contractId}-I1`,
@@ -551,8 +562,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * all rnd()-consuming post-passes; earlier values (e.g. cust-am
    * creditLimit 2,750,000) must stay byte-identical.
    * ------------------------------------------------------------------ */
+  // Id stays the literal `wh-mw` — it's referenced elsewhere in this generator (the GRN below)
+  // and isn't derived from the code, unlike goods/partners/customers.
   const warehouses: Warehouse[] = [
-    { id: 'wh-mw', name: 'Main Warehouse', code: 'MW', location: 'Jebel Ali, Dubai', active: true },
+    { id: 'wh-mw', name: 'Main Warehouse', code: nextIntegerCode([]), location: 'Jebel Ali, Dubai', active: true },
   ];
   const invoices: Invoice[] = [];
   const inventoryDocs: InventoryDocument[] = [];
@@ -644,6 +657,13 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   const LME_QUOTE_DATE = rel('2026-05-20').toISOString();
   const LME_QUOTE_PRICE = 2450;
 
+  // Server-shaped document numbers (`YYMM` + 4 digits, one shared monthly sequence) are NOT
+  // assigned here — every invoice below (these four plus every historical SI/PI further down)
+  // gets a placeholder `invoiceNumber` and is renumbered in one global chronological pass once
+  // every invoice in the dataset exists (search "Server-shaped document numbers" below). That
+  // keeps the monthly sequence correct even though historical invoices, built later in this
+  // function, can be dated earlier than these.
+
   // First PURCHASE contract (array order): full PO → PP → PI chain.
   const firstPurchaseContract = contracts.find((c) => c.contractType === 'PURCHASE');
   if (firstPurchaseContract) {
@@ -656,7 +676,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const poTotals = invoiceTotals(poItems);
     const po: Invoice = {
       id: poId,
-      invoiceNumber: 'PO-2026-0001',
+      invoiceNumber: poId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_ORDER',
       invoiceDate: PURCHASE_ORDER_DATE,
       contractId: contract.id,
@@ -685,7 +705,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const ppTotals = invoiceTotals(ppItems);
     const pp: Invoice = {
       id: ppId,
-      invoiceNumber: 'PP-2026-0001',
+      invoiceNumber: ppId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_PROVISIONAL',
       invoiceDate: PURCHASE_PROVISIONAL_DATE,
       contractId: contract.id,
@@ -715,7 +735,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const piTotals = invoiceTotals(piItems);
     const pi: Invoice = {
       id: piId,
-      invoiceNumber: 'PI-2026-0001',
+      invoiceNumber: piId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'PURCHASE_INVOICE',
       invoiceDate: PURCHASE_INVOICE_DATE,
       contractId: contract.id,
@@ -755,9 +775,9 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     inventoryDocs.push(grn);
 
     // One payment: 50% of PI totalAmount, currency USD, fxRate 1, method 'TT',
-    // date 2026-06-01 (relative to anchor), invoiceId = PI id, direction 'OUT', reference = 'PI-2026-0001'.
+    // date 2026-06-01 (relative to anchor), invoiceId = PI id, direction 'OUT', reference = the PI's own number.
     const paymentAmount = round(pi.totalAmount * 0.5, 2);
-    payments.push({
+    const piPayment: Payment = {
       id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
       customerId: pi.customerId,
       date: rel('2026-06-01').toISOString(),
@@ -766,11 +786,13 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       fxRate: 1,
       amountUSD: paymentAmount,
       method: 'TT',
-      reference: 'PI-2026-0001',
+      reference: pi.invoiceNumber, // placeholder — fixed up once numbering is final
       invoiceId: piId,
       direction: 'OUT',
       notes: '',
-    });
+    };
+    payments.push(piPayment);
+    paymentsPendingInvoiceNumberRef.push({ payment: piPayment, invoice: pi });
   }
 
   // First SELL contract (array order): DRAFT SO-2026-0001, first item only, 50% qty.
@@ -784,7 +806,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     const soTotals = invoiceTotals(soItems);
     const so: Invoice = {
       id: soId,
-      invoiceNumber: 'SO-2026-0001',
+      invoiceNumber: soId, // placeholder — replaced in the global numbering pass below
       invoiceType: 'SALE_ORDER',
       invoiceDate: SALE_ORDER_DATE,
       contractId: contract.id,
@@ -834,23 +856,21 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   }
 
   const historicalInvoiceIds = new Set(invoices.map((inv) => inv.id));
-  const historicalInvoiceNumbers = new Set(invoices.map((inv) => inv.invoiceNumber));
 
   /**
-   * `<PFX>-<YYYY>-<NNNN>` / `inv-<pfx>-<NNNN>`, scan-until-unused against every invoice id/number
-   * created so far in the seed (identical schemes to api.ts's runtime `nextInvoiceNumber`/
-   * `nextInvoiceId`, reimplemented locally since this module cannot import api.ts).
+   * `inv-<pfx>-<NNNN>`, scan-until-unused against every invoice id created so far in the seed
+   * (identical scheme to api.ts's runtime `nextInvoiceId`, reimplemented locally since this
+   * module cannot import api.ts). `invoiceNumber` is NOT minted here — it's a placeholder until
+   * the global chronological numbering pass (below, after every invoice in the dataset exists)
+   * assigns the real server-shaped `YYMM` + 4-digit number.
    */
-  function nextHistoricalInvoiceIds(prefix: 'SI' | 'PI'): { id: string; number: string } {
-    const year = anchor.format('YYYY');
+  function nextHistoricalInvoiceId(prefix: 'SI' | 'PI'): string {
     let n = 1;
     for (;;) {
-      const number = `${prefix}-${year}-${String(n).padStart(4, '0')}`;
       const id = `inv-${prefix.toLowerCase()}-${String(n).padStart(4, '0')}`;
-      if (!historicalInvoiceIds.has(id) && !historicalInvoiceNumbers.has(number)) {
+      if (!historicalInvoiceIds.has(id)) {
         historicalInvoiceIds.add(id);
-        historicalInvoiceNumbers.add(number);
-        return { id, number };
+        return id;
       }
       n += 1;
     }
@@ -897,7 +917,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
     const invoiceType: InvoiceType = contract.contractType === 'SELL' ? 'SALE_INVOICE' : 'PURCHASE_INVOICE';
     const prefix = invoiceType === 'SALE_INVOICE' ? 'SI' : 'PI';
-    const { id, number } = nextHistoricalInvoiceIds(prefix);
+    const id = nextHistoricalInvoiceId(prefix);
     const items = raws.map((raw) => makeHistoricalInvoiceItem(id, raw));
     const totals = invoiceTotals(items);
     const invoiceDate = raws
@@ -909,7 +929,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
 
     const invoice: Invoice = {
       id,
-      invoiceNumber: number,
+      invoiceNumber: id, // placeholder — replaced in the global numbering pass below
       invoiceType,
       invoiceDate,
       contractId: contract.id,
@@ -942,7 +962,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         2,
       );
       if (paidAmount > 0) {
-        payments.push({
+        const historicalPayment: Payment = {
           id: `NIZ${String(payments.length + 1).padStart(3, '0')}`,
           customerId: invoice.customerId,
           date: invoiceDate,
@@ -951,14 +971,42 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
           fxRate: 1,
           amountUSD: paidAmount,
           method: 'TT',
-          reference: invoice.invoiceNumber,
+          reference: invoice.invoiceNumber, // placeholder — fixed up once numbering is final
           invoiceId: invoice.id,
           direction: 'IN',
           notes: '',
-        });
+        };
+        payments.push(historicalPayment);
+        paymentsPendingInvoiceNumberRef.push({ payment: historicalPayment, invoice });
       }
     }
     // Purchase invoices are payables — no payment seeded here.
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Server-shaped document numbers: `YYMM` + 4 digits, one shared monthly sequence, assigned
+   * ONLY now that every invoice in the dataset exists — the four PO/PP/PI/SO above (each still
+   * carrying its own id as a placeholder `invoiceNumber`) plus every historical SI/PI invoice
+   * just generated. Sorting the full set by `invoiceDate` before numbering means the sequence
+   * is chronologically correct dataset-wide, not just within the group of documents built
+   * together above — a historical invoice dated before the PO can still land number 1 in its
+   * month even though it was built afterward in this function. ZERO PRNG draws.
+   * ------------------------------------------------------------------ */
+  const documentNumbers: string[] = [];
+  const docNo = (dateIso: string): string => {
+    const n = nextDocumentNumber(dateIso, documentNumbers);
+    documentNumbers.push(n);
+    return n;
+  };
+  [...invoices]
+    .sort((a, b) => (a.invoiceDate < b.invoiceDate ? -1 : a.invoiceDate > b.invoiceDate ? 1 : 0))
+    .forEach((inv) => {
+      inv.invoiceNumber = docNo(inv.invoiceDate);
+    });
+  // Payments whose `reference` mirrors an invoice's number were pushed before numbering was
+  // final (see `paymentsPendingInvoiceNumberRef` above) — fix them up now.
+  for (const { payment, invoice } of paymentsPendingInvoiceNumberRef) {
+    payment.reference = invoice.invoiceNumber;
   }
 
   // Recompute every item's remainingMt from the historical invoice lines just created, so the
@@ -982,7 +1030,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * portal login has nothing to resolve to even with sample data loaded. ZERO rnd() draws,
    * so it doesn't disturb determinism.
    * ------------------------------------------------------------------ */
-  const portalCustomer = customers.find((c) => c.code === 'AM');
+  const portalCustomer = customers.find((c) => c.id === 'cust-1');
   if (portalCustomer) portalCustomer.portalAccount = true;
 
   /* ------------------------------------------------------------------ *
@@ -1018,16 +1066,21 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     { id: 'fa-0006', name: 'Basra safe — IQD', type: 'CASH_SAFE', currency: 'IQD', active: true },
   ];
 
-  const goods: Good[] = PRODUCTS.map((p, i) => ({
-    id: `good-${String(i + 1).padStart(4, '0')}`,
-    name: p.name,
-    code: p.code,
-    metalType: p.metalType,
-    form: p.form,
-    unit: 'MT' as const,
-    hsCode: p.hsCode,
-    active: true,
-  }));
+  const goodCodes: string[] = [];
+  const goods: Good[] = PRODUCTS.map((p, i) => {
+    const code = nextGoodCode(p.metalType, goodCodes);
+    goodCodes.push(code);
+    return {
+      id: `good-${String(i + 1).padStart(4, '0')}`,
+      name: p.name,
+      code,
+      metalType: p.metalType,
+      form: p.form,
+      unit: 'MT' as const,
+      hsCode: p.hsCode,
+      active: true,
+    };
+  });
 
   /* ------------------------------------------------------------------ *
    * Charge master data (cost centres + the 2×2 of charge categories) and a handful of demo
@@ -1050,33 +1103,51 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
    * already-anchor-relative date — never an absolute literal and never the clock. A previous
    * release shipped baked absolute dates and produced a permanent −100% trend.
    * ------------------------------------------------------------------ */
+  const costCentreCodes: string[] = [];
+  const nextCostCentreCode = (): string => {
+    const code = nextIntegerCode(costCentreCodes);
+    costCentreCodes.push(code);
+    return code;
+  };
   const costCentres: CostCentre[] = [
-    { id: 'cc-0001', name: 'Logistics', code: 'LOG', description: 'Freight, port handling and haulage', active: true },
-    { id: 'cc-0002', name: 'Trading Desk', code: 'TRD', description: 'Deal-side costs and recoveries', active: true },
-    { id: 'cc-0003', name: 'Administration', code: 'ADM', description: 'Office and general overheads', active: true },
-    { id: 'cc-0004', name: 'Finance', code: 'FIN', description: 'Banking, insurance and treasury', active: true },
+    { id: 'cc-0001', name: 'Logistics', code: nextCostCentreCode(), description: 'Freight, port handling and haulage', active: true },
+    { id: 'cc-0002', name: 'Trading Desk', code: nextCostCentreCode(), description: 'Deal-side costs and recoveries', active: true },
+    { id: 'cc-0003', name: 'Administration', code: nextCostCentreCode(), description: 'Office and general overheads', active: true },
+    { id: 'cc-0004', name: 'Finance', code: nextCostCentreCode(), description: 'Banking, insurance and treasury', active: true },
   ];
 
   // The 2×2 of spec §2: `direction` EXPENSE|REVENUE × `scope` INVOICE|GENERAL. `code` is
-  // trimmed+uppercased and unique WITHIN a direction (so REVENUE may reuse an EXPENSE code) —
-  // the `createChargeCategory` guard these literals must satisfy.
+  // assigned per direction (so REVENUE may reuse an EXPENSE code) — the `createChargeCategory`
+  // guard these codes must satisfy.
+  const expenseCatCodes: string[] = [];
+  const revenueCatCodes: string[] = [];
+  const nextExpenseCatCode = (): string => {
+    const code = nextIntegerCode(expenseCatCodes);
+    expenseCatCodes.push(code);
+    return code;
+  };
+  const nextRevenueCatCode = (): string => {
+    const code = nextIntegerCode(revenueCatCodes);
+    revenueCatCodes.push(code);
+    return code;
+  };
   const chargeCategories: ChargeCategory[] = [
     // EXPENSE / INVOICE — costs booked against a specific trade document's goods.
-    { id: 'ccat-0001', name: 'Ocean Freight', code: 'FRT', direction: 'EXPENSE', scope: 'INVOICE', description: 'Sea freight per shipment', active: true },
-    { id: 'ccat-0002', name: 'Customs Duty', code: 'DUTY', direction: 'EXPENSE', scope: 'INVOICE', description: 'Import/export duty and clearance', active: true },
-    { id: 'ccat-0003', name: 'Inspection & Assay', code: 'INSP', direction: 'EXPENSE', scope: 'INVOICE', description: 'Third-party survey, sampling and assay', active: true },
-    { id: 'ccat-0004', name: 'Port Handling', code: 'PORT', direction: 'EXPENSE', scope: 'INVOICE', description: 'Terminal handling, lift-on/lift-off, storage', active: true },
-    { id: 'ccat-0005', name: 'Cargo Insurance', code: 'INS', direction: 'EXPENSE', scope: 'INVOICE', description: 'Marine cargo cover per shipment', active: true },
+    { id: 'ccat-0001', name: 'Ocean Freight', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'INVOICE', description: 'Sea freight per shipment', active: true },
+    { id: 'ccat-0002', name: 'Customs Duty', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'INVOICE', description: 'Import/export duty and clearance', active: true },
+    { id: 'ccat-0003', name: 'Inspection & Assay', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'INVOICE', description: 'Third-party survey, sampling and assay', active: true },
+    { id: 'ccat-0004', name: 'Port Handling', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'INVOICE', description: 'Terminal handling, lift-on/lift-off, storage', active: true },
+    { id: 'ccat-0005', name: 'Cargo Insurance', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'INVOICE', description: 'Marine cargo cover per shipment', active: true },
     // EXPENSE / GENERAL — overheads that belong to no single document.
-    { id: 'ccat-0006', name: 'Office Rent', code: 'RENT', direction: 'EXPENSE', scope: 'GENERAL', description: 'Premises rent and service charge', active: true },
-    { id: 'ccat-0007', name: 'Salaries & Wages', code: 'SAL', direction: 'EXPENSE', scope: 'GENERAL', description: 'Payroll and staff costs', active: true },
-    { id: 'ccat-0008', name: 'Bank Charges', code: 'BANK', direction: 'EXPENSE', scope: 'GENERAL', description: 'LC fees, transfer and facility charges', active: true },
+    { id: 'ccat-0006', name: 'Office Rent', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'GENERAL', description: 'Premises rent and service charge', active: true },
+    { id: 'ccat-0007', name: 'Salaries & Wages', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'GENERAL', description: 'Payroll and staff costs', active: true },
+    { id: 'ccat-0008', name: 'Bank Charges', code: nextExpenseCatCode(), direction: 'EXPENSE', scope: 'GENERAL', description: 'LC fees, transfer and facility charges', active: true },
     // REVENUE / INVOICE — income attributable to a document's goods.
-    { id: 'ccat-0009', name: 'Weight Gain', code: 'WTGAIN', direction: 'REVENUE', scope: 'INVOICE', description: 'Outturn weight above invoiced quantity', active: true },
-    { id: 'ccat-0010', name: 'Quality Premium', code: 'QPREM', direction: 'REVENUE', scope: 'INVOICE', description: 'Assay above contracted grade', active: true },
+    { id: 'ccat-0009', name: 'Weight Gain', code: nextRevenueCatCode(), direction: 'REVENUE', scope: 'INVOICE', description: 'Outturn weight above invoiced quantity', active: true },
+    { id: 'ccat-0010', name: 'Quality Premium', code: nextRevenueCatCode(), direction: 'REVENUE', scope: 'INVOICE', description: 'Assay above contracted grade', active: true },
     // REVENUE / GENERAL — income that belongs to no single document.
-    { id: 'ccat-0011', name: 'Interest Income', code: 'INT', direction: 'REVENUE', scope: 'GENERAL', description: 'Deposit and facility interest', active: true },
-    { id: 'ccat-0012', name: 'Scrap Resale', code: 'SCRAP', direction: 'REVENUE', scope: 'GENERAL', description: 'Yard sweepings and off-spec resale', active: true },
+    { id: 'ccat-0011', name: 'Interest Income', code: nextRevenueCatCode(), direction: 'REVENUE', scope: 'GENERAL', description: 'Deposit and facility interest', active: true },
+    { id: 'ccat-0012', name: 'Scrap Resale', code: nextRevenueCatCode(), direction: 'REVENUE', scope: 'GENERAL', description: 'Yard sweepings and off-spec resale', active: true },
   ];
 
   /**

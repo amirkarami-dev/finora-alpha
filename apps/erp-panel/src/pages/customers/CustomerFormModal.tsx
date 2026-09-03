@@ -25,7 +25,6 @@ const NON_TRADING_DEFAULTS = {
 
 interface CustomerFormValues {
   name: string;
-  code: string;
   customerType: CustomerType;
   defaultCurrency: Customer['defaultCurrency'];
   contactName?: string;
@@ -57,7 +56,6 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
   const initialValues: Partial<CustomerFormValues> = customer
     ? {
         name: customer.name,
-        code: customer.code,
         customerType: customer.customerType,
         defaultCurrency: customer.defaultCurrency,
         contactName: customer.contactName,
@@ -79,7 +77,6 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
     }
     const input: CustomerInput = {
       name: values.name.trim(),
-      code: values.code.trim(),
       customerType: values.customerType,
       contactName: values.contactName?.trim() || undefined,
       email: values.email?.trim() || undefined,
@@ -105,11 +102,7 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
         message.success(t('customers.created'));
       }
       onClose();
-    } catch (e) {
-      if (e instanceof Error && e.message === 'duplicate-code') {
-        form.setFields([{ name: 'code', errors: [t('customers.codeTaken')] }]);
-        return;
-      }
+    } catch {
       message.error(t('common.saveFailed'));
     }
   };
@@ -135,16 +128,11 @@ export function CustomerFormModal({ open, onClose, customer }: CustomerFormModal
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
-            <Form.Item
-              name="code"
-              label={t('customers.code')}
-              rules={[
-                { required: true, message: t('common.required') },
-                { pattern: /^[A-Za-z0-9-]+$/, message: t('customers.codeInvalid') },
-              ]}
-            >
-              <Input placeholder={t('customers.codePlaceholder')} disabled={isEdit} />
-            </Form.Item>
+            {isEdit && (
+              <Form.Item label={t('customers.code')}>
+                <Input value={customer?.code} disabled />
+              </Form.Item>
+            )}
           </Col>
           <Col xs={24} sm={12}>
             <Form.Item name="customerType" label={t('customers.type')} rules={[{ required: true, message: t('common.required') }]}>

@@ -550,7 +550,7 @@ Example (Alco Metal, contract AM-P-251101156):  11,685 × 94.76 % + 0  ≈  11,0
     <h3>Details</h3>
     <div class="two">
       <ul>
-        <li><b>Numbers</b> are automatic per type and year (e.g. <code>PO-2026-0001</code>), editable while DRAFT.</li>
+        <li><b>Numbers</b> are assigned by the server: YYMM + 4 digits (e.g. <code>26090001</code>), one sequence for all six types, restarting each month. Never editable.</li>
         <li><b>Currency</b> per document with its exchange rate (1 for USD); totals, discount and weight are stored on the header and recomputed on every item change.</li>
         <li><b>Convert</b> creates a new DRAFT of the target type dated today, linked back with a reference. Orders never carry an LME price; PP → PI carries price, date and discount.</li>
       </ul>

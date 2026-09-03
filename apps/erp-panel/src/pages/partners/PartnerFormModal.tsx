@@ -6,7 +6,6 @@ import type { Partner } from '@/types';
 
 interface PartnerFormValues {
   name: string;
-  code: string;
 }
 
 interface PartnerFormModalProps {
@@ -24,7 +23,7 @@ export function PartnerFormModal({ open, onClose, partner }: PartnerFormModalPro
   const isEdit = !!partner;
 
   const initialValues: Partial<PartnerFormValues> = partner
-    ? { name: partner.name, code: partner.code }
+    ? { name: partner.name }
     : {};
 
   const submit = async () => {
@@ -34,7 +33,7 @@ export function PartnerFormModal({ open, onClose, partner }: PartnerFormModalPro
     } catch {
       return;
     }
-    const input: PartnerInput = { name: values.name.trim(), code: values.code.trim() };
+    const input: PartnerInput = { name: values.name.trim() };
     try {
       if (isEdit && partner) {
         await updateMut.mutateAsync({ id: partner.id, input });
@@ -44,11 +43,7 @@ export function PartnerFormModal({ open, onClose, partner }: PartnerFormModalPro
         message.success(t('partners.created'));
       }
       onClose();
-    } catch (e) {
-      if (e instanceof Error && e.message === 'duplicate-code') {
-        form.setFields([{ name: 'code', errors: [t('partners.codeTaken')] }]);
-        return;
-      }
+    } catch {
       message.error(t('common.saveFailed'));
     }
   };
@@ -69,16 +64,11 @@ export function PartnerFormModal({ open, onClose, partner }: PartnerFormModalPro
         <Form.Item name="name" label={t('partners.name')} rules={[{ required: true, message: t('common.required') }]}>
           <Input placeholder={t('partners.namePlaceholder')} />
         </Form.Item>
-        <Form.Item
-          name="code"
-          label={t('partners.code')}
-          rules={[
-            { required: true, message: t('common.required') },
-            { pattern: /^[A-Za-z0-9-]+$/, message: t('partners.codeInvalid') },
-          ]}
-        >
-          <Input placeholder={t('partners.codePlaceholder')} disabled={isEdit} />
-        </Form.Item>
+        {isEdit && (
+          <Form.Item label={t('partners.code')}>
+            <Input value={partner?.code} disabled />
+          </Form.Item>
+        )}
       </Form>
     </Modal>
   );

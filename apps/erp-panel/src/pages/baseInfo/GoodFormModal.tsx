@@ -9,7 +9,6 @@ const { TextArea } = Input;
 
 interface GoodFormValues {
   name: string;
-  code: string;
   metalType: MetalType;
   form?: GoodFormType;
   unit: GoodUnit;
@@ -36,7 +35,6 @@ export function GoodFormModal({ open, onClose, good }: GoodFormModalProps) {
   const initialValues: Partial<GoodFormValues> = good
     ? {
         name: good.name,
-        code: good.code,
         metalType: good.metalType,
         form: good.form,
         unit: good.unit,
@@ -54,7 +52,6 @@ export function GoodFormModal({ open, onClose, good }: GoodFormModalProps) {
     }
     const input: GoodInput = {
       name: values.name.trim(),
-      code: values.code.trim(),
       metalType: values.metalType,
       form: values.form,
       unit: values.unit,
@@ -74,10 +71,6 @@ export function GoodFormModal({ open, onClose, good }: GoodFormModalProps) {
       // Server-side guards surface on the offending field rather than as a toast, so the user
       // can see WHICH input to change (the `CostCentreFormModal` precedent).
       if (e instanceof Error) {
-        if (e.message === 'duplicate-code') {
-          form.setFields([{ name: 'code', errors: [t('goods.codeTaken')] }]);
-          return;
-        }
         if (e.message === 'duplicate-name') {
           form.setFields([{ name: 'name', errors: [t('goods.nameTaken')] }]);
           return;
@@ -107,22 +100,18 @@ export function GoodFormModal({ open, onClose, good }: GoodFormModalProps) {
         >
           <Input placeholder={t('goods.namePlaceholder')} />
         </Form.Item>
-        <Form.Item
-          name="code"
-          label={t('goods.code')}
-          rules={[
-            { required: true, message: t('common.required') },
-            { pattern: /^[A-Za-z0-9-]+$/, message: t('goods.codeInvalid') },
-          ]}
-        >
-          <Input placeholder={t('goods.codePlaceholder')} disabled={isEdit} />
-        </Form.Item>
+        {isEdit && (
+          <Form.Item label={t('goods.code')}>
+            <Input value={good?.code} disabled />
+          </Form.Item>
+        )}
         <Form.Item
           name="metalType"
           label={t('goods.metalType')}
           rules={[{ required: true, message: t('common.required') }]}
         >
           <Select
+            disabled={isEdit}
             placeholder={t('goods.metalTypePlaceholder')}
             options={METAL_TYPES.map((m) => ({ value: m, label: t(`metalTypes.${m}`) }))}
           />
