@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "@/components/icons";
+import SourcingVideo from "@/components/SourcingVideo";
 
 const accentGradient = {
   background: "linear-gradient(135deg,#E8A87C,#B87333,#7C4A1E)",
@@ -272,6 +273,29 @@ export default function Home() {
           <div style={{ position: "absolute", bottom: -22, left: -22, padding: "20px 24px", borderRadius: 16, background: "rgba(17,21,24,0.92)", backdropFilter: "blur(14px)", border: "1px solid rgba(184,115,51,0.34)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
             <div style={{ fontFamily: "var(--ff-display)", fontSize: 30, fontWeight: 700, color: "var(--copper-light)", lineHeight: 1 }}>ISO-grade</div>
             <div style={{ fontFamily: "var(--ff-body)", fontSize: 12.5, color: "var(--muted)", marginTop: 5 }}>quality-checked material</div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ FROM THE YARD (video) ============ */}
+      <section style={{ position: "relative", zIndex: 5, background: "linear-gradient(180deg,#0A0D0F,#0e1114 40%,#0A0D0F)", borderTop: "1px solid rgba(184,115,51,0.12)" }}>
+        <div style={{ maxWidth: 1240, margin: "0 auto", padding: "clamp(64px,9vw,120px) clamp(20px,5vw,72px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: "clamp(36px,5vw,64px)", alignItems: "center" }}>
+          <div className="reveal" data-delay="0">
+            <span style={{ fontFamily: "var(--ff-body)", fontSize: 12, fontWeight: 600, letterSpacing: ".22em", textTransform: "uppercase", color: "var(--copper)" }}>From the yard</span>
+            <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(30px,4.5vw,48px)", color: "var(--text)", lineHeight: 1.1, margin: "16px 0 20px" }}>
+              Raw copper scrap, <span style={accentGradient}>sourced by hand</span>
+            </h2>
+            <p style={{ fontFamily: "var(--ff-body)", fontSize: 15.5, lineHeight: 1.78, color: "var(--muted)", margin: "0 0 28px", maxWidth: 520 }}>
+              Before a single tonne reaches a container it is sorted, graded and loaded at origin by our own team. This is the material behind every Jalil Jalal consignment — seen the way our buyers never get to see it.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 11 }}>
+              {["Sorted on site", "Graded by hand", "Loaded for export"].map((u) => (
+                <span key={u} style={{ fontFamily: "var(--ff-body)", fontSize: 13, fontWeight: 500, color: "var(--copper-light)", padding: "9px 17px", borderRadius: 30, border: "1px solid rgba(184,115,51,0.34)", background: "rgba(184,115,51,0.07)" }}>{u}</span>
+              ))}
+            </div>
+          </div>
+          <div className="reveal" data-delay="150">
+            <SourcingVideo src="/assets/videos/sourcing-raw-copper-scrap.mp4" caption="Sourcing raw copper scrap" />
           </div>
         </div>
       </section>
