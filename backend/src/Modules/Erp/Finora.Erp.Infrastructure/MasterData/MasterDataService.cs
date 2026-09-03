@@ -586,32 +586,11 @@ public sealed partial class MasterDataService(ErpDbContext db)
     /// <summary>
     /// Saves, and on a unique-index collision (two users minted the same code in the same second)
     /// lets the caller mint again — once. A second collision is reported as duplicate-code rather
-    /// than looped on, because two collisions in a row means something other than timing.
+    /// than looped on, because two collisions in a row means something other than timing. Shared
+    /// with <see cref="Trade.InvoiceService"/> — see <see cref="UniqueRetry"/>.
     /// </summary>
-    private async Task SaveWithOneRetryAsync(Func<Task> mintAndAdd, CancellationToken cancellationToken)
-    {
-        await mintAndAdd();
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException first) when (IsUniqueViolation(first))
-        {
-            db.ChangeTracker.Clear();
-            await mintAndAdd();
-            try
-            {
-                await db.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException second) when (IsUniqueViolation(second))
-            {
-                throw new DomainException(Codes.DuplicateCode);
-            }
-        }
-    }
-
-    private static bool IsUniqueViolation(DbUpdateException exception) =>
-        exception.InnerException is Npgsql.PostgresException { SqlState: "23505" };
+    private Task SaveWithOneRetryAsync(Func<Task> mintAndAdd, CancellationToken cancellationToken) =>
+        UniqueRetry.SaveWithOneRetryAsync(db, mintAndAdd, Codes.DuplicateCode, cancellationToken);
 
     /// <summary>An empty or whitespace-only string means "not given" here, exactly as the SPA's
     /// <c>input.x?.trim() || undefined</c> does. Storing "" instead would make a blank field

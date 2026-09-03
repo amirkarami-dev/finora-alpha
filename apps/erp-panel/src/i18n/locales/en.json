@@ -601,8 +601,7 @@
     "namePlaceholder": "e.g. Freight",
     "descriptionPlaceholder": "Optional notes for this category",
     "errors": {
-      "name-required": "Name is required",
-      "code-required": "Code is required"
+      "name-required": "Name is required"
     },
     "created": "Category created",
     "updated": "Category updated",
@@ -641,7 +640,7 @@
     "newGeneralDoc": "New general document",
     "editDoc": "Edit document",
     "docTitle": "Title",
-    "titlePlaceholder": "e.g. Freight and customs for PP-2026-0001",
+    "titlePlaceholder": "e.g. Freight and customs for 26090002",
     "invoice": "Invoice",
     "date": "Date",
     "description": "Description",
@@ -1082,7 +1081,7 @@
     "selectInvoice": "Select invoice",
     "changeInvoice": "Change invoice",
     "claimTitle": "Title",
-    "titlePlaceholder": "e.g. Quality claim for PP-2026-0001",
+    "titlePlaceholder": "e.g. Quality claim for 26090002",
     "claimType": "Claim type",
     "date": "Date",
     "invoice": "Invoice",

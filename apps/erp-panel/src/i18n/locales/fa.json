@@ -601,8 +601,7 @@
     "namePlaceholder": "مثلاً حمل‌ونقل",
     "descriptionPlaceholder": "یادداشت اختیاری برای این دسته",
     "errors": {
-      "name-required": "نام الزامی است",
-      "code-required": "کد الزامی است"
+      "name-required": "نام الزامی است"
     },
     "created": "دسته ایجاد شد",
     "updated": "دسته به‌روزرسانی شد",
@@ -641,7 +640,7 @@
     "newGeneralDoc": "سند عمومی جدید",
     "editDoc": "ویرایش سند",
     "docTitle": "عنوان",
-    "titlePlaceholder": "مثلاً: هزینه حمل و گمرک برای PP-2026-0001",
+    "titlePlaceholder": "مثلاً: هزینه حمل و گمرک برای 26090002",
     "invoice": "فاکتور",
     "date": "تاریخ",
     "description": "توضیحات",
@@ -1082,7 +1081,7 @@
     "selectInvoice": "انتخاب فاکتور",
     "changeInvoice": "تغییر فاکتور",
     "claimTitle": "عنوان",
-    "titlePlaceholder": "مثال: مطالبه کیفیت برای PP-2026-0001",
+    "titlePlaceholder": "مثال: مطالبه کیفیت برای 26090002",
     "claimType": "نوع مطالبه",
     "date": "تاریخ",
     "invoice": "فاکتور",

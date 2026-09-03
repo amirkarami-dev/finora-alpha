@@ -405,7 +405,7 @@ export interface InvoiceItem {
 
 export interface Invoice {
   id: string;               // e.g. 'inv-po-0001' (prefix by type, zero-padded counter)
-  invoiceNumber: string;    // e.g. 'PO-2026-0001' — auto-generated, editable while DRAFT
+  invoiceNumber: string;    // e.g. '26090001' — assigned by the server (YYMM + 4 digits, one sequence across all document types), never editable
   invoiceType: InvoiceType;
   invoiceDate: string;      // ISO date
   contractId: string;

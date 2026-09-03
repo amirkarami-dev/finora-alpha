@@ -36,6 +36,7 @@ public sealed class InvoiceService(ErpDbContext db)
         public const string InvoiceCancelled = "invoice-cancelled";
         public const string InvalidStatus = "invalid-status";
         public const string InvalidDiscount = "invalid-discount";
+        public const string DuplicateNumber = "duplicate-number";
     }
 
     /* ---------------------------------- Reads ----------------------------------- */
@@ -60,31 +61,39 @@ public sealed class InvoiceService(ErpDbContext db)
             .SingleOrDefaultAsync(c => c.Id == input.ContractId, cancellationToken)
             ?? throw new NotFoundException(Codes.ContractNotFound);
 
-        var all = await LoadAllAsync(cancellationToken);
-        var number = NextNumber(all, input.InvoiceDate);
-
         var currency = ParseCurrency(input.Currency);
-        var invoice = new Invoice
-        {
-            Id = NextInvoiceId(all, type),
-            InvoiceNumber = number,
-            InvoiceType = type,
-            // Npgsql only accepts offset-zero values for `timestamptz`; the instant is unchanged,
-            // only its representation. The number above is computed from the original offset, so
-            // Gulf-time month boundaries are unaffected.
-            InvoiceDate = input.InvoiceDate.ToUniversalTime(),
-            ContractId = contract.Id,
-            // Copied once, never re-read. Reassigning the contract later must not silently
-            // re-bill every document raised against it.
-            CustomerId = contract.CustomerId,
-            Status = InvoiceStatus.DRAFT,
-            Currency = currency,
-            ExchangeRate = currency == Currency.USD ? 1m : (input.ExchangeRate ?? await FxRateAsync(cancellationToken)),
-            Description = Blank(input.Description),
-        };
+        var exchangeRate = currency == Currency.USD
+            ? 1m
+            : (input.ExchangeRate ?? await FxRateAsync(cancellationToken));
 
-        db.Invoices.Add(invoice);
-        await db.SaveChangesAsync(cancellationToken);
+        Invoice invoice = null!;
+        await UniqueRetry.SaveWithOneRetryAsync(db, async () =>
+        {
+            // Re-read on every attempt: a retry follows a collision on the number, and the
+            // second mint must see whatever the other writer just saved.
+            var all = await LoadAllAsync(cancellationToken);
+            invoice = new Invoice
+            {
+                Id = NextInvoiceId(all, type),
+                InvoiceNumber = NextNumber(all, input.InvoiceDate),
+                InvoiceType = type,
+                // Npgsql only accepts offset-zero values for `timestamptz`; the instant is
+                // unchanged, only its representation. The number above is computed from the
+                // original offset, so Gulf-time month boundaries are unaffected.
+                InvoiceDate = input.InvoiceDate.ToUniversalTime(),
+                ContractId = contract.Id,
+                // Copied once, never re-read. Reassigning the contract later must not silently
+                // re-bill every document raised against it.
+                CustomerId = contract.CustomerId,
+                Status = InvoiceStatus.DRAFT,
+                Currency = currency,
+                ExchangeRate = exchangeRate,
+                Description = Blank(input.Description),
+            };
+
+            db.Invoices.Add(invoice);
+        }, Codes.DuplicateNumber, cancellationToken);
+
         return await SingleAsync(invoice.Id, cancellationToken);
     }
 
@@ -93,34 +102,50 @@ public sealed class InvoiceService(ErpDbContext db)
     {
         ArgumentNullException.ThrowIfNull(patch);
 
-        var all = await LoadAllAsync(cancellationToken);
-        var invoice = Find(all, id);
-        RequireDraft(invoice);
-
-        if (patch.InvoiceDate is { } date)
+        // The whole patch runs inside the mint-and-add lambda, not just the number: a collision
+        // clears the change tracker, so anything set on `invoice` before that point would be
+        // silently lost on retry unless it is re-applied to a freshly loaded entity too.
+        await UniqueRetry.SaveWithOneRetryAsync(db, async () =>
         {
-            invoice.InvoiceDate = date.ToUniversalTime();
-        }
+            var all = await LoadAllAsync(cancellationToken);
+            var invoice = Find(all, id);
+            RequireDraft(invoice);
 
-        if (patch.Currency is not null)
-        {
-            invoice.Currency = ParseCurrency(patch.Currency);
-            invoice.ExchangeRate = invoice.Currency == Currency.USD
-                ? 1m
-                : (patch.ExchangeRate ?? await FxRateAsync(cancellationToken));
-        }
-        else if (patch.ExchangeRate is { } rate && invoice.Currency != Currency.USD)
-        {
-            invoice.ExchangeRate = rate;
-        }
+            if (patch.InvoiceDate is { } date)
+            {
+                invoice.InvoiceDate = date.ToUniversalTime();
 
-        if (patch.Description is not null)
-        {
-            invoice.Description = Blank(patch.Description);
-        }
+                // A DRAFT's number carries the month it was minted in. Moving the date to
+                // another month would leave that promise broken — a document numbered 2609...
+                // dated in October — so the number is re-minted in the destination month's own
+                // sequence. Staying within the same month leaves the number untouched.
+                var newMonth = date.ToOffset(Numbering.GulfOffset)
+                    .ToString("yyMM", CultureInfo.InvariantCulture);
+                if (!invoice.InvoiceNumber.StartsWith(newMonth, StringComparison.Ordinal))
+                {
+                    invoice.InvoiceNumber = NextNumber(all, date);
+                }
+            }
 
-        await db.SaveChangesAsync(cancellationToken);
-        return await SingleAsync(invoice.Id, cancellationToken);
+            if (patch.Currency is not null)
+            {
+                invoice.Currency = ParseCurrency(patch.Currency);
+                invoice.ExchangeRate = invoice.Currency == Currency.USD
+                    ? 1m
+                    : (patch.ExchangeRate ?? await FxRateAsync(cancellationToken));
+            }
+            else if (patch.ExchangeRate is { } rate && invoice.Currency != Currency.USD)
+            {
+                invoice.ExchangeRate = rate;
+            }
+
+            if (patch.Description is not null)
+            {
+                invoice.Description = Blank(patch.Description);
+            }
+        }, Codes.DuplicateNumber, cancellationToken);
+
+        return await SingleAsync(id, cancellationToken);
     }
 
     /* ----------------------------------- Lines ---------------------------------- */
@@ -511,57 +536,67 @@ public sealed class InvoiceService(ErpDbContext db)
         var carryPrices = source.InvoiceType
             is InvoiceType.PURCHASE_PROVISIONAL or InvoiceType.SALE_PROVISIONAL;
 
-        var today = DateTimeOffset.UtcNow;
-        var successor = new Invoice
+        Invoice successor = null!;
+        await UniqueRetry.SaveWithOneRetryAsync(db, async () =>
         {
-            Id = NextInvoiceId(all, target),
-            InvoiceNumber = NextNumber(all, today),
-            InvoiceType = target,
-            InvoiceDate = today,
-            ContractId = source.ContractId,
-            CustomerId = source.CustomerId,
-            Status = InvoiceStatus.DRAFT,
-            Currency = source.Currency,
-            ExchangeRate = source.ExchangeRate,
-            Description = source.Description,
-            RefInvoiceId = source.Id,
-        };
+            // Re-read on every attempt, same reason as CreateAsync: a retry follows a collision
+            // on the number, and the source's items must come from a tracked, non-detached
+            // entity after a collision clears the change tracker.
+            var candidates = await LoadAllAsync(cancellationToken);
+            var current = Find(candidates, id);
+            var today = DateTimeOffset.UtcNow;
 
-        var seq = 0;
-        foreach (var line in source.Items)
-        {
-            successor.Items.Add(new InvoiceItem
+            successor = new Invoice
             {
-                Id = NextItemId(all, seq++),
-                InvoiceId = successor.Id,
-                ContractItemId = line.ContractItemId,
-                // The whole point of the chain. A fresh identity here would silently break
-                // warehouse de-duplication and orphan every cost booked on the predecessor.
-                ReferenceDocumentItemId = line.ReferenceDocumentItemId,
-                Product = line.Product,
-                QuantityMt = line.QuantityMt,
-                LmePercent = line.LmePercent,
-                LmeFixed = line.LmeFixed,
-                FixedPrice = line.FixedPrice,
-                Premium = line.Premium,
-                LmePrice = carryPrices ? line.LmePrice : null,
-                LmeDate = carryPrices ? line.LmeDate : null,
-                DiscountPercent = carryPrices ? line.DiscountPercent : null,
-                ContainerId = line.ContainerId,
-                Description = line.Description,
-                Amount = 0m,
-            });
-        }
+                Id = NextInvoiceId(candidates, target),
+                InvoiceNumber = NextNumber(candidates, today),
+                InvoiceType = target,
+                InvoiceDate = today,
+                ContractId = current.ContractId,
+                CustomerId = current.CustomerId,
+                Status = InvoiceStatus.DRAFT,
+                Currency = current.Currency,
+                ExchangeRate = current.ExchangeRate,
+                Description = current.Description,
+                RefInvoiceId = current.Id,
+            };
 
-        foreach (var line in successor.Items)
-        {
-            InvoiceMath.RecomputeItemAmount(line);
-        }
+            var seq = 0;
+            foreach (var line in current.Items)
+            {
+                successor.Items.Add(new InvoiceItem
+                {
+                    Id = NextItemId(candidates, seq++),
+                    InvoiceId = successor.Id,
+                    ContractItemId = line.ContractItemId,
+                    // The whole point of the chain. A fresh identity here would silently break
+                    // warehouse de-duplication and orphan every cost booked on the predecessor.
+                    ReferenceDocumentItemId = line.ReferenceDocumentItemId,
+                    Product = line.Product,
+                    QuantityMt = line.QuantityMt,
+                    LmePercent = line.LmePercent,
+                    LmeFixed = line.LmeFixed,
+                    FixedPrice = line.FixedPrice,
+                    Premium = line.Premium,
+                    LmePrice = carryPrices ? line.LmePrice : null,
+                    LmeDate = carryPrices ? line.LmeDate : null,
+                    DiscountPercent = carryPrices ? line.DiscountPercent : null,
+                    ContainerId = line.ContainerId,
+                    Description = line.Description,
+                    Amount = 0m,
+                });
+            }
 
-        InvoiceMath.RecomputeInvoiceTotals(successor);
-        db.Invoices.Add(successor);
+            foreach (var line in successor.Items)
+            {
+                InvoiceMath.RecomputeItemAmount(line);
+            }
 
-        await SaveAndRecomputeRemainingAsync(cancellationToken);
+            InvoiceMath.RecomputeInvoiceTotals(successor);
+            db.Invoices.Add(successor);
+        }, Codes.DuplicateNumber, cancellationToken);
+
+        await RecomputeAllRemainingAsync(db, cancellationToken);
         return await SingleAsync(successor.Id, cancellationToken);
     }
 

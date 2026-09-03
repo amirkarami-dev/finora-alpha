@@ -39,6 +39,12 @@ public sealed class ErrorCodeContractTests
         // the modals show their generic failure message for it, which is honest for a race.
         "duplicate-code",
 
+        // Same race, for trade-document numbers: two concurrent creates (or a header edit that
+        // re-mints across a month boundary) can both land on the same number, and the retry can
+        // still collide a second time. The SPA no longer branches on this — it shows the generic
+        // failure message, honest for a race the user did not cause.
+        "duplicate-number",
+
         // User administration. These live on the server because `api.ts` never had accounts to
         // administer — the mock app had four hardcoded logins. Every one of them is reachable
         // from a form a person is filling in, so each has a translation in all three locale

@@ -40,6 +40,12 @@ Binding details:
   4-digit part is the count of existing documents (any type, any status, cancelled
   included) whose number starts with that `YYMM`, plus one; it grows to 5 digits after
   9999 rather than failing. Numbers are never editable, not even in DRAFT.
+- **Editing a DRAFT's date across a month boundary re-mints the number.** The number's
+  `YYMM` must always agree with `invoiceDate`, so if a header edit moves the date into a
+  different Gulf-time month than the number already carries, the server assigns a fresh
+  number in the destination month's sequence at save time; staying within the same month
+  leaves the number untouched. This is the server keeping its own promise, not a form of
+  user editing — the number field itself stays read-only throughout.
 - **Contract ids** keep their current shape and keep using the person code, so they read
   `1-P-251101156`. Customer ids stay `cust-<code>` (`cust-1`). No other id changes.
 - **Uniqueness under concurrency**: the existing unique constraints (code per table,

@@ -738,6 +738,44 @@ public sealed class InvoiceTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Moving_a_drafts_date_to_another_month_re_mints_the_number()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var created = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_ORDER", contractId = "ctr-1", invoiceDate = "2026-09-30T08:00:00+04:00" });
+        Assert.Equal("26090001", Number(created));
+
+        var patched = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{Id(created)}", UriKind.Relative),
+            new { invoiceDate = "2026-10-02T08:00:00+04:00" });
+        patched.EnsureSuccessStatusCode();
+        var body = await patched.Content.ReadFromJsonAsync<JsonElement>(Json);
+
+        // The number's YYMM must always agree with the date it now carries, even on a DRAFT
+        // nobody edited the number of directly.
+        Assert.Equal("26100001", Number(body));
+    }
+
+    [Fact]
+    public async Task Moving_a_drafts_date_within_the_same_month_leaves_the_number_unchanged()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var created = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_ORDER", contractId = "ctr-1", invoiceDate = "2026-09-05T08:00:00+04:00" });
+        Assert.Equal("26090001", Number(created));
+
+        var patched = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{Id(created)}", UriKind.Relative),
+            new { invoiceDate = "2026-09-20T08:00:00+04:00" });
+        patched.EnsureSuccessStatusCode();
+        var body = await patched.Content.ReadFromJsonAsync<JsonElement>(Json);
+
+        Assert.Equal("26090001", Number(body));
+    }
+
+    [Fact]
     public async Task A_converted_document_takes_the_month_it_is_made_in()
     {
         await ResetAsync();

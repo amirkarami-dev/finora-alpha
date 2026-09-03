@@ -4,9 +4,10 @@ import type { MetalType } from '@/types';
  * The codes the server assigns, mirrored line for line from
  * `backend/src/Modules/Erp/Finora.Erp.Domain/Numbering.cs`.
  *
- * Used only by the offline fallback in `api.ts` (a browser that lost the API) and by the sample
- * data generator, so a record made without the server still carries the shape the server would
- * have given it. Change the C# and this file together.
+ * `nextIntegerCode` and `nextGoodCode` back the offline fallback in `api.ts` (a browser that
+ * lost the API), so a record made without the server still carries the shape the server would
+ * have given it. `nextDocumentNumber` has no offline caller — trade documents are server-only —
+ * and is used only by the sample data generator. Change the C# and this file together.
  */
 
 const GULF_OFFSET_MS = 4 * 60 * 60 * 1000;

@@ -138,7 +138,8 @@ public sealed class Invoice
 {
     public required string Id { get; init; }
 
-    /// <summary>Auto-generated, e.g. 'PO-2026-0001'. Editable only while DRAFT.</summary>
+    /// <summary>Assigned by the server: YYMM plus four digits (e.g. '26090001'), one sequence
+    /// shared across all six document types. Never editable by the user.</summary>
     public required string InvoiceNumber { get; set; }
 
     public InvoiceType InvoiceType { get; init; }
