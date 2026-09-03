@@ -4,6 +4,7 @@ import type {
   ChargeScope,
   ChequeStatus,
   ClaimSide,
+  ConversionDocInput,
   FinancialAccountType,
   PaymentStatus,
   PaymentType,
@@ -102,6 +103,9 @@ export const qk = {
   claimSourceInvoices: (side: ClaimSide) => ['claimSourceInvoices', side] as const,
   // ---- Invoice charge summary (design spec §4-§5, Phase 7) ----
   invoiceChargeSummary: (invoiceId: string) => ['invoiceChargeSummary', invoiceId] as const,
+  // ---- Warehouse conversions (design spec 2026-09-03) ----
+  conversions: ['conversions'] as const,
+  invoiceCostOfSales: (invoiceId: string) => ['invoiceCostOfSales', invoiceId] as const,
 };
 
 export const useAccounts = () => useQuery({ queryKey: qk.accounts, queryFn: api.getAccounts });
@@ -639,6 +643,65 @@ export const useCancelInventoryDocument = () => {
   const invalidate = useInvalidateWarehouses();
   return useMutation({
     mutationFn: (id: string) => api.cancelInventoryDocument(id),
+    onSuccess: invalidate,
+  });
+};
+
+/* -------------------------- Conversions (design spec 2026-09-03) -------------------------- */
+
+export const useConversions = () => useQuery({ queryKey: qk.conversions, queryFn: api.getConversions });
+
+export const useInvoiceCostOfSales = (invoiceId: string) =>
+  useQuery({
+    queryKey: qk.invoiceCostOfSales(invoiceId),
+    queryFn: () => api.getInvoiceCostOfSales(invoiceId),
+    enabled: !!invoiceId,
+  });
+
+// Confirm/cancel also book or reverse a charge document (added costs) on the workshop person,
+// so both the charge lists and that person's balance are stale the moment a conversion write
+// returns. Bare-prefix invalidation (queries.ts precedent above) covers every direction/kind/id
+// variant already cached.
+function useInvalidateConversions() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: qk.conversions });
+    qc.invalidateQueries({ queryKey: qk.stock });
+    qc.invalidateQueries({ queryKey: ['invoiceCostOfSales'] });
+    qc.invalidateQueries({ queryKey: ['chargeDocs'] });
+    qc.invalidateQueries({ queryKey: ['chargeDoc'] });
+    qc.invalidateQueries({ queryKey: qk.customers });
+  };
+}
+
+export const useCreateConversion = () => {
+  const invalidate = useInvalidateConversions();
+  return useMutation({
+    mutationFn: (input: ConversionDocInput) => api.createConversion(input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useUpdateConversion = () => {
+  const invalidate = useInvalidateConversions();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ConversionDocInput }) => api.updateConversion(id, input),
+    onSuccess: invalidate,
+  });
+};
+
+export const useConfirmConversion = () => {
+  const invalidate = useInvalidateConversions();
+  return useMutation({
+    mutationFn: (id: string) => api.confirmConversion(id),
+    onSuccess: invalidate,
+  });
+};
+
+export const useCancelConversion = () => {
+  const invalidate = useInvalidateConversions();
+  return useMutation({
+    mutationFn: (id: string) => api.cancelConversion(id),
     onSuccess: invalidate,
   });
 };

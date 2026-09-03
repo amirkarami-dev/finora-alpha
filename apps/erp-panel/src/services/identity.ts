@@ -1,12 +1,13 @@
 import type { Role } from '@/types';
-import type { RouteKey } from '@/config/roles';
 import { request } from '@/services/http';
 
 /**
  * The session, as the server describes it.
  *
- * Permissions are route keys — the same strings the sidebar and the route guards already test —
- * so moving the decision to the server changed where the answer comes from, not the answer.
+ * Permissions used to be route keys only — the same strings the sidebar and the route guards
+ * already test. They still are, but the server can now also grant fine-grained codes that are
+ * not routes (e.g. `'conversions.confirm'`), so the type widened to `string[]`; route-key checks
+ * (`permissions.includes(routeKey)`) still type-check because a `RouteKey` is a `string`.
  */
 export interface SessionUser {
   id: string;
@@ -14,7 +15,8 @@ export interface SessionUser {
   name: string;
   role: Role;
   avatarColor: string;
-  permissions: RouteKey[];
+  /** Route keys plus fine-grained codes such as 'conversions.confirm' — whatever the server granted. */
+  permissions: string[];
   /** Where this role lands after signing in. */
   home: string;
 }

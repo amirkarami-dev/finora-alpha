@@ -5,6 +5,7 @@ import type {
   Cheque,
   Container,
   Contract,
+  ConversionDocument,
   CostCentre,
   Customer,
   ExchangeGainLoss,
@@ -68,8 +69,11 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  * Schema v7 (2026-09-03): codes and document numbers are assigned by the server
  * (docs/superpowers/specs/2026-09-03-auto-codes-design.md). No field changed shape, but the
  * demo dataset's codes did, and a v6 blob would mix `AM`-style codes with `1`-style ones.
+ *
+ * Schema v8 (2026-09-03): conversion documents and cost per MT on inventory lines
+ * (docs/superpowers/specs/2026-09-03-warehouse-conversion-design.md).
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
@@ -90,6 +94,7 @@ const seed = {
   cheques: [] as Cheque[],
   moneyTransfers: [] as MoneyTransfer[],
   exchangeGainLosses: [] as ExchangeGainLoss[],
+  conversions: [] as ConversionDocument[],
   fxRate: DEFAULT_FX_AED_PER_USD,
 };
 
@@ -141,6 +146,9 @@ function isCompatible(d: unknown): d is typeof seed {
   if (o.containers.length && !Array.isArray((o.containers[0] as Record<string, unknown> | undefined)?.goods)) {
     return false;
   }
+  // Schema v8: a fresh STORAGE_KEY means every blob that reaches here was persisted under v8 or
+  // later, so `conversions` is a HARD requirement — same reasoning as the v6 four above.
+  if (!Array.isArray(o.conversions)) return false;
   // Schema v4: Container.shipmentDate → loadDate.
   if (o.containers.length && typeof (o.containers[0] as Record<string, unknown> | undefined)?.loadDate !== 'string') {
     return false;

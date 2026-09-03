@@ -17,6 +17,8 @@ import type {
   Contract,
   ContractStatus,
   ContractType,
+  ConversionDocInput,
+  ConversionDocument,
   CostCentre,
   Currency,
   Customer,
@@ -66,7 +68,8 @@ import { chargesApi, type ChargeResult } from '@/services/charges';
 import { claimsApi, type ClaimResult } from '@/services/claims';
 import { transfersApi, type TransferResult } from '@/services/transfers';
 import { exchangeGainLossApi, type GainLossResult } from '@/services/exchangeGainLoss';
-import { isServerBacked } from '@/services/snapshot';
+import { conversionsApi, type ConversionResult } from '@/services/conversions';
+import { isServerBacked, hydrateFromServer } from '@/services/snapshot';
 import { nextGoodCode, nextIntegerCode } from '@/utils/numbering';
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms));
@@ -1799,29 +1802,43 @@ export interface StockLevelRow {
   /** First-seen display casing. */
   product: string;
   mt: number;
+  /** Σ costUsd of what came in − Σ costUsd of what went out, over confirmed movements. */
+  valueUsd: number;
+  /** valueUsd ÷ mt, 4 dp; 0 when nothing is in stock. */
+  unitCostUsd: number;
+  /** False when metal is in stock but some movement behind it carries no cost (pre-costing rows). */
+  costKnown: boolean;
 }
 
+/** Mirrors the server's StockLedger for display: receipts and conversion outputs add, issues
+ *  and conversion inputs subtract, in tonnes and in USD. Never used to decide a cost. */
 export async function getStockLevels(): Promise<StockLevelRow[]> {
   await delay(140);
   const rows = new Map<string, StockLevelRow>();
+  const move = (warehouseId: string, product: string, mt: number, cost: number, known: boolean) => {
+    const productKey = product.trim().toLowerCase();
+    const key = `${warehouseId}::${productKey}`;
+    const row = rows.get(key) ?? { warehouseId, productKey, product, mt: 0, valueUsd: 0, unitCostUsd: 0, costKnown: true };
+    row.mt = round3(row.mt + mt);
+    row.valueUsd = round(row.valueUsd + cost);
+    row.costKnown = row.costKnown && known;
+    rows.set(key, row);
+  };
   for (const doc of db.inventoryDocs) {
     if (doc.status !== 'CONFIRMED') continue;
     const sign = doc.type === 'IN' ? 1 : -1;
     for (const item of doc.items) {
-      const productKey = item.product.trim().toLowerCase();
-      const key = `${doc.warehouseId}::${productKey}`;
-      const existing = rows.get(key);
-      if (existing) {
-        existing.mt = round(existing.mt + sign * item.quantityMt);
-      } else {
-        rows.set(key, {
-          warehouseId: doc.warehouseId,
-          productKey,
-          product: item.product,
-          mt: round(sign * item.quantityMt),
-        });
-      }
+      move(doc.warehouseId, item.product, sign * item.quantityMt, sign * item.costUsd, item.unitCostUsd > 0);
     }
+  }
+  for (const cnv of db.conversions) {
+    if (cnv.status !== 'CONFIRMED') continue;
+    for (const i of cnv.inputs) move(cnv.warehouseId, i.product, -i.quantityMt, -i.costUsd, true);
+    for (const o of cnv.outputs) move(cnv.warehouseId, o.product, o.quantityMt, o.costUsd, true);
+  }
+  for (const row of rows.values()) {
+    row.unitCostUsd = row.mt === 0 ? 0 : round4(row.valueUsd / row.mt);
+    if (row.mt === 0) row.costKnown = true;
   }
   return [...rows.values()];
 }
@@ -2098,6 +2115,52 @@ export async function createInventoryDocument(input: InventoryDocInput): Promise
 export async function cancelInventoryDocument(id: string): Promise<InventoryDocument> {
   return warehouseWrite(() => warehouseDocsApi.cancel(id));
 }
+
+/* ---------------------------- Conversions ---------------------------- */
+
+export async function getConversions(): Promise<ConversionDocument[]> {
+  await delay(140);
+  return [...db.conversions].sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+}
+
+/** Σ costUsd of the confirmed issues that shipped this sale invoice — its cost of sales. */
+export async function getInvoiceCostOfSales(invoiceId: string): Promise<{ costUsd: number; costKnown: boolean } | null> {
+  await delay(80);
+  const issues = db.inventoryDocs.filter((d) => d.type === 'OUT' && d.status === 'CONFIRMED' && d.invoiceId === invoiceId);
+  if (issues.length === 0) return null;
+  let cost = 0;
+  let known = true;
+  for (const doc of issues) for (const item of doc.items) {
+    cost += item.costUsd;
+    known = known && item.unitCostUsd > 0;
+  }
+  return { costUsd: round(cost), costKnown: known };
+}
+
+function applyConversionResult(result: ConversionResult): ConversionDocument {
+  db.conversions.splice(0, db.conversions.length, ...result.all);
+  persistDb({ alreadySynced: true });
+  return result.entity;
+}
+
+export const createConversion = async (input: ConversionDocInput) => applyConversionResult(await conversionsApi.create(input));
+export const updateConversion = async (id: string, input: ConversionDocInput) =>
+  applyConversionResult(await conversionsApi.update(id, input));
+
+// A confirm/cancel also books (or reverses) a charge document server-side for the added costs,
+// so the store's charge list is stale the instant this returns. Re-hydrating the whole snapshot
+// is the simplest correct fix — cheap next to a per-feature endpoint for a rare action, and the
+// pattern this codebase already uses whenever one write's fallout spans entities it doesn't own.
+export const confirmConversion = async (id: string) => {
+  const entity = applyConversionResult(await conversionsApi.confirm(id));
+  await hydrateFromServer();
+  return entity;
+};
+export const cancelConversion = async (id: string) => {
+  const entity = applyConversionResult(await conversionsApi.cancel(id));
+  await hydrateFromServer();
+  return entity;
+};
 
 /**
  * Creates a new DRAFT of `targetType` copying header + items from `id` (spec §5).

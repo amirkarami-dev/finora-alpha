@@ -148,7 +148,7 @@ const EMPTY: Db = {
   customers: [], contracts: [], containers: [], payments: [], partners: [], warehouses: [],
   invoices: [], inventoryDocs: [], costCentres: [], chargeCategories: [], chargeDocs: [],
   claims: [], goods: [], financialAccounts: [], cheques: [], moneyTransfers: [],
-  exchangeGainLosses: [], fxRate: db.fxRate,
+  exchangeGainLosses: [], conversions: [], fxRate: db.fxRate,
 };
 
 // Every local write schedules a push, so an edit made before its feature has a real endpoint

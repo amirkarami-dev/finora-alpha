@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { Role } from '@/types';
-import type { RouteKey } from '@/config/roles';
 import { normalizeRole } from '@/config/roles';
 import { identityApi, type SessionUser } from '@/services/identity';
 import { clearHydratedData, hydrateFromServer, setServerBacked } from '@/services/snapshot';
@@ -16,8 +15,8 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  /** Route keys this user may reach, as granted by the server. */
-  permissions: RouteKey[];
+  /** Route keys plus fine-grained codes such as 'conversions.confirm' — whatever the server granted. */
+  permissions: string[];
   /** Where this role lands after signing in. */
   home: string;
   isAuthenticated: boolean;
