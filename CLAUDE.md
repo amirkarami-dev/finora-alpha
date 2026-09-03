@@ -189,6 +189,7 @@ lookup indexes must not go stale).
 - **Money/status/dates** render through `components/common/Money.tsx`,
   `StatusTag.tsx`, and `utils/format.ts` — reuse them, don't reformat inline.
 - Keep `npm run lint` and `npm run build` clean before committing.
+- **Codes and document numbers are server-assigned** (`Finora.Erp.Domain.Numbering`, mirrored in `utils/numbering.ts` for the offline path). Forms never take a code; see `docs/superpowers/specs/2026-09-03-auto-codes-design.md`.
 
 ## Adding a page (pattern)
 

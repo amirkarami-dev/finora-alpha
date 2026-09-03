@@ -189,7 +189,7 @@
   <div class="path"><span class="menu">Base Info</span><i></i><span>Goods</span><i></i><span>Banks</span><i></i><span>Cash safes</span><i></i><span>Expense / Revenue categories</span><i></i><span>Cost centres</span><i></i><span class="menu">Warehouse</span><i></i><span class="menu">Persons</span><i></i><span class="end">Ready</span></div>
 
   <ol class="steps">
-    <li><div class="t"><span class="where">Base Info › Goods</span> → <span class="btn">New</span>. Add each product you trade: <b>name</b>, <b>code</b>, <b>metal type</b> (copper, aluminium …), <b>form</b> (cathode, ingot, scrap …), HS code if you know it.<span class="see">the goods list. These names appear when you add goods to a contract.</span></div></li>
+    <li><div class="t"><span class="where">Base Info › Goods</span> → <span class="btn">New</span>. Add each product you trade: <b>name</b>, <b>metal type</b> (copper, aluminium …), <b>form</b> (cathode, ingot, scrap …), HS code if you know it.<span class="see">the goods list. These names appear when you add goods to a contract.</span></div></li>
     <li><div class="t"><span class="where">Base Info › Banks</span> → <span class="btn">New</span>. Add each company bank account: name, <b>currency</b>, account number, IBAN, SWIFT.<br><span class="where">Base Info › Cash safes</span> → <span class="btn">New</span>. Add each cash box: name and currency.<span class="see">you will pick these when money comes in by bank transfer (TT) or when a cheque is paid.</span></div></li>
     <li><div class="t"><span class="where">Base Info › Expense categories</span> and <span class="where">Revenue categories</span> → <span class="btn">New</span>. Example expenses: Freight, Customs, Rent, Salaries. Example revenues: Commission, Interest. For each one choose the <b>scope</b>: <b>Invoice</b> (belongs to a shipment) or <b>General</b> (office cost).</div></li>
     <li><div class="t"><span class="where">Base Info › Cost centres</span> → <span class="btn">New</span>. Optional. Example: Dubai office, Iraq branch.</div></li>
@@ -199,10 +199,9 @@
   </ol>
 
   <div class="two">
-    <div class="box tip"><h3>Rules for codes</h3><ul>
-      <li>Codes use letters, numbers and hyphens only. They become UPPERCASE.</li>
-      <li>A code cannot be changed after saving. Choose short and clear: <b>CU-CATH</b>, <b>MW</b>, <b>AM</b>.</li>
-      <li>A code cannot be used twice in the same list.</li>
+    <div class="box tip"><h3>Codes are automatic</h3><ul>
+      <li>You never type a code. The system gives one when you save: persons, partners, warehouses, cost centres and categories count 1, 2, 3…; goods are named by metal, like <b>copper-001</b>.</li>
+      <li>A code never changes. The metal type of a good is also fixed after saving.</li>
     </ul></div>
     <div class="box warn"><h3>Nothing is deleted</h3><ul>
       <li>Records with history cannot be deleted. Use <b>Deactivate</b> instead. An inactive record is hidden from the pick lists but stays in old documents.</li>
@@ -222,7 +221,7 @@
   <ol class="steps">
     <li><div class="t">Open <span class="where">Persons</span> and click <span class="btn">New person</span>.</div></li>
     <li><div class="t"><b>Name</b> — the company or person name, as it must appear on documents. Example: <i>Alco Metal Trading</i>.</div></li>
-    <li><div class="t"><b>Code</b> — short, example <i>AM</i>. It becomes part of every contract number of this person, so choose it carefully. It cannot change later.</div></li>
+    <li><div class="t"><b>Code</b> — given by the system when you save (1, 2, 3…). It appears in contract numbers, e.g. <b>1-P-251101156</b>.</div></li>
     <li><div class="t"><b>Type</b> — choose one:
       <table>
         <tr><th>Type</th><th>Use it for</th><th>Can have contracts?</th></tr>
@@ -249,8 +248,7 @@
       <li>To edit, open the person and click <span class="btn">Edit person</span>.</li>
     </ul></div>
     <div class="box warn"><h3>Cannot save?</h3><ul>
-      <li>"This code is already in use" — pick another code.</li>
-      <li>"Letters, numbers and hyphens only" — remove spaces and symbols from the code.</li>
+      <li>A person with the same name already exists — check the list before adding.</li>
     </ul></div>
   </div>
   <div class="foot"><span>Jalil-Jalal user guide · Add a person</span><span>Page 3 / 16</span></div>
@@ -306,14 +304,14 @@
 
   <h2>A. Make the order</h2>
   <ol class="steps">
-    <li><div class="t"><span class="where">Purchase › Orders</span> → <span class="btn">New order</span>. Pick the <b>contract</b>; the supplier fills in by itself. Choose currency and rate. <span class="btn">Save</span>.<span class="see">a DRAFT document with a number like PO-2026-0001.</span></div></li>
+    <li><div class="t"><span class="where">Purchase › Orders</span> → <span class="btn">New order</span>. Pick the <b>contract</b>; the supplier fills in by itself. Choose currency and rate. <span class="btn">Save</span>.<span class="see">a DRAFT document with a number like 26090001 — year, month, and a counter that restarts every month.</span></div></li>
     <li><div class="t">Click <span class="btn">Add items</span> → <span class="btn">Insert all from contract</span> (or tick lines and <span class="btn">Insert selected</span>). Change quantities if this order is only part of the contract.</div></li>
     <li><div class="t">Click <span class="btn">Confirm</span>.<span class="see">status CONFIRMED. The document is now locked. The page shows how many MT of the contract are still uninvoiced.</span></div></li>
   </ol>
 
   <h2>B. Convert to a provisional, then price it</h2>
   <ol class="steps">
-    <li><div class="t">On the confirmed order click <span class="btn">Convert</span> → choose <b>Provisional</b>.<span class="see">a new DRAFT PP-2026-0001 with the same items. It shows "Reference: PO-2026-0001".</span></div></li>
+    <li><div class="t">On the confirmed order click <span class="btn">Convert</span> → choose <b>Provisional</b>.<span class="see">a new DRAFT numbered 26090002, with the same items. It shows "Reference: 26090001".</span></div></li>
     <li><div class="t">In the <b>Pricing</b> panel enter the <b>LME price</b> and <b>LME date</b> (needed for floating lines). Click <span class="btn">Apply to all</span>, or set each line. Add a <b>Discount %</b> if agreed.<span class="see">every line now has an amount, and the total at the bottom.</span></div></li>
     <li><div class="t">Optional: <span class="btn">Send</span> marks it as sent to the other party. <span class="btn">Print</span> gives a printable copy.</div></li>
     <li><div class="t">Click <span class="btn">Confirm</span>.</div></li>
