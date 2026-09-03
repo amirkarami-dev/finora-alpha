@@ -3,23 +3,16 @@ namespace Finora.Erp.Application;
 /// <summary>
 /// A new trade document. Mirrors the SPA's <c>InvoiceInput</c>.
 /// </summary>
-/// <param name="InvoiceNumber">
-/// Optional. Left out, the server mints the next free one for this type. The browser's preview
-/// does not reserve, so two people drafting at once both see the same suggestion and the second
-/// save is refused — which is why the field is optional rather than required.
-/// </param>
 public sealed record InvoiceInput(
     string InvoiceType,
     string ContractId,
     DateTimeOffset InvoiceDate,
-    string? InvoiceNumber,
     string? Currency,
     decimal? ExchangeRate,
     string? Description);
 
 /// <summary>Header fields that may change while a document is still a draft.</summary>
 public sealed record InvoiceHeaderPatch(
-    string? InvoiceNumber,
     DateTimeOffset? InvoiceDate,
     string? Currency,
     decimal? ExchangeRate,

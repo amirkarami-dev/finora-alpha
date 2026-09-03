@@ -23,7 +23,6 @@ public sealed class InvoiceService(ErpDbContext db)
         public const string InvoiceNotFound = "invoice-not-found";
         public const string ContractNotFound = "contract-not-found";
         public const string ContractItemNotFound = "contract-item-not-found";
-        public const string DuplicateNumber = "duplicate-number";
         public const string NotDraft = "not-draft";
         public const string NoItems = "no-items";
         public const string MissingLmePrice = "missing-lme-price";
@@ -62,23 +61,7 @@ public sealed class InvoiceService(ErpDbContext db)
             ?? throw new NotFoundException(Codes.ContractNotFound);
 
         var all = await LoadAllAsync(cancellationToken);
-        var number = input.InvoiceNumber?.Trim();
-
-        if (!string.IsNullOrEmpty(number))
-        {
-            // The browser scopes this to the document type; the schema's index is global. They
-            // agree for generated numbers, because the type is encoded in the prefix — they part
-            // company only when someone types the same number onto two different types, which the
-            // stricter rule is right to refuse.
-            if (all.Any(i => string.Equals(i.InvoiceNumber, number, StringComparison.Ordinal)))
-            {
-                throw new DomainException(Codes.DuplicateNumber);
-            }
-        }
-        else
-        {
-            number = NextNumber(all, type, input.InvoiceDate);
-        }
+        var number = NextNumber(all, input.InvoiceDate);
 
         var currency = ParseCurrency(input.Currency);
         var invoice = new Invoice
@@ -86,7 +69,10 @@ public sealed class InvoiceService(ErpDbContext db)
             Id = NextInvoiceId(all, type),
             InvoiceNumber = number,
             InvoiceType = type,
-            InvoiceDate = input.InvoiceDate,
+            // Npgsql only accepts offset-zero values for `timestamptz`; the instant is unchanged,
+            // only its representation. The number above is computed from the original offset, so
+            // Gulf-time month boundaries are unaffected.
+            InvoiceDate = input.InvoiceDate.ToUniversalTime(),
             ContractId = contract.Id,
             // Copied once, never re-read. Reassigning the contract later must not silently
             // re-bill every document raised against it.
@@ -111,21 +97,9 @@ public sealed class InvoiceService(ErpDbContext db)
         var invoice = Find(all, id);
         RequireDraft(invoice);
 
-        var number = patch.InvoiceNumber?.Trim();
-        if (!string.IsNullOrEmpty(number) && !string.Equals(number, invoice.InvoiceNumber, StringComparison.Ordinal))
-        {
-            if (all.Any(i => i.Id != invoice.Id &&
-                             string.Equals(i.InvoiceNumber, number, StringComparison.Ordinal)))
-            {
-                throw new DomainException(Codes.DuplicateNumber);
-            }
-
-            invoice.InvoiceNumber = number;
-        }
-
         if (patch.InvoiceDate is { } date)
         {
-            invoice.InvoiceDate = date;
+            invoice.InvoiceDate = date.ToUniversalTime();
         }
 
         if (patch.Currency is not null)
@@ -541,7 +515,7 @@ public sealed class InvoiceService(ErpDbContext db)
         var successor = new Invoice
         {
             Id = NextInvoiceId(all, target),
-            InvoiceNumber = NextNumber(all, target, today),
+            InvoiceNumber = NextNumber(all, today),
             InvoiceType = target,
             InvoiceDate = today,
             ContractId = source.ContractId,
@@ -708,16 +682,6 @@ public sealed class InvoiceService(ErpDbContext db)
 
     /* --------------------------------- Numbering -------------------------------- */
 
-    private static readonly Dictionary<InvoiceType, string> NumberPrefix = new()
-    {
-        [InvoiceType.PURCHASE_ORDER] = "PO",
-        [InvoiceType.PURCHASE_PROVISIONAL] = "PP",
-        [InvoiceType.PURCHASE_INVOICE] = "PI",
-        [InvoiceType.SALE_ORDER] = "SO",
-        [InvoiceType.SALE_PROVISIONAL] = "SP",
-        [InvoiceType.SALE_INVOICE] = "SI",
-    };
-
     private static readonly Dictionary<InvoiceType, string> IdPrefix = new()
     {
         [InvoiceType.PURCHASE_ORDER] = "po",
@@ -729,34 +693,12 @@ public sealed class InvoiceService(ErpDbContext db)
     };
 
     /// <summary>
-    /// The first unused number for this type and year.
-    ///
-    /// <para>
-    /// Gap-filling from one, against every number of this type INCLUDING cancelled and hand-typed
-    /// ones. A database sequence would be simpler and wrong twice over: it leaves gaps an auditor
-    /// reads as deleted invoices, and skipping cancelled numbers would reissue one that has
-    /// already been sent to a customer.
-    /// </para>
+    /// The next document number: <c>YYMM</c> of the document's date plus four digits, counted
+    /// across every type and every status — cancelled and old-style numbers included — so a
+    /// number is never issued twice. See <see cref="Numbering.NextDocumentNumber"/>.
     /// </summary>
-    private static string NextNumber(List<Invoice> all, InvoiceType type, DateTimeOffset date)
-    {
-        var prefix = NumberPrefix[type];
-        var year = date.Year.ToString(CultureInfo.InvariantCulture);
-        var taken = all.Where(i => i.InvoiceType == type)
-            .Select(i => i.InvoiceNumber)
-            .ToHashSet(StringComparer.Ordinal);
-
-        for (var n = 1; n <= 9999; n++)
-        {
-            var candidate = string.Create(CultureInfo.InvariantCulture, $"{prefix}-{year}-{n:D4}");
-            if (!taken.Contains(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return string.Create(CultureInfo.InvariantCulture, $"{prefix}-{year}-{all.Count + 1}");
-    }
+    private static string NextNumber(IEnumerable<Invoice> all, DateTimeOffset date) =>
+        Numbering.NextDocumentNumber(date, all.Select(i => i.InvoiceNumber));
 
     private static string NextInvoiceId(IReadOnlyCollection<Invoice> all, InvoiceType type)
     {

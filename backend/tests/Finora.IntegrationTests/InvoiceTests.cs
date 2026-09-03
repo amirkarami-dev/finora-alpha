@@ -656,14 +656,14 @@ public sealed class InvoiceTests(ApiFixture fixture)
     /* -------------------------------- Numbering ------------------------------- */
 
     [Fact]
-    public async Task Numbers_fill_the_first_gap_and_a_cancelled_one_is_never_reissued()
+    public async Task A_cancelled_number_is_never_reissued()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
 
         var first = await PostAsync(c, "/api/erp/invoices",
             new { invoiceType = "SALE_INVOICE", contractId = "ctr-1", invoiceDate = "2026-08-13T00:00:00Z" });
-        Assert.Equal("SI-2026-0001", first.GetProperty("entity").GetProperty("invoiceNumber").GetString());
+        Assert.Equal("26080001", first.GetProperty("entity").GetProperty("invoiceNumber").GetString());
 
         await PostAsync(c, $"/api/erp/invoices/{Id(first)}/cancel");
 
@@ -672,30 +672,86 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         // A cancelled number has already been sent to somebody. Reissuing it puts one legal
         // invoice number on two documents.
-        Assert.Equal("SI-2026-0002", second.GetProperty("entity").GetProperty("invoiceNumber").GetString());
+        Assert.Equal("26080002", second.GetProperty("entity").GetProperty("invoiceNumber").GetString());
     }
 
+    /* --------------------------------- Numbering --------------------------------- */
+
+    private static string Number(JsonElement result) =>
+        result.GetProperty("entity").GetProperty("invoiceNumber").GetString()!;
+
     [Fact]
-    public async Task A_hand_typed_number_that_already_exists_is_refused_with_a_code()
+    public async Task Numbers_are_yymm_plus_four_digits_and_shared_across_types()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
 
-        await PostAsync(c, "/api/erp/invoices", new
-        {
-            invoiceType = "SALE_INVOICE", contractId = "ctr-1",
-            invoiceDate = "2026-08-13T00:00:00Z", invoiceNumber = "CUSTOM-1",
-        });
+        var order = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "PURCHASE_ORDER", contractId = "ctr-1", invoiceDate = "2026-09-05T08:00:00+04:00" });
+        var sale = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_INVOICE", contractId = "ctr-1", invoiceDate = "2026-09-20T08:00:00+04:00" });
 
-        var again = await c.PostAsJsonAsync(new Uri("/api/erp/invoices", UriKind.Relative), new
-        {
-            invoiceType = "PURCHASE_INVOICE", contractId = "ctr-1",
-            invoiceDate = "2026-08-13T00:00:00Z", invoiceNumber = "CUSTOM-1",
-        });
+        Assert.Equal("26090001", Number(order));
+        Assert.Equal("26090002", Number(sale));
+    }
 
-        // The schema's unique index is global. Caught here so the caller gets a code rather than
-        // a driver exception surfacing as a 500.
-        Assert.Equal("duplicate-number", (await ProblemAsync(again)).GetProperty("code").GetString());
+    [Fact]
+    public async Task A_new_month_restarts_the_sequence()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_ORDER", contractId = "ctr-1", invoiceDate = "2026-09-05T08:00:00+04:00" });
+        var october = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_ORDER", contractId = "ctr-1", invoiceDate = "2026-10-01T08:00:00+04:00" });
+
+        Assert.Equal("26100001", Number(october));
+    }
+
+    [Fact]
+    public async Task A_posted_number_is_ignored_not_honoured()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var created = await PostAsync(c, "/api/erp/invoices",
+            new { invoiceType = "SALE_ORDER", contractId = "ctr-1", invoiceDate = "2026-09-05T08:00:00+04:00", invoiceNumber = "MINE-1" });
+
+        Assert.Equal("26090001", Number(created));
+    }
+
+    [Fact]
+    public async Task Editing_the_header_cannot_change_the_number()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c, "SALE_ORDER");
+
+        var patched = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{id}", UriKind.Relative),
+            new { invoiceNumber = "MINE-2", description = "still a draft" });
+        patched.EnsureSuccessStatusCode();
+        var body = await patched.Content.ReadFromJsonAsync<JsonElement>(Json);
+
+        Assert.Equal("26080001", Number(body));
+        Assert.Equal("still a draft", body.GetProperty("entity").GetProperty("description").GetString());
+    }
+
+    [Fact]
+    public async Task A_converted_document_takes_the_month_it_is_made_in()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c, "SALE_ORDER");                 // dated 2026-08-13 → 26080001
+        await AddLineAsync(c, id, 10m);
+        await PostAsync(c, $"/api/erp/invoices/{id}/confirm");
+
+        var converted = await PostAsync(c, $"/api/erp/invoices/{id}/convert", new { targetType = "SALE_INVOICE" });
+
+        var expectedMonth = DateTimeOffset.UtcNow.ToOffset(Numbering.GulfOffset)
+            .ToString("yyMM", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.StartsWith(expectedMonth, Number(converted), StringComparison.Ordinal);
+        Assert.Equal(expectedMonth + "0001", Number(converted));
     }
 
     /* ------------------------------- Permissions ------------------------------ */
