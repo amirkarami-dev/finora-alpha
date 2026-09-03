@@ -8,7 +8,6 @@ const { TextArea } = Input;
 
 interface CostCentreFormValues {
   name: string;
-  code: string;
   description?: string;
 }
 
@@ -27,7 +26,7 @@ export function CostCentreFormModal({ open, onClose, costCentre }: CostCentreFor
   const isEdit = !!costCentre;
 
   const initialValues: Partial<CostCentreFormValues> = costCentre
-    ? { name: costCentre.name, code: costCentre.code, description: costCentre.description }
+    ? { name: costCentre.name, description: costCentre.description }
     : {};
 
   const submit = async () => {
@@ -39,7 +38,6 @@ export function CostCentreFormModal({ open, onClose, costCentre }: CostCentreFor
     }
     const input: CostCentreInput = {
       name: values.name.trim(),
-      code: values.code.trim(),
       description: values.description?.trim() || undefined,
     };
     try {
@@ -51,11 +49,7 @@ export function CostCentreFormModal({ open, onClose, costCentre }: CostCentreFor
         message.success(t('costCentres.created'));
       }
       onClose();
-    } catch (e) {
-      if (e instanceof Error && e.message === 'duplicate-code') {
-        form.setFields([{ name: 'code', errors: [t('costCentres.codeTaken')] }]);
-        return;
-      }
+    } catch {
       message.error(t('common.saveFailed'));
     }
   };
@@ -86,16 +80,11 @@ export function CostCentreFormModal({ open, onClose, costCentre }: CostCentreFor
         >
           <Input placeholder={t('costCentres.namePlaceholder')} />
         </Form.Item>
-        <Form.Item
-          name="code"
-          label={t('costCentres.code')}
-          rules={[
-            { required: true, message: t('common.required') },
-            { pattern: /^[A-Za-z0-9-]+$/, message: t('costCentres.codeInvalid') },
-          ]}
-        >
-          <Input placeholder={t('costCentres.codePlaceholder')} disabled={isEdit} />
-        </Form.Item>
+        {isEdit && (
+          <Form.Item label={t('costCentres.code')}>
+            <Input value={costCentre?.code} disabled />
+          </Form.Item>
+        )}
         <Form.Item name="description" label={t('costCentres.description')}>
           <TextArea rows={3} maxLength={300} showCount placeholder={t('costCentres.descriptionPlaceholder')} />
         </Form.Item>

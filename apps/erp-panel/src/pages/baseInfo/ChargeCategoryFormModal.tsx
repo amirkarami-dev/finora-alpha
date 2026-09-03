@@ -8,7 +8,6 @@ const { TextArea } = Input;
 
 interface ChargeCategoryFormValues {
   name: string;
-  code: string;
   scope: ChargeScope;
   description?: string;
 }
@@ -34,7 +33,6 @@ export function ChargeCategoryFormModal({ open, onClose, category, direction }: 
   const initialValues: Partial<ChargeCategoryFormValues> = category
     ? {
         name: category.name,
-        code: category.code,
         scope: category.scope,
         description: category.description,
       }
@@ -49,7 +47,6 @@ export function ChargeCategoryFormModal({ open, onClose, category, direction }: 
     }
     const input: ChargeCategoryInput = {
       name: values.name.trim(),
-      code: values.code.trim(),
       direction,
       scope: values.scope,
       description: values.description?.trim() || undefined,
@@ -65,16 +62,12 @@ export function ChargeCategoryFormModal({ open, onClose, category, direction }: 
       onClose();
     } catch (e) {
       const code = e instanceof Error ? e.message : '';
-      if (code === 'duplicate-code') {
-        form.setFields([{ name: 'code', errors: [t('chargeCategories.codeTaken')] }]);
-        return;
-      }
-      // The server validates name/code independently of this form (api.ts's
-      // `createChargeCategory`/`updateChargeCategory`, spec §4) — surface those on the offending
-      // field rather than as a generic "save failed".
-      if (code === 'name-required' || code === 'code-required') {
-        const field = code === 'name-required' ? 'name' : 'code';
-        form.setFields([{ name: field, errors: [t(`chargeCategories.errors.${code}`)] }]);
+      // The server validates name independently of this form (api.ts's
+      // `createChargeCategory`/`updateChargeCategory`, spec §4) — surface that on the offending
+      // field rather than as a generic "save failed". `code` is server-assigned, so the
+      // matching guard can no longer fire.
+      if (code === 'name-required') {
+        form.setFields([{ name: 'name', errors: [t(`chargeCategories.errors.${code}`)] }]);
         return;
       }
       message.error(t('common.saveFailed'));
@@ -107,16 +100,11 @@ export function ChargeCategoryFormModal({ open, onClose, category, direction }: 
         >
           <Input placeholder={t('chargeCategories.namePlaceholder')} />
         </Form.Item>
-        <Form.Item
-          name="code"
-          label={t('chargeCategories.code')}
-          rules={[
-            { required: true, message: t('common.required') },
-            { pattern: /^[A-Za-z0-9-]+$/, message: t('chargeCategories.codeInvalid') },
-          ]}
-        >
-          <Input placeholder={t('chargeCategories.codePlaceholder')} disabled={isEdit} />
-        </Form.Item>
+        {isEdit && (
+          <Form.Item label={t('chargeCategories.code')}>
+            <Input value={category?.code} disabled />
+          </Form.Item>
+        )}
         <Form.Item
           name="scope"
           label={t('chargeCategories.scope')}

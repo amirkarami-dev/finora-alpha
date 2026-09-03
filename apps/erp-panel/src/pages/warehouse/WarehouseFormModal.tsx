@@ -6,7 +6,6 @@ import type { Warehouse } from '@/types';
 
 interface WarehouseFormValues {
   name: string;
-  code: string;
   location?: string;
 }
 
@@ -25,7 +24,7 @@ export function WarehouseFormModal({ open, onClose, warehouse }: WarehouseFormMo
   const isEdit = !!warehouse;
 
   const initialValues: Partial<WarehouseFormValues> = warehouse
-    ? { name: warehouse.name, code: warehouse.code, location: warehouse.location }
+    ? { name: warehouse.name, location: warehouse.location }
     : {};
 
   const submit = async () => {
@@ -37,7 +36,6 @@ export function WarehouseFormModal({ open, onClose, warehouse }: WarehouseFormMo
     }
     const input: WarehouseInput = {
       name: values.name.trim(),
-      code: values.code.trim(),
       location: values.location?.trim() || undefined,
     };
     try {
@@ -49,11 +47,7 @@ export function WarehouseFormModal({ open, onClose, warehouse }: WarehouseFormMo
         message.success(t('warehouse.created'));
       }
       onClose();
-    } catch (e) {
-      if (e instanceof Error && e.message === 'duplicate-code') {
-        form.setFields([{ name: 'code', errors: [t('warehouse.codeTaken')] }]);
-        return;
-      }
+    } catch {
       message.error(t('common.saveFailed'));
     }
   };
@@ -84,16 +78,11 @@ export function WarehouseFormModal({ open, onClose, warehouse }: WarehouseFormMo
         >
           <Input placeholder={t('warehouse.namePlaceholder')} />
         </Form.Item>
-        <Form.Item
-          name="code"
-          label={t('warehouse.code')}
-          rules={[
-            { required: true, message: t('common.required') },
-            { pattern: /^[A-Za-z0-9-]+$/, message: t('warehouse.codeInvalid') },
-          ]}
-        >
-          <Input placeholder={t('warehouse.codePlaceholder')} disabled={isEdit} />
-        </Form.Item>
+        {isEdit && (
+          <Form.Item label={t('warehouse.code')}>
+            <Input value={warehouse?.code} disabled />
+          </Form.Item>
+        )}
         <Form.Item name="location" label={t('warehouse.location')}>
           <Input placeholder={t('warehouse.locationPlaceholder')} />
         </Form.Item>

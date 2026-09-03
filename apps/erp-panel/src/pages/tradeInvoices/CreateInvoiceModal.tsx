@@ -1,10 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { App, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useContracts, useCreateInvoice, useUpdateInvoiceHeader } from '@/services/queries';
-import { previewInvoiceNumber } from '@/services/api';
 import { useDefaultFxRate } from '@/store/useSettingsStore';
 import { CURRENCIES } from '@/config/constants';
 import type { Currency, Invoice, InvoiceType } from '@/types';
@@ -14,7 +13,6 @@ const { TextArea } = Input;
 interface CreateInvoiceFormValues {
   contractId: string;
   invoiceDate: dayjs.Dayjs;
-  invoiceNumber: string;
   currency: Currency;
   exchangeRate: number;
   description?: string;
@@ -66,7 +64,6 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
     ? {
         contractId: invoice.contractId,
         invoiceDate: dayjs(invoice.invoiceDate),
-        invoiceNumber: invoice.invoiceNumber,
         currency: invoice.currency,
         exchangeRate: invoice.exchangeRate,
         description: invoice.description,
@@ -76,19 +73,6 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         currency: 'USD',
         exchangeRate: 1,
       };
-
-  // Prefill the auto-generated number whenever the CREATE modal opens for this type.
-  useEffect(() => {
-    if (!open || isEdit) return;
-    let cancelled = false;
-    previewInvoiceNumber(invoiceType).then((number) => {
-      if (!cancelled) form.setFieldValue('invoiceNumber', number);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, invoiceType, isEdit]);
 
   const selectedContractId = Form.useWatch('contractId', form);
   const selectedCustomerName =
@@ -108,7 +92,6 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         await updateHeaderMut.mutateAsync({
           id: invoice.id,
           patch: {
-            invoiceNumber: values.invoiceNumber,
             invoiceDate: values.invoiceDate.toISOString(),
             currency: values.currency,
             exchangeRate: values.currency === 'USD' ? 1 : values.exchangeRate,
@@ -117,12 +100,8 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         });
         message.success(t('tradeInvoices.headerUpdated'));
         onClose();
-      } catch (err) {
-        if (err instanceof Error && err.message === 'duplicate-number') {
-          form.setFields([{ name: 'invoiceNumber', errors: [t('tradeInvoices.numberTaken')] }]);
-        } else {
-          message.error(t('common.saveFailed'));
-        }
+      } catch {
+        message.error(t('common.saveFailed'));
       }
       return;
     }
@@ -131,7 +110,6 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         invoiceType,
         contractId: values.contractId,
         invoiceDate: values.invoiceDate.toISOString(),
-        invoiceNumber: values.invoiceNumber,
         currency: values.currency,
         exchangeRate: values.currency === 'USD' ? 1 : values.exchangeRate,
         description: values.description?.trim() || undefined,
@@ -139,12 +117,8 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
       message.success(t('tradeInvoices.created'));
       onClose();
       navigate(`/app/invoices/${encodeURIComponent(created.id)}`);
-    } catch (err) {
-      if (err instanceof Error && err.message === 'duplicate-number') {
-        form.setFields([{ name: 'invoiceNumber', errors: [t('tradeInvoices.numberTaken')] }]);
-      } else {
-        message.error(t('common.saveFailed'));
-      }
+    } catch {
+      message.error(t('common.saveFailed'));
     }
   };
 
@@ -191,12 +165,11 @@ export function CreateInvoiceModal({ open, onClose, invoiceType, invoice }: Crea
         >
           <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
         </Form.Item>
-        <Form.Item
-          name="invoiceNumber"
-          label={t('tradeInvoices.number')}
-          rules={[{ required: true, message: t('common.required') }]}
-        >
-          <Input placeholder={t('tradeInvoices.numberPlaceholder')} />
+        <Form.Item label={t('tradeInvoices.number')}>
+          <Input
+            value={isEdit ? invoice?.invoiceNumber : t('tradeInvoices.numberAssigned')}
+            disabled
+          />
         </Form.Item>
         <Form.Item
           name="currency"
