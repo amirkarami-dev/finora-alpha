@@ -572,6 +572,7 @@
     "costCategoryInvalid": "Pick an expense category with scope General",
     "insufficientStock": "Not enough {{product}} in this warehouse — available: {{available}} MT",
     "cancelBlockedStock": "{{product}} from this conversion has already been used — cancel those documents first",
+    "notDraft": "Only a draft conversion can be confirmed",
     "linkedExpense": "Booked as expense"
   },
   "costCentres": {

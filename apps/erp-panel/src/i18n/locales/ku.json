@@ -572,6 +572,7 @@
     "costCategoryInvalid": "پۆلێکی خەرجی هەڵبژێرە کە ڕەوتی گشتی بێت",
     "insufficientStock": "بڕی {{product}} لەم کۆگایە بەس نییە — بەردەست: {{available}} MT",
     "cancelBlockedStock": "{{product}} ی سەرچاوەگیراو لەم گۆڕینە پێشتر بەکارهاتووە — سەرەتا ئەو بەڵگەنامانە هەڵبوەشێنەرەوە",
+    "notDraft": "تەنها گۆڕینێکی ڕەشنووس دەتوانرێت پەسەند بکرێت",
     "linkedExpense": "وەک خەرجی تۆمارکراوە"
   },
   "costCentres": {

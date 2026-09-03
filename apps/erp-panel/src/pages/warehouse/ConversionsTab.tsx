@@ -64,6 +64,7 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
   const confirmMut = useConfirmConversion();
   const cancelMut = useCancelConversion();
   const canConfirm = useAuthStore((s) => s.permissions.includes('conversions.confirm'));
+  const canOpenExpenses = useAuthStore((s) => s.permissions.includes('expenses'));
 
   const warehouseById = useMemo(() => {
     const map = new Map<string, string>();
@@ -87,8 +88,20 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
     try {
       await confirmMut.mutateAsync(id);
       message.success(t('conversions.confirmed'));
-    } catch {
-      message.error(t('common.saveFailed'));
+    } catch (err) {
+      const error = err as Error & { product?: string; available?: number };
+      const code = error.message;
+      if (code === 'conversion-empty') message.error(t('conversions.needInputAndOutput'));
+      else if (code === 'invalid-shares') message.error(t('conversions.invalidShares'));
+      else if (code === 'conversion-not-draft') message.error(t('conversions.notDraft'));
+      else if (code === 'insufficient-stock') {
+        message.error(
+          t('conversions.insufficientStock', {
+            product: error.product ?? '',
+            available: formatMt(error.available ?? 0),
+          }),
+        );
+      } else message.error(t('common.saveFailed'));
     }
   };
 
@@ -373,7 +386,7 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
                   </div>
                 </div>
               )}
-              {r.chargeDocId && (
+              {r.chargeDocId && canOpenExpenses && (
                 <Button
                   type="link"
                   size="small"
@@ -382,6 +395,11 @@ export function ConversionsTab({ onEdit }: ConversionsTabProps) {
                 >
                   {t('conversions.linkedExpense')}
                 </Button>
+              )}
+              {r.chargeDocId && !canOpenExpenses && (
+                <Text type="secondary" style={{ fontFamily: 'monospace' }}>
+                  {t('conversions.linkedExpense')}
+                </Text>
               )}
             </Space>
           );

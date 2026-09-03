@@ -220,8 +220,26 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
       return; // validation errors render inline
     }
 
-    const validInputs = inputRows.filter((r) => r.product.trim() && (r.quantityMt ?? 0) > 0);
-    const validOutputs = outputRows.filter((r) => r.product.trim() && (r.quantityMt ?? 0) > 0);
+    // A row with nothing filled in is just an unused blank line — drop it. A row that has been
+    // *started* (a product picked, or a quantity typed) must be complete: silently dropping a
+    // half-filled input/output row would quietly change what stock moves (mirrors the cost-row
+    // rule just below).
+    const startedInputs = inputRows.filter((r) => r.product.trim() || (r.quantityMt ?? 0) > 0);
+    for (const r of startedInputs) {
+      if (!r.product.trim() || !((r.quantityMt ?? 0) > 0)) {
+        message.error(t('common.required'));
+        return;
+      }
+    }
+    const startedOutputs = outputRows.filter((r) => r.product.trim() || (r.quantityMt ?? 0) > 0);
+    for (const r of startedOutputs) {
+      if (!r.product.trim() || !((r.quantityMt ?? 0) > 0)) {
+        message.error(t('common.required'));
+        return;
+      }
+    }
+    const validInputs = startedInputs;
+    const validOutputs = startedOutputs;
     if (validInputs.length === 0 || validOutputs.length === 0) {
       message.error(t('conversions.needInputAndOutput'));
       return;

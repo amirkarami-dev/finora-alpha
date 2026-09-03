@@ -572,6 +572,7 @@
     "costCategoryInvalid": "اختر فئة مصروف بنطاق عام",
     "insufficientStock": "لا يوجد ما يكفي من {{product}} في هذا المستودع — المتاح: {{available}} طن",
     "cancelBlockedStock": "تم بالفعل استخدام {{product}} الناتج عن هذا التحويل — ألغِ تلك المستندات أولاً",
+    "notDraft": "يمكن تأكيد تحويل في حالة المسودة فقط",
     "linkedExpense": "مسجّل كمصروف"
   },
   "costCentres": {

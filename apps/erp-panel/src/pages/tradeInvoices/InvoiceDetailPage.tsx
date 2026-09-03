@@ -574,7 +574,16 @@ export default function InvoiceDetailPage() {
                   {
                     key: 'margin',
                     label: t('tradeInvoices.margin'),
-                    children: <Money value={invoice.totalAmount - costOfSales.costUsd} strong />,
+                    children: (
+                      <Money
+                        value={
+                          (invoice.currency === 'USD'
+                            ? invoice.totalAmount
+                            : invoice.totalAmount / invoice.exchangeRate) - costOfSales.costUsd
+                        }
+                        strong
+                      />
+                    ),
                   },
                 ]
               : []),

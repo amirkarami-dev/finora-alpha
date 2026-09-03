@@ -572,6 +572,7 @@
     "costCategoryInvalid": "دسته‌ای از هزینه با دامنه عمومی انتخاب کنید",
     "insufficientStock": "موجودی {{product}} در این انبار کافی نیست — موجود: {{available}} تن",
     "cancelBlockedStock": "{{product}} حاصل از این تبدیل قبلاً مصرف شده — نخست آن اسناد را لغو کنید",
+    "notDraft": "فقط تبدیل پیش‌نویس را می‌توان تأیید کرد",
     "linkedExpense": "به‌عنوان هزینه ثبت شد"
   },
   "costCentres": {
