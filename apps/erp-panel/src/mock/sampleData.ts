@@ -770,6 +770,11 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         referenceDocumentItemId: it.referenceDocumentItemId,
         product: it.product,
         quantityMt: it.quantityMt,
+        // A receipt's unit cost is the invoice line's own price per MT (warehouse spec §2.2) —
+        // the same figure the PI line itself was priced at, since PI-2026-0001 is CONFIRMED with
+        // a real LME quote already applied above.
+        unitCostUsd: invoiceItemUnitPrice(it) ?? 0,
+        costUsd: invoiceItemAmount(it),
       })),
     };
     inventoryDocs.push(grn);
@@ -1869,6 +1874,10 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     cheques,
     moneyTransfers,
     exchangeGainLosses,
+    // Empty on purpose (Task 6 — the data layer and UI, not the sample dataset): a sample
+    // conversion document is Task 7's ("Sample data, docs, full verification"). This entry only
+    // satisfies `Db`'s now-required `conversions` field so the sample generator typechecks.
+    conversions: [],
     fxRate: DEFAULT_FX_AED_PER_USD,
   };
 }

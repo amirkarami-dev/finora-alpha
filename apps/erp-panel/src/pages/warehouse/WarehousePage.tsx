@@ -14,15 +14,17 @@ import {
   useWarehouses,
 } from '@/services/queries';
 import type { StockLevelRow } from '@/services/api';
-import { formatDate, formatMt } from '@/utils/format';
+import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { useTabParam } from '@/hooks/useTabParam';
-import type { InventoryDocType, InventoryDocument, InventoryDocumentItem, Warehouse } from '@/types';
+import type { ConversionDocument, InventoryDocType, InventoryDocument, InventoryDocumentItem, Warehouse } from '@/types';
+import { ConversionFormModal } from './ConversionFormModal';
+import { ConversionsTab } from './ConversionsTab';
 import { InventoryDocFormModal } from './InventoryDocFormModal';
 import { WarehouseFormModal } from './WarehouseFormModal';
 
 const { Text } = Typography;
 
-const TAB_KEYS = ['warehouses', 'inventory', 'documents'] as const;
+const TAB_KEYS = ['warehouses', 'inventory', 'documents', 'conversions'] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 const DOC_TYPE_COLOR: Record<InventoryDocType, string> = { IN: 'blue', OUT: 'gold' };
@@ -39,6 +41,9 @@ export default function WarehousePage() {
   const [docFormState, setDocFormState] = useState<{ open: boolean; type: InventoryDocType }>({
     open: false,
     type: 'IN',
+  });
+  const [conversionForm, setConversionForm] = useState<{ open: boolean; conversion?: ConversionDocument }>({
+    open: false,
   });
 
   const { data: stockLevels, isLoading: stockLoading } = useStockLevels();
@@ -269,6 +274,14 @@ export default function WarehousePage() {
                 {t('warehouse.newIssue')}
               </Button>
             </Space>
+          ) : tab === 'conversions' ? (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setConversionForm({ open: true, conversion: undefined })}
+            >
+              {t('conversions.newConversion')}
+            </Button>
           ) : undefined
         }
       />
@@ -280,6 +293,7 @@ export default function WarehousePage() {
           { key: 'warehouses', label: t('warehouse.tabWarehouses') },
           { key: 'inventory', label: t('warehouse.tabInventory') },
           { key: 'documents', label: t('warehouse.tabDocuments') },
+          { key: 'conversions', label: t('conversions.tab') },
         ]}
         activeTabKey={tab}
         onTabChange={(key) => setTab(key as TabKey)}
@@ -315,12 +329,25 @@ export default function WarehousePage() {
                         ) : (
                           <Space direction="vertical" size={4} style={{ width: '100%' }}>
                             {rows.map((r) => (
-                              <div
-                                key={r.productKey}
-                                style={{ display: 'flex', justifyContent: 'space-between' }}
-                              >
-                                <Text>{r.product}</Text>
-                                <Text strong>{formatMt(r.mt)}</Text>
+                              <div key={r.productKey}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Text>{r.product}</Text>
+                                  <Text strong>{formatMt(r.mt)}</Text>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  {r.costKnown ? (
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      {t('warehouse.unitCost')}: {formatCurrency(r.unitCostUsd, 'USD')}
+                                    </Text>
+                                  ) : (
+                                    <Tag color="warning" style={{ marginInlineEnd: 0 }}>
+                                      {t('warehouse.costUnknown')}
+                                    </Tag>
+                                  )}
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {t('warehouse.stockValue')}: {formatCurrency(r.valueUsd, 'USD')}
+                                  </Text>
+                                </div>
                               </div>
                             ))}
                           </Space>
@@ -369,6 +396,10 @@ export default function WarehousePage() {
             }}
           />
         )}
+
+        {tab === 'conversions' && (
+          <ConversionsTab onEdit={(c) => setConversionForm({ open: true, conversion: c })} />
+        )}
       </Card>
 
       <WarehouseFormModal
@@ -382,6 +413,14 @@ export default function WarehousePage() {
           open={docFormState.open}
           onClose={() => setDocFormState((s) => ({ ...s, open: false }))}
           type={docFormState.type}
+        />
+      )}
+
+      {conversionForm.open && (
+        <ConversionFormModal
+          open={conversionForm.open}
+          onClose={() => setConversionForm((s) => ({ ...s, open: false }))}
+          conversion={conversionForm.conversion}
         />
       )}
     </div>

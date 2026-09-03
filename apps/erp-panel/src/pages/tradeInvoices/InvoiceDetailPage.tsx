@@ -43,6 +43,7 @@ import {
   useCancelInvoice,
   useContainerOptions,
   useContractRemaining,
+  useInvoiceCostOfSales,
   useMarkInvoiceSent,
   useRemoveInvoiceItem,
   useTradeInvoice,
@@ -108,6 +109,10 @@ export default function InvoiceDetailPage() {
     data?.invoice.contractId ?? '',
     data ? invoiceSide(data.invoice.invoiceType) : 'SALE',
   );
+
+  // Hooks must run unconditionally (this call sits above the early returns below), so the
+  // sale/confirmed gate lives only in what gets rendered from `costOfSales` further down.
+  const { data: costOfSales } = useInvoiceCostOfSales(invoiceId);
 
   if (!isLoading && !data) {
     return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />;
@@ -554,6 +559,25 @@ export default function InvoiceDetailPage() {
               label: t('tradeInvoices.totalWeight'),
               children: formatMt(invoice.totalWeightMt),
             },
+            ...(invoice.invoiceType === 'SALE_INVOICE' && invoice.status === 'CONFIRMED' && costOfSales
+              ? [
+                  {
+                    key: 'costOfSales',
+                    label: t('tradeInvoices.costOfSales'),
+                    children: (
+                      <Space size={6}>
+                        <Money value={costOfSales.costUsd} />
+                        {!costOfSales.costKnown && <Tag color="warning">{t('warehouse.costUnknown')}</Tag>}
+                      </Space>
+                    ),
+                  },
+                  {
+                    key: 'margin',
+                    label: t('tradeInvoices.margin'),
+                    children: <Money value={invoice.totalAmount - costOfSales.costUsd} strong />,
+                  },
+                ]
+              : []),
           ]}
         />
       </Card>
