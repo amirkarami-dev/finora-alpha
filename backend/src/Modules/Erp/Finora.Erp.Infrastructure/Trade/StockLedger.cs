@@ -23,6 +23,35 @@ public sealed class StockLedger(ErpDbContext db)
     public static string Key(string warehouseId, string product) =>
         $"{warehouseId}::{product.Trim().ToLowerInvariant()}";
 
+    /// <summary>
+    /// Serialises every stock-changing write in one warehouse. Stock has no row to lock, so a
+    /// transaction-scoped advisory lock stands in for one: the second confirm waits until the
+    /// first has committed, then folds the ledger afresh and sees the metal already gone. Two
+    /// warehouses never wait on each other. Must be called inside an open transaction — the lock
+    /// is released with it.
+    /// </summary>
+    public Task LockWarehouseAsync(string warehouseId, CancellationToken cancellationToken = default) =>
+        LockKeyAsync($"stock:{warehouseId}", cancellationToken);
+
+    /// <summary>
+    /// Same device for the "how much of this invoice line is already moved" check, which two
+    /// documents against the same invoice would otherwise both pass. Taken AFTER the warehouse
+    /// lock, always, so the two can never deadlock.
+    /// </summary>
+    public Task LockInvoiceAsync(string invoiceId, CancellationToken cancellationToken = default) =>
+        LockKeyAsync($"invoice:{invoiceId}", cancellationToken);
+
+    private async Task LockKeyAsync(string key, CancellationToken cancellationToken)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A stock lock is only meaningful inside a transaction.");
+        }
+
+        // hashtext folds the key to an int4; the ::bigint keeps the single-argument overload.
+        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtext({key})::bigint)", cancellationToken);
+    }
+
     public async Task<Dictionary<string, StockPosition>> PositionsAsync(CancellationToken cancellationToken = default)
     {
         var positions = new Dictionary<string, StockPosition>(StringComparer.Ordinal);

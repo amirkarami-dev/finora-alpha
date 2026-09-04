@@ -84,6 +84,14 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
         }
 
         var byRefId = invoice.Items.ToDictionary(i => i.ReferenceDocumentItemId, StringComparer.Ordinal);
+
+        // Both checks below read a fold that another request may be changing at this very
+        // moment. The transaction plus the two advisory locks make documents for the same
+        // warehouse, or against the same invoice, run one after the other.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await ledger.LockWarehouseAsync(warehouse.Id, cancellationToken);
+        await ledger.LockInvoiceAsync(invoice.Id, cancellationToken);
+
         var used = await UsedByReferenceAsync(cancellationToken);
 
         // One fold for an OUT document, not two: `stock`'s running quantities are derived from
@@ -189,6 +197,7 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
 
         db.InventoryDocuments.Add(doc);
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return doc;
     }
 
@@ -217,8 +226,11 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
             return doc;
         }
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
         if (doc.Type == InventoryDocType.IN)
         {
+            await ledger.LockWarehouseAsync(doc.WarehouseId, cancellationToken);
             var stock = await StockAsync(cancellationToken);
             foreach (var item in doc.Items)
             {
@@ -238,6 +250,7 @@ public sealed class WarehouseDocumentService(ErpDbContext db, StockLedger ledger
 
         doc.Status = DocumentStatus.CANCELLED;
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return doc;
     }
 
