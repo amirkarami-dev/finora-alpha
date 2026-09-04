@@ -241,7 +241,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         var response = await c.PutAsJsonAsync(
             new Uri($"/api/erp/invoices/{final}/items/{lineId}", UriKind.Relative),
-            new { quantityMt = 100m });
+            new { grossMt = 100m, tareMt = 0m });
 
         response.EnsureSuccessStatusCode();
     }
