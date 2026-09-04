@@ -1,6 +1,7 @@
 import { request } from './http';
 import * as api from './api';
 import { ROUTES } from '@/config/constants';
+import { useAuthStore } from '@/store/useAuthStore';
 import type { InvoiceSide, Locale } from '@/types';
 
 const INVOICE_ROUTE = '/app/invoices';
@@ -89,16 +90,26 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
   }
   const str = (k: string) => (typeof args[k] === 'string' ? (args[k] as string).trim() : '');
 
+  // A tool result's "link" points at a page the caller might not hold the route key for — the
+  // panel would just redirect them home. Read permissions once per call and drop the link there.
+  const permissions = useAuthStore.getState().permissions;
+  function linkIf(key: string | string[], path: string): { link?: string } {
+    const keys = Array.isArray(key) ? key : [key];
+    return keys.some((k) => permissions.includes(k)) ? { link: path } : {};
+  }
+  const toPerson = (c: Awaited<ReturnType<typeof api.getCustomers>>[number]) => ({
+    id: c.id, name: c.name, code: c.code, type: c.customerType, ...linkIf('customers', `${ROUTES.customers}/${c.id}`),
+  });
+
   try {
     switch (name) {
       case 'find_persons': {
         const q = str('query').toLowerCase();
-        const all = await api.getCustomers();
-        const hits = all
-          .filter((c) => c.active !== false && (c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)))
-          .slice(0, 10)
-          .map((c) => ({ id: c.id, name: c.name, code: c.code, type: c.customerType, link: `${ROUTES.customers}/${c.id}` }));
-        return { count: hits.length, persons: hits };
+        const all = (await api.getCustomers()).filter((c) => c.active !== false);
+        const found = q ? all.filter((c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)) : all;
+        const matched = !q || found.length > 0;
+        const source = matched ? found : all;
+        return { count: source.length, persons: source.slice(0, 10).map(toPerson), ...(matched ? {} : { note: 'no-match' }) };
       }
       case 'get_person_balance': {
         const id = str('personId');
@@ -112,31 +123,32 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
           outstandingUsd: usd(row.totalOutstanding),
           overdueUsd: usd(row.overdue),
           netBalanceUsd: usd(row.netBalance),
-          link: `${ROUTES.customers}/${id}`,
+          ...linkIf('customers', `${ROUTES.customers}/${id}`),
         };
       }
       case 'list_open_invoices': {
         const id = str('personId') || undefined;
         const side: InvoiceSide = str('side').toUpperCase() === 'PURCHASE' ? 'PURCHASE' : 'SALE';
         if (side === 'SALE') {
-          const rows = (await api.getReceivableInvoices(id)).filter((r) => r.displayStatus !== 'PAID').slice(0, 20);
+          const all = (await api.getReceivableInvoices(id)).filter((r) => r.displayStatus !== 'PAID');
+          const rows = all.slice(0, 20);
           return {
-            side, count: rows.length,
+            side, count: all.length,
             invoices: rows.map((r) => ({
               number: r.invoiceNumber, date: r.invoiceDate, person: r.customerName, totalUsd: usd(r.totalAmount),
               paidUsd: usd(r.paidUSD), outstandingUsd: usd(r.totalAmount - r.paidUSD), status: r.displayStatus,
-              link: `${INVOICE_ROUTE}/${r.id}`,
+              ...linkIf(['purchase', 'sale'], `${INVOICE_ROUTE}/${r.id}`),
             })),
           };
         }
-        const rows = (await api.getTradeInvoices('PURCHASE'))
-          .filter((r) => r.invoiceType === 'PURCHASE_INVOICE' && r.status === 'CONFIRMED' && (!id || r.customerId === id))
-          .slice(0, 20);
+        const all = (await api.getTradeInvoices('PURCHASE'))
+          .filter((r) => r.invoiceType === 'PURCHASE_INVOICE' && r.status === 'CONFIRMED' && (!id || r.customerId === id));
+        const rows = all.slice(0, 20);
         return {
-          side, count: rows.length,
+          side, count: all.length,
           invoices: rows.map((r) => ({
             number: r.invoiceNumber, date: r.invoiceDate, person: r.customerName, totalUsd: usd(api.invoiceTotalUSD(r)),
-            currency: r.currency, status: r.status, link: `${INVOICE_ROUTE}/${r.id}`,
+            currency: r.currency, status: r.status, ...linkIf(['purchase', 'sale'], `${INVOICE_ROUTE}/${r.id}`),
           })),
         };
       }
@@ -157,20 +169,21 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
             warehouse: r.warehouseName, product: r.product, quantityMt: r.mt,
             valueUsd: r.costKnown ? usd(r.valueUsd) : null, unitCostUsd: r.costKnown ? r.unitCostUsd : null,
           })),
-          link: ROUTES.warehouse,
+          ...linkIf('warehouse', ROUTES.warehouse),
           ...(matched ? {} : { note: 'warehouse-not-matched' }),
         };
       }
       case 'list_contracts': {
         const id = str('personId');
-        const rows = (id ? await api.getContractsByCustomer(id) : await api.getContracts()).slice(0, 20);
+        const all = id ? await api.getContractsByCustomer(id) : await api.getContracts();
+        const rows = all.slice(0, 20);
         return {
-          count: rows.length,
+          count: all.length,
           contracts: rows.map((c) => ({
             id: c.id, person: c.customerName, type: c.contractType,
             product: productSummary(c.items.map((i) => i.product)),
             quantityMt: c.quantityMt, remainingMt: c.remainingMt, status: c.status,
-            link: `${ROUTES.contracts}/${c.id}`,
+            ...linkIf('contracts', `${ROUTES.contracts}/${c.id}`),
           })),
         };
       }
@@ -184,7 +197,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         return {
           contractId: id, person: contract.customerName,
           lines: rows.map((r) => ({ product: r.product, contractedMt: r.quantityMt, uninvoicedMt: r.uninvoicedMt })),
-          link: `${ROUTES.contracts}/${id}`,
+          ...linkIf('contracts', `${ROUTES.contracts}/${id}`),
         };
       }
       case 'find_document': {
@@ -195,7 +208,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         return {
           number: doc.invoiceNumber, type: doc.invoiceType, person: doc.customerName, date: doc.invoiceDate,
           totalUsd: usd(api.invoiceTotalUSD(doc)), currency: doc.currency, status: doc.status,
-          link: `${INVOICE_ROUTE}/${doc.id}`,
+          ...linkIf(['purchase', 'sale'], `${INVOICE_ROUTE}/${doc.id}`),
         };
       }
       case 'get_dashboard_summary': {
@@ -203,7 +216,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         return {
           outstandingUsd: usd(k.totalOutstanding), overdueUsd: usd(k.overdue), invoicedUsd: usd(k.totalInvoiced),
           paidUsd: usd(k.totalPaid), activeContracts: k.activeContracts, customers: k.customers,
-          collectionRatePct: k.collectionRate, link: ROUTES.dashboard,
+          collectionRatePct: k.collectionRate, ...linkIf('dashboard', ROUTES.dashboard),
         };
       }
       default:

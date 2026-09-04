@@ -1,6 +1,7 @@
 import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useAssistantStore } from '@/store/useAssistantStore';
+import { useUiStore, isRtl } from '@/store/useUiStore';
 import { BRAND } from '@/config/constants';
 import { SparklesIcon } from './SparklesIcon';
 
@@ -20,9 +21,10 @@ export function AssistantFab() {
   const { t } = useTranslation();
   const open = useAssistantStore((s) => s.open);
   const setOpen = useAssistantStore((s) => s.setOpen);
+  const rtl = isRtl(useUiStore((s) => s.locale));
   if (open) return null;
   return (
-    <Tooltip title={t('assistant.openButton')} placement="left">
+    <Tooltip title={t('assistant.openButton')} placement={rtl ? 'right' : 'left'}>
       <button
         ref={(el) => {
           fabButton = el;

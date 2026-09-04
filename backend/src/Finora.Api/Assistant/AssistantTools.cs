@@ -17,7 +17,8 @@ public static class AssistantTools
     public static IReadOnlyList<Tool> All { get; } =
     [
         new("find_persons",
-            "Finds persons (customers, suppliers, others) by part of their name or code. Returns id, name, type, code and a link.",
+            "Finds persons (customers, suppliers, others) by part of their name or code. Returns id, name, type, code and a link. " +
+            "Names are stored in English/Latin script; search with the likely English spelling.",
             """{"type":"object","properties":{"query":{"type":"string","description":"Part of the name or code"}},"required":["query"]}""",
             ["customers", "reports", "executive"]),
         new("get_person_balance",
@@ -42,7 +43,7 @@ public static class AssistantTools
             """{"type":"object","properties":{"contractId":{"type":"string"}},"required":["contractId"]}""",
             ["contracts", "reports", "executive"]),
         new("find_document",
-            "Finds a trade document (order, provisional or invoice) by its number. Returns type, person, date, total, status and a link.",
+            "Finds a trade document (order, provisional or invoice) by its number. Returns type, person, date, total USD, status and a link.",
             """{"type":"object","properties":{"number":{"type":"string"}},"required":["number"]}""",
             ["sale", "purchase", "reports", "executive"]),
         new("get_dashboard_summary",

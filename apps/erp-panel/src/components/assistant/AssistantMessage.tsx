@@ -52,6 +52,7 @@ export function AssistantMessage({ message }: { message: UiMessage }) {
             components={{
               h1: Paragraph, h2: Paragraph, h3: Paragraph,
               h4: Paragraph, h5: Paragraph, h6: Paragraph,
+              img: () => null,
               a: ({ href, children }) =>
                 href && href.startsWith('/app/') ? (
                   <Link to={href} style={{ color: token.colorPrimary, textDecoration: 'underline' }}>{children}</Link>
@@ -81,7 +82,7 @@ export function AssistantMessage({ message }: { message: UiMessage }) {
  *  itself, not on an English "Open:" label, so it also works for Arabic/Farsi/Sorani answers. */
 function linkify(text: string, label: string): string {
   return text.replace(
-    /(^|\s)([^\s:]{1,20}:\s*)?(\/app\/[A-Za-z0-9._~/-]+)/g,
-    (_m, lead: string, _prefix, path: string) => `${lead}[${label}](${path})`,
+    /(^|\s)(\/app\/[A-Za-z0-9._~/-]*[A-Za-z0-9_~/-])/g,
+    (_m, lead: string, path: string) => `${lead}[${label}](${path})`,
   );
 }
