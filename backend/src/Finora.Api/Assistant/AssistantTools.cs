@@ -25,7 +25,7 @@ public static class AssistantTools
             """{"type":"object","properties":{"personId":{"type":"string"}},"required":["personId"]}""",
             ["reports", "executive"]),
         new("list_open_invoices",
-            "Open (not fully paid) invoices, optionally for one person or one side. Returns number, date, person, total USD, paid USD, outstanding USD, status and a link.",
+            "Open sale invoices with total, paid and outstanding USD; or, for side PURCHASE, confirmed purchase invoices with their total USD. Optionally for one person. Returns number, date, person, status and a link.",
             """{"type":"object","properties":{"personId":{"type":"string"},"side":{"type":"string","enum":["SALE","PURCHASE"]}}}""",
             ["sale", "purchase", "reports", "executive"]),
         new("get_stock_levels",
