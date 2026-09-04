@@ -128,11 +128,12 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
     >
       <Form key={item.id} form={form} layout="vertical" preserve={false} initialValues={initialValues}>
         {weighed ? (
-          <Space style={{ width: '100%' }} align="start" wrap>
+          <div style={{ display: 'flex', gap: 12 }}>
             <Form.Item
               name="grossMt"
               label={t('tradeInvoices.grossMt')}
               rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1 }}
             >
               <InputNumber min={0.000001} precision={6} style={{ width: '100%' }} />
             </Form.Item>
@@ -140,6 +141,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
               name="tareMt"
               label={t('tradeInvoices.tareMt')}
               dependencies={['grossMt']}
+              style={{ flex: 1 }}
               rules={[
                 { required: true, message: t('common.required') },
                 {
@@ -159,7 +161,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
             >
               <InputNumber min={0} precision={6} style={{ width: '100%' }} />
             </Form.Item>
-          </Space>
+          </div>
         ) : (
           <Form.Item
             name="quantityMt"
