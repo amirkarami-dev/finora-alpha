@@ -461,7 +461,7 @@ export interface PersonLedger {
 
 /** `Invoice.totalAmount` is in the INVOICE's currency, unlike every payment figure. Everything
  *  in this ledger is USD, so it is converted once here rather than compared across currencies. */
-function invoiceTotalUSD(inv: Invoice): number {
+export function invoiceTotalUSD(inv: Invoice): number {
   if (inv.currency === 'USD') return round(inv.totalAmount);
   const rate = Number.isFinite(inv.exchangeRate) && inv.exchangeRate > 0 ? inv.exchangeRate : 1;
   return round(inv.totalAmount / rate);

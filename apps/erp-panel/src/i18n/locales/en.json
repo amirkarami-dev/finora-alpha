@@ -1439,5 +1439,31 @@
     "refusedBody": "“Load sample data” and “Wipe all data” are disabled here, so that action had no effect. Your normal work is unaffected and saves as usual.",
     "failingTitle": "Could not reach the server",
     "failingBody": "Your recent changes are saved on this device but have not reached the server yet. They will be sent again automatically. Do not clear your browser data until this message disappears."
+  },
+  "assistant": {
+    "title": "Assistant",
+    "openButton": "Ask the assistant",
+    "placeholder": "Ask about balances, invoices, stock…",
+    "send": "Send",
+    "record": "Tap to speak",
+    "recording": "Listening… tap to send",
+    "stop": "Stop",
+    "newChat": "New chat",
+    "thinking": "Thinking…",
+    "listening": "Listening",
+    "voiceNote": "Voice",
+    "emptyTitle": "Ask a question about your data",
+    "emptyHint": "I answer from the app's own figures and never change anything.",
+    "example1": "How much does Alco Metal owe us?",
+    "example2": "What is in the main warehouse?",
+    "example3": "Which invoices are overdue?",
+    "open": "Open",
+    "micBlocked": "The microphone is blocked. Allow it in the browser and try again.",
+    "nothingHeard": "I could not hear anything. Please try again.",
+    "unavailable": "The assistant is not available right now.",
+    "rateLimited": "Too many questions. Please wait a while and try again.",
+    "badRequest": "That request could not be sent. Please try again.",
+    "readOnly": "Read-only: the assistant can look, not change.",
+    "failed": "Something went wrong. Please try again."
   }
 }
