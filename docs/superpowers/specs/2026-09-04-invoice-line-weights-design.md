@@ -73,15 +73,16 @@ Binding details:
 ## 4. App changes (`apps/erp-panel/`)
 
 - `types/index.ts`: `InvoiceItem.grossMt?`, `tareMt?`; `services/api.ts` inputs mirror the
-  server; the offline (`*Local`) paths apply the same rules so a browser that lost the API
-  computes the same net. `SCHEMA_VERSION` bumps.
+  server. Invoice writes have no offline path (they go to the server only), so nothing is
+  mirrored client-side. `SCHEMA_VERSION` bumps.
 - **Add-items form** (`AddItemsModal`) and **edit-line form** (`EditLineModal`): on an
   invoice type, two inputs **Gross (MT)** and **Tare (MT)** and a read-only **Net (MT)** that
   updates as they type; the existing read-only unit price and line total sit beside them and
   the total follows the net. The contract-remaining hint and `max` apply to the net. On an
   order type the forms are unchanged (one Quantity input).
 - **Invoice detail** line table: on an invoice type, columns Gross, Tare, Net replace
-  Quantity; on an order type, Quantity as today. Excel export of lines follows the same rule.
+  Quantity; on an order type, Quantity as today. (There is no per-line Excel export on the
+  invoice page; the reports' trade export stays on the net quantity it already shows.)
 - **Warehouse receipt and issue forms**: the line quantity they show is the net; its column
   header becomes "Net (MT)" on invoice types (it is the only quantity those forms can ever
   see, since orders cannot be received against).
