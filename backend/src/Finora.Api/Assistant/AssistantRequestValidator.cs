@@ -31,12 +31,13 @@ public static class AssistantRequestValidator
             {
                 foreach (var part in content.EnumerateArray())
                 {
-                    var type = part.TryGetProperty("type", out var t) ? t.GetString() : null;
+                    var type = part.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
                     if (type == "text") continue;
                     if (type == "input_audio")
                     {
                         if (request.Mode != "transcribe") throw Bad("audio-not-allowed");
-                        var format = part.GetProperty("input_audio").TryGetProperty("format", out var f) ? f.GetString() : null;
+                        if (!part.TryGetProperty("input_audio", out var audio) || audio.ValueKind != JsonValueKind.Object) throw Bad("audio-shape");
+                        var format = audio.TryGetProperty("format", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null;
                         if (format != "wav") throw Bad("audio-format");
                         continue;
                     }

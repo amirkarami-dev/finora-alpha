@@ -81,10 +81,20 @@ public static partial class AssistantEndpoints
 
             var started = TimeProvider.System.GetTimestamp();
             var reply = await client.ChatAsync(body, ct);
-            var message0 = reply.GetProperty("choices")[0].GetProperty("message");
+
+            // The upstream is external and a 200 does not guarantee a usable body: no "choices",
+            // an empty array, or a missing "message" are all as unusable as a network failure, so
+            // they get the same assistant-unavailable code instead of an unhandled exception.
+            if (!reply.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array
+                || choices.GetArrayLength() == 0 || !choices[0].TryGetProperty("message", out var message0)
+                || message0.ValueKind != JsonValueKind.Object)
+            {
+                throw new DomainException(AssistantClient.Unavailable);
+            }
+
             var usage = reply.TryGetProperty("usage", out var u) ? u : default;
-            var promptTokens = usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty("prompt_tokens", out var p) ? p.GetInt32() : 0;
-            var completionTokens = usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty("completion_tokens", out var c) ? c.GetInt32() : 0;
+            var promptTokens = usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty("prompt_tokens", out var p) && p.TryGetInt32(out var promptTokensValue) ? promptTokensValue : 0;
+            var completionTokens = usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty("completion_tokens", out var c) && c.TryGetInt32(out var completionTokensValue) ? completionTokensValue : 0;
 
             var elapsedMs = TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
             LogCall(logger, userId, request.Mode, promptTokens, completionTokens, elapsedMs);
@@ -92,7 +102,12 @@ public static partial class AssistantEndpoints
             return Results.Ok(new AssistantChatResponse(message0, new AssistantUsage(promptTokens, completionTokens)));
         })
             .WithName("AssistantChat")
-            .WithSummary("Forwards a conversation to the AI model with the server's rules and the caller's allowed tools.");
+            .WithSummary("Forwards a conversation to the AI model with the server's rules and the caller's allowed tools.")
+            // Belt-and-braces alongside the ContentLength check above (which chunked bodies can
+            // skip): a fixed 4 MB cap at the Kestrel/framework level. AssistantOptions.MaxBodyBytes
+            // is a config value read at request time, not at map time, so it can't be threaded
+            // into this attribute without a service lookup here; 4 MB matches the option's default.
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(4 * 1024 * 1024));
 
         return app;
     }

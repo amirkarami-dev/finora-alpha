@@ -33,13 +33,17 @@ public sealed partial class AssistantClient(HttpClient http, IOptions<AssistantO
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                LogUpstream(logger, (int)response.StatusCode, text.Length > 500 ? text[..500] : text);
+                // The upstream can echo the request back (e.g. in an error message), so the key
+                // must never reach the log even truncated.
+                var redacted = string.IsNullOrEmpty(settings.ApiKey) ? text : text.Replace(settings.ApiKey, "***", StringComparison.Ordinal);
+                LogUpstream(logger, (int)response.StatusCode, redacted.Length > 500 ? redacted[..500] : redacted);
                 throw new DomainException(Unavailable);
             }
 
-            return JsonDocument.Parse(text).RootElement.Clone();
+            using var doc = JsonDocument.Parse(text);
+            return doc.RootElement.Clone();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or JsonException) && !cancellationToken.IsCancellationRequested)
         {
             LogFailure(logger, ex);
             throw new DomainException(Unavailable);

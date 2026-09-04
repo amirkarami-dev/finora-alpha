@@ -125,7 +125,7 @@ public sealed class AssistantTests(ApiFixture fixture)
     }
 
     [Theory]
-    [InlineData("chat", "en", "assistant", "hello")]        // a client system role is dropped, but a bogus role is refused
+    [InlineData("chat", "en", "assistant", "hello")]        // an assistant-only conversation has no user turn, so it is refused
     [InlineData("chat", "de", "user", "hello")]             // unsupported language
     [InlineData("sing", "en", "user", "hello")]             // unknown mode
     public async Task A_malformed_request_is_refused_with_a_code(string mode, string language, string role, string text)
@@ -175,12 +175,56 @@ public sealed class AssistantTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task An_unexpected_upstream_body_is_reported_as_unavailable()
+    {
+        // A 200 with no "choices" (or an empty one, or no "message") is as unusable as a network
+        // failure — the endpoint must not throw an unhandled exception trying to read it.
+        Upstream.Respond = _ => FakeAssistantUpstream.Json(new { error = "shape" });
+        try
+        {
+            using var c = await LoginAsync(fixture, "amir@finora.app", "demo1234");
+            var response = await PostAsync(c, Ask("hi"));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+            Assert.Equal("assistant-unavailable", problem.GetProperty("code").GetString());
+        }
+        finally
+        {
+            Upstream.Respond = _ => FakeAssistantUpstream.Text("OK");
+        }
+    }
+
+    [Fact]
+    public async Task A_malformed_content_part_is_refused_not_crashed()
+    {
+        using var c = await LoginAsync(fixture, "amir@finora.app", "demo1234");
+
+        var typeNotAString = await PostAsync(c, new
+        {
+            mode = "chat", language = "en",
+            messages = new object[] { new { role = "user", content = new object[] { new { type = 5 } } } },
+        });
+        var typeProblem = await typeNotAString.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("assistant-bad-request", typeProblem.GetProperty("code").GetString());
+
+        var audioMissingObject = await PostAsync(c, new
+        {
+            mode = "transcribe", language = "en",
+            messages = new object[] { new { role = "user", content = new object[] { new { type = "input_audio" } } } },
+        });
+        var audioProblem = await audioMissingObject.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("assistant-bad-request", audioProblem.GetProperty("code").GetString());
+        Assert.Equal("audio-shape", audioProblem.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task The_limit_stops_one_user_and_leaves_the_others_alone()
     {
         // RequestsPerHour is 5 in the fixture. Other tests may already have spent one or two of
         // Staff's five, so this loops until the refusal and only asserts it came within six calls;
         // the window is cleared afterwards so test order never matters.
         var limiter = fixture.Services.GetRequiredService<Finora.Api.Assistant.AssistantRateLimiter>();
+        limiter.Reset();
         try
         {
             using var staff = await LoginAsync(fixture, "staff@finora.app", "Staff@2026");
