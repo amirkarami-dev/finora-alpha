@@ -1,3 +1,4 @@
+using Finora.Api.Assistant;
 using Finora.Api.Endpoints;
 using Finora.Api.Infrastructure;
 using Microsoft.AspNetCore.DataProtection;
@@ -30,6 +31,7 @@ if (!string.IsNullOrWhiteSpace(keyPath))
 builder.AddFinoraAuthentication();
 builder.AddIdentityModule();
 builder.AddErpModule();
+builder.Services.AddAssistant(builder.Configuration);
 
 builder.Services.AddOpenApi();
 
@@ -60,6 +62,7 @@ app.MapChargeEndpoints();
 app.MapClaimEndpoints();
 app.MapMoneyTransferEndpoints();
 app.MapExchangeGainLossEndpoints();
+app.MapAssistantEndpoints();
 
 // Off unless a test switches it on. See DiagnosticEndpoints for why the seam exists at all.
 if (app.Configuration.GetValue<bool>("Api:EnableDiagnosticEndpoints"))

@@ -1,7 +1,9 @@
+using Finora.Api.Assistant;
 using Finora.Erp.Infrastructure;
 using Finora.Identity.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
@@ -55,5 +57,20 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         // The seeded accounts need their published demo passwords here, exactly as in local
         // development. Production leaves this off and the seeder creates them unusable instead.
         builder.UseSetting("Identity:AllowDemoPasswords", "true");
+        // The assistant talks to a fake upstream: the key and URL are placeholders, and the
+        // typed client's primary handler is swapped for the recorder below.
+        builder.UseSetting("Assistant:BaseUrl", "https://fake-liara.test/v1");
+        builder.UseSetting("Assistant:Model", "google/gemini-2.5-flash");
+        builder.UseSetting("Assistant:ApiKey", "test-key-not-secret");
+        builder.UseSetting("Assistant:RequestsPerHour", "5");
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<FakeAssistantUpstream>();
+            services.AddHttpClient<AssistantClient>()
+                .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<FakeAssistantUpstream>())
+                // The factory rotates and disposes primary handlers every two minutes by default;
+                // ours is a singleton recorder shared by every test, so it must never be disposed.
+                .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        });
     }
 }

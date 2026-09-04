@@ -131,6 +131,7 @@ Neither is committed. Both are mode 600.
 ```
 POSTGRES_PASSWORD=…      # the postgres superuser password
 POSTGRES_NETWORK=postgres
+ASSISTANT_API_KEY=…      # Liara AI key for the assistant; empty = assistant off
 ```
 
 `POSTGRES_NETWORK` names the Docker network the `postgres` container sits on, and it differs per

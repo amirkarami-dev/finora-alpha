@@ -17,6 +17,12 @@ public sealed class ErrorCodeContractTests
     /// </summary>
     private static readonly string[] BackendOnlyCodes =
     [
+        // AI assistant. The SPA branches on these in Task 2 of the assistant plan; remove
+        // these three lines when `code === 'assistant-…'` exists in apps/erp-panel/src.
+        "assistant-bad-request",
+        "assistant-rate-limited",
+        "assistant-unavailable",
+
         // Authentication did not exist while the app ran on mock data.
         "invalid-credentials",
 

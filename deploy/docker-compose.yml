@@ -82,6 +82,10 @@ services:
       # password is supplied from the host environment, never committed.
       ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       ASPNETCORE_ENVIRONMENT: Production
+      # The AI assistant's upstream (Liara, OpenAI-compatible). The key is read from .env,
+      # never committed; an empty key keeps the assistant switched off (it answers
+      # "assistant-unavailable") without affecting anything else.
+      Assistant__ApiKey: "${ASSISTANT_API_KEY:-}"
     volumes:
       # Data-protection keys, which encrypt the session cookie. Without a volume they live in the
       # container and a redeploy signs every user out.
@@ -155,6 +159,10 @@ services:
     environment:
       ConnectionStrings__finora: "Host=postgres;Port=5432;Database=finora2;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       ASPNETCORE_ENVIRONMENT: Production
+      # The AI assistant's upstream (Liara, OpenAI-compatible). The key is read from .env,
+      # never committed; an empty key keeps the assistant switched off (it answers
+      # "assistant-unavailable") without affecting anything else.
+      Assistant__ApiKey: "${ASSISTANT_API_KEY:-}"
     volumes:
       # Its own keys. Sessions cannot cross anyway — the cookie is host-scoped — but two tenants
       # sharing a signing key is a coupling with no upside.
