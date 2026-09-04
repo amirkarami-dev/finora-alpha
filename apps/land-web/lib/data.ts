@@ -33,12 +33,33 @@ export const copper: ProductCategory = {
   headingAccent: "Products",
   intro:
     "High-purity copper in every traded form — from bright bare Millberry wire to cast billets and refined ingots. All grades sorted, quality-checked and export-ready.",
-  heroImage: "/assets/cu-coil.jpg",
+  heroImage: "/assets/products/stock-05.jpeg",
   heroTint: "rgba(184,115,51,0.28)",
   ctaTitle: "Need a grade not listed here?",
   ctaText:
     "We source to specification. Tell us your purity, volume and destination port — our desk will revert with availability and a live quote.",
   products: [
+    {
+      title: "Bulk Copper Wire Scrap",
+      description:
+        "Mixed copper wire and conductor offcuts supplied in bulk bags for recovery, sorting and high-yield remelting.",
+      image: "/assets/products/stock-05.jpeg",
+      tag: "Bulk Supply",
+    },
+    {
+      title: "Mixed Copper Wire Bales",
+      description:
+        "Prepared copper wire bundles with a practical mix of insulated and bare material, graded by recoverable copper content.",
+      image: "/assets/products/stock-06.jpeg",
+      tag: "Sorted Feedstock",
+    },
+    {
+      title: "Reclaimed Heat Exchangers",
+      description:
+        "Copper and aluminum heat exchanger assemblies recovered for dismantling, separation and metal reclamation.",
+      image: "/assets/products/stock-09.jpeg",
+      tag: "Cu / Al Recovery",
+    },
     {
       title: "Mixed Copper Wire Scrap",
       description:
@@ -106,12 +127,26 @@ export const aluminum: ProductCategory = {
   headingAccent: "Products",
   intro:
     "Consistent, foundry-ready aluminum across ingots, granules, pressed bales and UBC scrap — sorted for purity and supplied at scale.",
-  heroImage: "/assets/al-bars.jpg",
+  heroImage: "/assets/products/stock-02.jpeg",
   heroTint: "rgba(154,163,173,0.2)",
   ctaTitle: "Looking for a specific alloy or volume?",
   ctaText:
     "Share your specification and destination — we'll confirm availability, packaging and a live quote.",
   products: [
+    {
+      title: "Premium Aluminum Scrap Bales",
+      description:
+        "Dense, strapped aluminum scrap bales prepared for efficient container loading and foundry charging.",
+      image: "/assets/products/stock-01.jpeg",
+      tag: "Premium Bale",
+    },
+    {
+      title: "Aluminum Ingots",
+      description:
+        "Strapped aluminum ingot lots for remelting, casting and secondary alloy production with consistent handling units.",
+      image: "/assets/products/stock-02.jpeg",
+      tag: "Cast Alloy",
+    },
     {
       title: "Aluminum Ingots",
       description:
@@ -152,12 +187,47 @@ export const otherProducts: ProductCategory = {
   headingSub: "Lead, Brass & Specialty Metals",
   intro:
     "Beyond copper and aluminum — refined lead, brass scrap and insulated power cables, all sorted to grade and ready for export.",
-  heroImage: "/assets/br-facet.jpg",
+  heroImage: "/assets/products/stock-07.jpeg",
   heroTint: "rgba(194,162,78,0.22)",
   ctaTitle: "Sourcing another non-ferrous metal?",
   ctaText:
     "Our network extends well beyond this list. Tell us what you need and we'll source it to specification.",
   products: [
+    {
+      title: "Industrial Lead Ingots",
+      description:
+        "Cast lead ingots marked for traceable lots, suitable for battery, shielding and industrial alloy applications.",
+      image: "/assets/products/stock-03.jpeg",
+      tag: "99.97% Pb",
+    },
+    {
+      title: "Cast Alloy Ingots",
+      description:
+        "Heavy cast alloy blocks supplied for controlled remelting and industrial feedstock programs.",
+      image: "/assets/products/stock-04.jpeg",
+      tag: "Cast Stock",
+    },
+    {
+      title: "Assorted Non-Ferrous Scrap",
+      description:
+        "Clean, sorted mixed-metal scrap in bulk bags, prepared for specialist separation and downstream manufacturing.",
+      image: "/assets/products/stock-07.jpeg",
+      tag: "Grade A Assorted",
+    },
+    {
+      title: "Sorted Metal Castings",
+      description:
+        "Commercial castings separated by material family and supplied for foundry charge and metal recovery.",
+      image: "/assets/products/stock-08.jpeg",
+      tag: "Sorted Castings",
+    },
+    {
+      title: "Heat Exchanger Plates",
+      description:
+        "Recovered copper-aluminum exchanger plates and assemblies for high-value metal separation and recycling.",
+      image: "/assets/products/stock-10.jpeg",
+      tag: "Cu / Al Recovery",
+    },
     {
       title: "Industrial Lead Ingots",
       description:

@@ -30,7 +30,7 @@ const usps = ["Quality Checked", "Export Ready", "Custom Packaging", "Fast Turna
 const bento = [
   {
     href: "/copper",
-    img: "/assets/cu-coil.jpg",
+    img: "/assets/products/stock-05.jpeg",
     overlay: "linear-gradient(180deg,rgba(10,13,15,0.1),rgba(124,74,30,0.35) 55%,rgba(10,13,15,0.92))",
     eyebrow: "01 — Copper",
     eyebrowColor: "#E8A87C",
@@ -40,7 +40,7 @@ const bento = [
   },
   {
     href: "/aluminum",
-    img: "/assets/al-bars.jpg",
+    img: "/assets/products/stock-02.jpeg",
     // Aluminum's texture is much brighter than the others — ramp to a strong
     // dark scrim by ~60% so the eyebrow + title stay legible over the bars.
     overlay: "linear-gradient(180deg,rgba(10,13,15,0.12) 0%,rgba(26,32,38,0.45) 38%,rgba(10,13,15,0.88) 62%,rgba(10,13,15,0.96) 100%)",
@@ -52,7 +52,7 @@ const bento = [
   },
   {
     href: "/other-products",
-    img: "/assets/br-facet.jpg",
+    img: "/assets/products/stock-07.jpeg",
     overlay: "linear-gradient(180deg,rgba(10,13,15,0.1),rgba(90,70,40,0.35) 55%,rgba(10,13,15,0.92))",
     eyebrow: "03 — Specialty",
     eyebrowColor: "#E8A87C",
@@ -175,21 +175,22 @@ export default function Home() {
 
       {/* ============ HERO ============ */}
       <section style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", overflow: "hidden" }}>
-        <div ref={heroBg} style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg,#1a120b,#0A0D0F)", transform: "scale(1.18)", willChange: "transform" }}>
+        <div ref={heroBg} style={{ position: "absolute", inset: 0, background: "linear-gradient(115deg,#0a0d0f 0%,#1d252b 48%,#3c2415 100%)", transform: "scale(1.18)", willChange: "transform" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/hero.jpg" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.42, filter: "saturate(1.1) contrast(1.05)" }} />
+          <img src="/assets/hero.jpg" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.38, filter: "saturate(0.78) contrast(1.12) brightness(0.88)" }} />
         </div>
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "radial-gradient(ellipse 80% 60% at 70% 30%, rgba(184,115,51,0.22), transparent 60%), linear-gradient(180deg, rgba(10,13,15,0.55) 0%, rgba(10,13,15,0.4) 40%, rgba(10,13,15,0.95) 100%)",
+              "radial-gradient(ellipse 58% 70% at 76% 42%, rgba(184,115,51,0.28), transparent 68%), radial-gradient(ellipse 70% 80% at 20% 35%, rgba(111,132,145,0.16), transparent 64%), linear-gradient(180deg, rgba(10,13,15,0.5) 0%, rgba(10,13,15,0.34) 40%, rgba(10,13,15,0.96) 100%)",
           }}
         />
         <div style={{ position: "absolute", bottom: -80, left: -60, width: 420, height: 420, background: "radial-gradient(circle, rgba(124,74,30,0.35), transparent 70%)", pointerEvents: "none" }} />
 
-        <div ref={heroContent} style={{ position: "relative", zIndex: 3, width: "100%", maxWidth: 1240, margin: "0 auto", padding: "120px clamp(20px,5vw,72px) 60px", willChange: "transform" }}>
+        <div ref={heroContent} className="hero-content" style={{ position: "relative", zIndex: 3, width: "100%", maxWidth: 1240, margin: "0 auto", padding: "120px clamp(20px,5vw,72px) 60px", willChange: "transform" }}>
+          <div className="hero-copy">
           <span
             className="reveal reveal-sm"
             data-delay="40"
@@ -199,21 +200,21 @@ export default function Home() {
             Dubai · Iraq · Worldwide Non-Ferrous Metals Trade
           </span>
 
-          <h1 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(46px,9vw,112px)", lineHeight: 0.98, color: "var(--text)", margin: "26px 0 0", letterSpacing: "-0.02em" }}>
+          <h1 className="hero-title" style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(46px,9vw,112px)", lineHeight: 0.98, color: "var(--text)", margin: "26px 0 0", letterSpacing: "-0.02em" }}>
             <span className="reveal reveal-sm" data-delay="80" style={heroWord}>Metal</span>
             <span className="reveal reveal-sm" data-delay="180" style={heroWord}>&nbsp;is</span>
             <span className="reveal reveal-sm" data-delay="280" style={heroWord}>&nbsp;Our</span>
             <span className="reveal reveal-sm" data-delay="380" style={{ ...heroWord, ...accentGradient }}>&nbsp;Craft</span>
           </h1>
-          <p className="reveal reveal-sm" data-delay="480" style={{ fontFamily: "var(--ff-display)", fontStyle: "italic", fontWeight: 500, fontSize: "clamp(24px,4.5vw,46px)", color: "var(--accent)", margin: "6px 0 0" }}>
+          <p className="hero-subtitle reveal reveal-sm" data-delay="480" style={{ fontFamily: "var(--ff-display)", fontStyle: "italic", fontWeight: 500, fontSize: "clamp(24px,4.5vw,46px)", color: "var(--accent)", margin: "6px 0 0" }}>
             Trust is Our Core
           </p>
 
-          <p className="reveal reveal-sm" data-delay="560" style={{ fontFamily: "var(--ff-body)", fontSize: "clamp(15px,1.7vw,18px)", lineHeight: 1.75, color: "#C8BFB5", maxWidth: 560, margin: "26px 0 0" }}>
+          <p className="hero-description reveal reveal-sm" data-delay="560" style={{ fontFamily: "var(--ff-body)", fontSize: "clamp(15px,1.7vw,18px)", lineHeight: 1.75, color: "#C8BFB5", maxWidth: 560, margin: "26px 0 0" }}>
             We source, process and export copper, aluminum, lead and brass to foundries, manufacturers and recyclers across the Gulf and beyond — clean material, transparent trade, dependable supply.
           </p>
 
-          <div className="reveal reveal-sm" data-delay="640" style={{ display: "flex", flexWrap: "wrap", gap: 15, marginTop: 38 }}>
+          <div className="hero-actions reveal reveal-sm" data-delay="640" style={{ display: "flex", flexWrap: "wrap", gap: 15, marginTop: 38 }}>
             <Link href="/copper" className="btn-copper" style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "16px 30px", borderRadius: 34, background: "var(--copper-gradient)", color: "var(--bg)", fontFamily: "var(--ff-body)", fontSize: 15.5, fontWeight: 700, boxShadow: "0 14px 36px rgba(184,115,51,0.42)" }}>
               Explore Products
               <ArrowRight width={17} height={17} />
@@ -221,6 +222,18 @@ export default function Home() {
             <Link href="/about-us" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "16px 30px", borderRadius: 34, border: "1px solid rgba(245,240,235,0.28)", color: "var(--text)", fontFamily: "var(--ff-body)", fontSize: 15.5, fontWeight: 600, background: "rgba(245,240,235,0.03)", backdropFilter: "blur(8px)" }}>
               About Us
             </Link>
+          </div>
+          </div>
+          <div className="hero-video-stack reveal reveal-sm" data-delay="360">
+            <div className="hero-brand-stamp" aria-label="Jalil Jalal Company">
+              <span>Jalil Jalal Company</span>
+              <i aria-hidden="true" />
+            </div>
+            <SourcingVideo src="/assets/videos/processing-heat-exchangers.mp4" caption="Heat exchange processing" />
+            <div className="hero-video-secondary">
+              <video src="/assets/videos/copper-wires.mp4" autoPlay muted loop playsInline preload="metadata" aria-label="Camera gliding over copper wires" />
+              <span>Copper in motion</span>
+            </div>
           </div>
         </div>
 
@@ -267,7 +280,7 @@ export default function Home() {
         <div className="reveal" data-delay="150" style={{ position: "relative" }}>
           <div style={{ position: "relative", borderRadius: 22, overflow: "hidden", aspectRatio: "4/5", background: "var(--copper-gradient)", boxShadow: "0 30px 70px rgba(0,0,0,0.5)", border: "1px solid rgba(184,115,51,0.3)" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/welcome.jpg" alt="Industrial metal processing" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.92 }} />
+            <img src="/assets/iso-certified-metal.jpg" alt="ISO-certified quality assurance for industrial metal processing" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.92 }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg,rgba(10,13,15,0) 50%,rgba(10,13,15,0.5))" }} />
           </div>
           <div style={{ position: "absolute", bottom: -22, left: -22, padding: "20px 24px", borderRadius: 16, background: "rgba(17,21,24,0.92)", backdropFilter: "blur(14px)", border: "1px solid rgba(184,115,51,0.34)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
@@ -283,19 +296,19 @@ export default function Home() {
           <div className="reveal" data-delay="0">
             <span style={{ fontFamily: "var(--ff-body)", fontSize: 12, fontWeight: 600, letterSpacing: ".22em", textTransform: "uppercase", color: "var(--copper)" }}>From the yard</span>
             <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(30px,4.5vw,48px)", color: "var(--text)", lineHeight: 1.1, margin: "16px 0 20px" }}>
-              Raw copper scrap, <span style={accentGradient}>sourced by hand</span>
+              Loaded for export, <span style={accentGradient}>ready for its next life</span>
             </h2>
-            <p style={{ fontFamily: "var(--ff-body)", fontSize: 15.5, lineHeight: 1.78, color: "var(--muted)", margin: "0 0 28px", maxWidth: 520 }}>
-              Before a single tonne reaches a container it is sorted, graded and loaded at origin by our own team. This is the material behind every Jalil Jalal consignment — seen the way our buyers never get to see it.
+              <p style={{ fontFamily: "var(--ff-body)", fontSize: 15.5, lineHeight: 1.78, color: "var(--muted)", margin: "0 0 28px", maxWidth: 520 }}>
+                Once a lot is graded and prepared, it moves through our export network in carefully loaded containers. Reliable handling turns recovered metal into dependable industrial supply.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 11 }}>
-              {["Sorted on site", "Graded by hand", "Loaded for export"].map((u) => (
+                  {["Loaded at origin", "Container-ready", "Tracked to destination"].map((u) => (
                 <span key={u} style={{ fontFamily: "var(--ff-body)", fontSize: 13, fontWeight: 500, color: "var(--copper-light)", padding: "9px 17px", borderRadius: 30, border: "1px solid rgba(184,115,51,0.34)", background: "rgba(184,115,51,0.07)" }}>{u}</span>
               ))}
             </div>
           </div>
           <div className="reveal" data-delay="150">
-            <SourcingVideo src="/assets/videos/sourcing-raw-copper-scrap.mp4" caption="Sourcing raw copper scrap" />
+              <SourcingVideo src="/assets/videos/freight-truck-loaded-metal.mp4" caption="Freight truck loaded with metal" />
           </div>
         </div>
       </section>
@@ -304,7 +317,8 @@ export default function Home() {
       <section style={{ position: "relative", zIndex: 5, maxWidth: 1240, margin: "0 auto", padding: "0 clamp(20px,5vw,72px) clamp(64px,9vw,120px)" }}>
         <div className="reveal" data-delay="0" style={{ textAlign: "center", maxWidth: 640, margin: "0 auto clamp(40px,5vw,60px)" }}>
           <span style={{ fontFamily: "var(--ff-body)", fontSize: 12, fontWeight: 600, letterSpacing: ".22em", textTransform: "uppercase", color: "var(--copper)" }}>Our Catalogue</span>
-          <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(30px,4.5vw,48px)", color: "var(--text)", lineHeight: 1.1, margin: "16px 0 0" }}>Material categories we trade</h2>
+          <h2 style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(30px,4.5vw,48px)", color: "var(--text)", lineHeight: 1.1, margin: "16px 0 0" }}>Materials in motion</h2>
+          <p style={{ fontFamily: "var(--ff-body)", fontSize: 15, lineHeight: 1.7, color: "var(--muted)", margin: "16px auto 0", maxWidth: 560 }}>From recovered wire and cast ingots to high-value copper-aluminum assemblies, each lot is prepared for its next industrial life.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 22 }}>
           {bento.map((b) => (
