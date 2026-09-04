@@ -424,7 +424,7 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
                             />
                           </Form.Item>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            {t('common.mtUnit')}
+                            {t('warehouse.netMt')}
                           </Text>
                         </div>
                       </div>

@@ -214,13 +214,39 @@ export default function InvoiceDetailPage() {
       width: 180,
       render: (v) => <Text strong>{v}</Text>,
     },
-    {
-      title: t('items.quantityMt'),
-      dataIndex: 'quantityMt',
-      width: 110,
-      align: 'right',
-      render: (v) => formatMt(v),
-    },
+    ...(priced
+      ? ([
+          {
+            title: t('tradeInvoices.grossMt'),
+            dataIndex: 'grossMt',
+            width: 110,
+            align: 'right',
+            render: (v?: number) => (v == null ? <Text type="secondary">—</Text> : formatMt(v)),
+          },
+          {
+            title: t('tradeInvoices.tareMt'),
+            dataIndex: 'tareMt',
+            width: 110,
+            align: 'right',
+            render: (v?: number) => (v == null ? <Text type="secondary">—</Text> : formatMt(v)),
+          },
+          {
+            title: t('tradeInvoices.netMt'),
+            dataIndex: 'quantityMt',
+            width: 110,
+            align: 'right',
+            render: (v: number) => <Text strong>{formatMt(v)}</Text>,
+          },
+        ] as ColumnsType<InvoiceItem>)
+      : ([
+          {
+            title: t('items.quantityMt'),
+            dataIndex: 'quantityMt',
+            width: 110,
+            align: 'right',
+            render: (v: number) => formatMt(v),
+          },
+        ] as ColumnsType<InvoiceItem>)),
     {
       title: t('items.lmePercent'),
       dataIndex: 'lmePercent',
@@ -625,7 +651,7 @@ export default function InvoiceDetailPage() {
           columns={itemColumns}
           dataSource={invoice.items}
           pagination={false}
-          scroll={{ x: 1700 }}
+          scroll={{ x: 1920 }}
           locale={{ emptyText: <Empty description={t('tradeInvoices.noItemsYet')} /> }}
         />
       </Card>

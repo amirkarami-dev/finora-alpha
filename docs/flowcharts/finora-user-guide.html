@@ -313,6 +313,7 @@
   <h2>B. Convert to a provisional, then price it</h2>
   <ol class="steps">
     <li><div class="t">On the confirmed order click <span class="btn">Convert</span> → choose <b>Provisional</b>.<span class="see">a new DRAFT numbered 26090002, with the same items. It shows "Reference: 26090001".</span></div></li>
+    <li><div class="t">Open each line with <span class="btn">Edit</span> and type the <b>Gross (MT)</b> from the scale and the <b>Tare (MT)</b> (packing and pallet). The app shows the <b>Net (MT)</b> = gross − tare. You cannot type the net. The line total is net × unit price.<span class="see">the net is the quantity the warehouse will receive.</span></div></li>
     <li><div class="t">In the <b>Pricing</b> panel enter the <b>LME price</b> and <b>LME date</b> (needed for floating lines). Click <span class="btn">Apply to all</span>, or set each line. Add a <b>Discount %</b> if agreed.<span class="see">every line now has an amount, and the total at the bottom.</span></div></li>
     <li><div class="t">Optional: <span class="btn">Send</span> marks it as sent to the other party. <span class="btn">Print</span> gives a printable copy.</div></li>
     <li><div class="t">Click <span class="btn">Confirm</span>.</div></li>
@@ -328,10 +329,12 @@
     <div class="box tip"><h3>Good to know</h3><ul>
       <li>A DRAFT can be edited freely. CONFIRMED is locked — to change it, cancel it and make a new one.</li>
       <li>Each document can be converted only once. After that the Convert button disappears.</li>
+      <li>Orders have one quantity. Provisional and final invoices have gross, tare and net.</li>
     </ul></div>
     <div class="box stop"><h3>If the app refuses</h3><ul>
       <li><b>"Quantity exceeds the contract's remaining uninvoiced amount"</b> — another document already used that quantity. Lower the quantity.</li>
       <li><b>"Cannot cancel — a converted document already exists"</b> — cancel the newer document first, then this one.</li>
+      <li><b>"Tare must be less than gross"</b> — check the two weights; the net must be more than 0.</li>
     </ul></div>
   </div>
   <div class="foot"><span>Jalil-Jalal user guide · Buying</span><span>Page 5 / 17</span></div>
@@ -346,7 +349,9 @@
 
   <ol class="steps">
     <li><div class="t"><span class="where">Sale › Orders</span> → <span class="btn">New order</span>. Pick the sell contract. <span class="btn">Save</span>, <span class="btn">Add items</span>, <span class="btn">Confirm</span>.</div></li>
-    <li><div class="t"><span class="btn">Convert</span> → <b>Provisional</b>. Enter <b>LME price</b>, <b>LME date</b>, discount. <span class="btn">Confirm</span>.</div></li>
+    <li><div class="t"><span class="btn">Convert</span> → <b>Provisional</b>.</div></li>
+    <li><div class="t">Open each line with <span class="btn">Edit</span> and type the <b>Gross (MT)</b> from the scale and the <b>Tare (MT)</b> (packing and pallet). The app shows the <b>Net (MT)</b> = gross − tare. You cannot type the net. The line total is net × unit price.<span class="see">the net is the quantity that leaves the warehouse.</span></div></li>
+    <li><div class="t">Enter <b>LME price</b>, <b>LME date</b>, discount. <span class="btn">Confirm</span>.</div></li>
     <li><div class="t">Optional but useful: on each line click <span class="btn">Assign container</span> and pick the container that carries these goods (section 7). The container number and BL number then print on the invoice.</div></li>
     <li><div class="t"><span class="btn">Convert</span> → <b>Invoice</b>. While it is a DRAFT, the items table shows an <b>"Available"</b> column: how many MT of that product are in stock. Red means not enough.</div></li>
     <li><div class="t">Click <span class="btn">Confirm</span>. A window asks: <b>which warehouse do the goods leave from?</b> Choose and click OK.<span class="see">"Document confirmed", a new issue <b>GDN-2026-0001</b> in Warehouse › Documents, stock goes down, and the buyer's balance goes up by the invoice total, and the invoice shows its cost of sales and margin.</span></div></li>
