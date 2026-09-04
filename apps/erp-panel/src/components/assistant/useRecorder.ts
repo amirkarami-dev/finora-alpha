@@ -46,6 +46,8 @@ export function useRecorder(onDone: (blob: Blob) => void, onBlocked: () => void)
         window.clearInterval(timer.current);
         setRecording(false);
         setSeconds(0);
+        recorder.current = null;
+        starting.current = false;
         const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' });
         if (blob.size > 0) onDone(blob);
       };
@@ -73,6 +75,7 @@ export function useRecorder(onDone: (blob: Blob) => void, onBlocked: () => void)
       mounted.current = false;
       window.clearInterval(timer.current);
       stop();
+      recorder.current = null;
     };
   }, [stop]);
 
