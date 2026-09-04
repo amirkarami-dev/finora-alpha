@@ -62,16 +62,19 @@ without writing those rules twice. When reads move to the server, the tools move
   needs. The server includes a tool only if the caller's session has that permission, so a
   Staff user's model never even sees `get_person_balance` (finance).
 
-  | Tool | Needs permission | Browser runs |
+  | Tool | Needs ANY of | Browser runs |
   |---|---|---|
-  | `find_persons(query)` | `customers` | `getCustomers()` filtered by name/code, → id, name, type, `link` |
-  | `get_person_balance(personId)` | `customers` + `reports` | `getAccounts()` row → invoiced, paid, outstanding, overdue, net; `link` |
-  | `list_open_invoices(personId?, side?)` | `sale` or `purchase` | `getReceivableInvoices(personId)` / `getTradeInvoices(side)` → number, date, total USD, paid, outstanding, status; `link` |
+  | `find_persons(query)` | `customers`, `reports`, `executive` | `getCustomers()` filtered by name/code, → id, name, type, `link` |
+  | `get_person_balance(personId)` | `reports`, `executive` | `getAccounts()` row → invoiced, paid, outstanding, overdue, net; `link` |
+  | `list_open_invoices(personId?, side?)` | `sale`, `purchase`, `reports`, `executive` | `getReceivableInvoices(personId)` / `getTradeInvoices(side)` → number, date, total USD, paid, outstanding, status; `link` |
   | `get_stock_levels(warehouse?)` | `warehouse` | `getStockLevels()` → warehouse, product, MT, value USD, cost/MT; `link` |
-  | `get_contract_remaining(contractId)` | `contracts` | `getContractRemaining(id, side)` → product, contracted, uninvoiced; `link` |
-  | `list_contracts(personId?)` | `contracts` | `getContracts()` / `getContractsByCustomer()` → id, person, product, MT, remaining, status; `link` |
-  | `find_document(number)` | `sale` or `purchase` | invoice by number → type, person, date, total, status; `link` |
-  | `get_dashboard_summary()` | `dashboard` | `getKpis()` → outstanding, overdue, invoiced/collected this month, active contracts |
+  | `list_contracts(personId?)` | `contracts`, `reports`, `executive` | `getContracts()` / `getContractsByCustomer()` → id, person, product, MT, remaining, status; `link` |
+  | `get_contract_remaining(contractId)` | `contracts`, `reports`, `executive` | `getContractRemaining(id, side)` → product, contracted, uninvoiced; `link` |
+  | `find_document(number)` | `sale`, `purchase`, `reports`, `executive` | invoice by number → type, person, date, total, status; `link` |
+  | `get_dashboard_summary()` | `dashboard`, `executive` | `getKpis()` → outstanding, overdue, invoiced/collected this month, active contracts |
+
+  The CEO role holds only `executive`, `reports`, `settings`, `users`, so `reports`/`executive`
+  open the finance tools for it; Staff (no `reports`) never sees `get_person_balance`.
 
   Permission keys are the existing route keys from `AccessCatalogue` (the SPA mirrors them in
   `useAuthStore.permissions`). Tool results are compact JSON, money in USD with two decimals,
