@@ -43,6 +43,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
         {
             Customers = [new Customer { Id = "cust-am", Name = "Alco Metal Trading", Code = "AM" }],
             Containers = [new Container { Id = "cnt-1", Reference = "MSNU8018095" }],
+            Warehouses = [new Warehouse { Id = "wh-1", Name = "Main", Code = "1" }],
             Contracts =
             [
                 new Contract
@@ -80,10 +81,12 @@ public sealed class InvoiceTests(ApiFixture fixture)
         Id(await PostAsync(c, "/api/erp/invoices",
             new { invoiceType = type, contractId = "ctr-1", invoiceDate = "2026-08-13T00:00:00Z" }));
 
+    /// <summary>Sends every quantity field: an order takes <c>quantityMt</c>, an invoice type
+    /// takes <c>grossMt</c>/<c>tareMt</c> and ignores the rest. Tare 0 keeps net == qty.</summary>
     private static Task<JsonElement> AddLineAsync(
         HttpClient c, string id, decimal qty, string? container = "cnt-1") =>
         PostAsync(c, $"/api/erp/invoices/{id}/items",
-            new[] { new { contractItemId = "item-1", quantityMt = qty, containerId = container } });
+            new[] { new { contractItemId = "item-1", quantityMt = qty, grossMt = qty, tareMt = 0m, containerId = container } });
 
     private static Task<JsonElement> PriceAsync(HttpClient c, string id, decimal lme = 9000m) =>
         PostAsync(c, $"/api/erp/invoices/{id}/lme-price",
@@ -119,9 +122,9 @@ public sealed class InvoiceTests(ApiFixture fixture)
         // Three lines each worth 11,072.706 × 0.5 = 5,536.353 → 5,536.35 stored.
         var invoice = (await PostAsync(c, $"/api/erp/invoices/{id}/items", new[]
         {
-            new { contractItemId = "item-1", quantityMt = 0.5m, containerId = "cnt-1" },
-            new { contractItemId = "item-1", quantityMt = 0.5m, containerId = "cnt-1" },
-            new { contractItemId = "item-1", quantityMt = 0.5m, containerId = "cnt-1" },
+            new { contractItemId = "item-1", quantityMt = 0.5m, grossMt = 0.5m, tareMt = 0m, containerId = "cnt-1" },
+            new { contractItemId = "item-1", quantityMt = 0.5m, grossMt = 0.5m, tareMt = 0m, containerId = "cnt-1" },
+            new { contractItemId = "item-1", quantityMt = 0.5m, grossMt = 0.5m, tareMt = 0m, containerId = "cnt-1" },
         })).GetProperty("entity");
 
         // Round-then-sum: 5,536.35 × 3 = 16,609.05. Summing raw and rounding once gives
@@ -206,7 +209,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
         var second = await DraftAsync(c, "SALE_PROVISIONAL");
         var response = await c.PostAsJsonAsync(
             new Uri($"/api/erp/invoices/{second}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 50m, containerId = "cnt-1" } });
+            new[] { new { contractItemId = "item-1", quantityMt = 50m, grossMt = 50m, tareMt = 0m, containerId = "cnt-1" } });
 
         var problem = await ProblemAsync(response);
         Assert.Equal("qty-exceeds-remaining", problem.GetProperty("code").GetString());
@@ -251,14 +254,14 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         var exact = await DraftAsync(c);
         (await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{exact}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 100m, containerId = "cnt-1" } }))
+            new[] { new { contractItemId = "item-1", quantityMt = 100m, grossMt = 100m, tareMt = 0m, containerId = "cnt-1" } }))
             .EnsureSuccessStatusCode();
 
         await ResetAsync();
         var over = await DraftAsync(c);
         var response = await c.PostAsJsonAsync(
             new Uri($"/api/erp/invoices/{over}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 100.001m, containerId = "cnt-1" } });
+            new[] { new { contractItemId = "item-1", quantityMt = 100.001m, grossMt = 100.001m, tareMt = 0m, containerId = "cnt-1" } });
 
         Assert.Equal("qty-exceeds-remaining", (await ProblemAsync(response)).GetProperty("code").GetString());
     }
@@ -274,9 +277,9 @@ public sealed class InvoiceTests(ApiFixture fixture)
             new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
             new[]
             {
-                new { contractItemId = "item-1", quantityMt = 40m, containerId = "cnt-1" },
-                new { contractItemId = "item-1", quantityMt = 40m, containerId = "cnt-1" },
-                new { contractItemId = "item-1", quantityMt = 40m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
             });
 
         // Each is under the 100 ceiling on its own; together they are not.
@@ -298,7 +301,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
         foreach (var _ in Enumerable.Range(0, 3))
         {
             await PostAsync(c, $"/api/erp/invoices/{second}/items",
-                new[] { new { contractItemId = "item-1", quantityMt = 30m, containerId = (string?)null } });
+                new[] { new { contractItemId = "item-1", quantityMt = 30m, grossMt = 30m, tareMt = 0m, containerId = (string?)null } });
         }
 
         // Then a rival claims 60 and confirms — allowed, because a draft reserves nothing.
@@ -326,7 +329,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         var response = await c.PostAsJsonAsync(
             new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 150m, containerId = "cnt-1" } });
+            new[] { new { contractItemId = "item-1", quantityMt = 150m, grossMt = 150m, tareMt = 0m, containerId = "cnt-1" } });
 
         // The dialog adds these up in front of the user, so every one crosses the wire separately
         // and `alreadyInvoicedMt` is NOT pre-summed with `onThisDocMt`.
@@ -413,8 +416,8 @@ public sealed class InvoiceTests(ApiFixture fixture)
         // inherits the chain identity, the second is genuinely additional goods.
         var after = await PostAsync(c, $"/api/erp/invoices/{successor}/items", new[]
         {
-            new { contractItemId = "item-1", quantityMt = 10m, containerId = "cnt-1" },
-            new { contractItemId = "item-1", quantityMt = 10m, containerId = "cnt-1" },
+            new { contractItemId = "item-1", quantityMt = 10m, grossMt = 10m, tareMt = 0m, containerId = "cnt-1" },
+            new { contractItemId = "item-1", quantityMt = 10m, grossMt = 10m, tareMt = 0m, containerId = "cnt-1" },
         });
 
         var ids = after.GetProperty("entity").GetProperty("items")
@@ -479,7 +482,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         var rival = await DraftAsync(c, "SALE_ORDER");
         (await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{rival}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 100m, containerId = (string?)null } }))
+            new[] { new { contractItemId = "item-1", quantityMt = 100m, grossMt = 100m, tareMt = 0m, containerId = (string?)null } }))
             .EnsureSuccessStatusCode();
     }
 
@@ -609,7 +612,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
 
         var response = await c.PostAsJsonAsync(
             new Uri($"/api/erp/invoices/{order}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 5m, containerId = (string?)null } });
+            new[] { new { contractItemId = "item-1", quantityMt = 5m, grossMt = 5m, tareMt = 0m, containerId = (string?)null } });
 
         Assert.Equal("not-draft", (await ProblemAsync(response)).GetProperty("code").GetString());
     }
@@ -651,6 +654,166 @@ public sealed class InvoiceTests(ApiFixture fixture)
         // The browser stamps anything. A cancelled invoice claiming to have been sent is a
         // statement about the outside world that is simply untrue.
         Assert.Equal("invoice-cancelled", (await ProblemAsync(response)).GetProperty("code").GetString());
+    }
+
+    /* ------------------------------- Weights ------------------------------- */
+
+#pragma warning disable CA1859 // the anonymous array type has no name to declare as the return type
+    private static object Weighed(decimal gross, decimal tare, string? container = "cnt-1") =>
+        new[] { new { contractItemId = "item-1", grossMt = gross, tareMt = tare, containerId = container } };
+#pragma warning restore CA1859
+
+    [Fact]
+    public async Task Net_is_gross_minus_tare_and_it_prices_the_line()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c);
+
+        // quantityMt is sent on purpose and must be ignored on an invoice type.
+        var line = (await PostAsync(c, $"/api/erp/invoices/{id}/items",
+            new[] { new { contractItemId = "item-1", grossMt = 1.2m, tareMt = 0.2m, quantityMt = 99m, containerId = "cnt-1" } }))
+            .GetProperty("entity").GetProperty("items")[0];
+
+        Assert.Equal(1.2m, line.GetProperty("grossMt").GetDecimal());
+        Assert.Equal(0.2m, line.GetProperty("tareMt").GetDecimal());
+        Assert.Equal(1m, line.GetProperty("quantityMt").GetDecimal());
+        // 11,685 × 94.76% = 11,072.706 USD/MT × 1.000 MT, to the cent.
+        Assert.Equal(11072.71m, line.GetProperty("amount").GetDecimal());
+    }
+
+    [Theory]
+    [InlineData(0, 0, "gross")]
+    [InlineData(1, -0.1, "tare")]
+    [InlineData(1, 1, "tare-exceeds-gross")]
+    [InlineData(1, 1.5, "tare-exceeds-gross")]
+    public async Task Weights_are_checked_rule_by_rule(decimal gross, decimal tare, string rule)
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c);
+
+        var response = await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative), Weighed(gross, tare));
+
+        var problem = await ProblemAsync(response);
+        Assert.Equal("weights-invalid", problem.GetProperty("code").GetString());
+        Assert.Equal(rule, problem.GetProperty("rule").GetString());
+    }
+
+    [Fact]
+    public async Task A_missing_weight_on_an_invoice_type_is_refused_not_defaulted()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c);
+
+        var response = await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
+            new[] { new { contractItemId = "item-1", quantityMt = 10m, containerId = "cnt-1" } });
+
+        var problem = await ProblemAsync(response);
+        Assert.Equal("weights-invalid", problem.GetProperty("code").GetString());
+        Assert.Equal("gross", problem.GetProperty("rule").GetString());
+    }
+
+    [Fact]
+    public async Task An_order_line_takes_a_quantity_and_stores_no_weights()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var order = await DraftAsync(c, "SALE_ORDER");
+
+        var line = (await PostAsync(c, $"/api/erp/invoices/{order}/items",
+            new[] { new { contractItemId = "item-1", quantityMt = 25m, grossMt = 40m, tareMt = 1m } }))
+            .GetProperty("entity").GetProperty("items")[0];
+
+        Assert.Equal(25m, line.GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, line.GetProperty("grossMt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, line.GetProperty("tareMt").ValueKind);
+
+        var zero = await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{order}/items", UriKind.Relative),
+            new[] { new { contractItemId = "item-1", quantityMt = 0m } });
+        var problem = await ProblemAsync(zero);
+        Assert.Equal("weights-invalid", problem.GetProperty("code").GetString());
+        Assert.Equal("quantity", problem.GetProperty("rule").GetString());
+    }
+
+    [Fact]
+    public async Task Editing_one_weight_moves_the_net_and_keeps_the_other()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c);
+        var lineId = (await PostAsync(c, $"/api/erp/invoices/{id}/items", Weighed(1.2m, 0.2m)))
+            .GetProperty("entity").GetProperty("items")[0].GetProperty("id").GetString();
+
+        var response = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{id}/items/{lineId}", UriKind.Relative), new { grossMt = 2m });
+        response.EnsureSuccessStatusCode();
+        var edited = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity").GetProperty("items")[0];
+
+        Assert.Equal(2m, edited.GetProperty("grossMt").GetDecimal());
+        Assert.Equal(0.2m, edited.GetProperty("tareMt").GetDecimal());
+        Assert.Equal(1.8m, edited.GetProperty("quantityMt").GetDecimal());
+
+        var refused = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{id}/items/{lineId}", UriKind.Relative), new { tareMt = 2.5m });
+        var problem = await ProblemAsync(refused);
+        Assert.Equal("weights-invalid", problem.GetProperty("code").GetString());
+        Assert.Equal("tare-exceeds-gross", problem.GetProperty("rule").GetString());
+    }
+
+    [Fact]
+    public async Task Converting_seeds_gross_from_an_orders_quantity_and_then_carries_the_weights()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var order = await DraftAsync(c, "SALE_ORDER");
+        await AddLineAsync(c, order, 25m, container: null);
+        await PostAsync(c, $"/api/erp/invoices/{order}/confirm");
+
+        var provisional = await PostAsync(c, $"/api/erp/invoices/{order}/convert", new { targetType = "SALE_PROVISIONAL" });
+        var pLine = provisional.GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(25m, pLine.GetProperty("grossMt").GetDecimal());
+        Assert.Equal(0m, pLine.GetProperty("tareMt").GetDecimal());
+        Assert.Equal(25m, pLine.GetProperty("quantityMt").GetDecimal());
+
+        // The desk weighs the goods and corrects the provisional, then it goes final.
+        var pId = Id(provisional);
+        var pLineId = pLine.GetProperty("id").GetString();
+        await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{pId}/items/{pLineId}", UriKind.Relative),
+            new { grossMt = 25.4m, tareMt = 0.4m, containerId = "cnt-1" });
+        await PostAsync(c, $"/api/erp/invoices/{pId}/confirm");
+
+        var final = (await PostAsync(c, $"/api/erp/invoices/{pId}/convert", new { targetType = "SALE_INVOICE" }))
+            .GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(25.4m, final.GetProperty("grossMt").GetDecimal());
+        Assert.Equal(0.4m, final.GetProperty("tareMt").GetDecimal());
+        Assert.Equal(25m, final.GetProperty("quantityMt").GetDecimal());
+    }
+
+    [Fact]
+    public async Task A_receipt_against_the_line_consumes_the_net_not_the_gross()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c, "PURCHASE_INVOICE");
+        var line = (await PostAsync(c, $"/api/erp/invoices/{id}/items", Weighed(1.2m, 0.2m)))
+            .GetProperty("entity").GetProperty("items")[0];
+        await PostAsync(c, $"/api/erp/invoices/{id}/confirm");
+        var refId = line.GetProperty("referenceDocumentItemId").GetString();
+
+        await PostAsync(c, "/api/erp/inventory-documents", new
+        {
+            type = "IN", warehouseId = "wh-1", invoiceId = id, date = "2026-08-13T00:00:00Z",
+            items = new[] { new { referenceDocumentItemId = refId, quantityMt = 1m } },
+        });
+
+        var over = await c.PostAsJsonAsync(new Uri("/api/erp/inventory-documents", UriKind.Relative), new
+        {
+            type = "IN", warehouseId = "wh-1", invoiceId = id, date = "2026-08-13T00:00:00Z",
+            items = new[] { new { referenceDocumentItemId = refId, quantityMt = 0.1m } },
+        });
+        var problem = await ProblemAsync(over);
+        Assert.Equal("exceeds-remaining", problem.GetProperty("code").GetString());
     }
 
     /* -------------------------------- Numbering ------------------------------- */

@@ -133,6 +133,10 @@ public sealed class ErrorCodeContractTests
         // only guards the endpoint against a caller that skips the screen; the generic message
         // is honest for that.
         "product-required",
+
+        // Invoice line weights (gross/tare). The SPA branch lands with the forms in the
+        // same feature; remove this line when `code === 'weights-invalid'` exists in the SPA.
+        "weights-invalid",
     ];
 
     /// <summary>
