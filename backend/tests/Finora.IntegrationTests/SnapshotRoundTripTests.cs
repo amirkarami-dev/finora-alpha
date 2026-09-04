@@ -90,6 +90,12 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
         Assert.Equal(94.7600m, item.LmePercent);
         // 6dp rate: the inverse of 3.6725, which a transfer stores.
         Assert.Equal(0.272294m, Assert.Single(read.MoneyTransfers).ExchangeRate);
+
+        // The weighed figures survive beside the net; the net is not recomputed on read.
+        var invoiceLine = Assert.Single(read.Invoices.Single(i => i.Id == "inv-pi-0001").Items);
+        Assert.Equal(28.227m, invoiceLine.GrossMt);
+        Assert.Equal(0.2m, invoiceLine.TareMt);
+        Assert.Equal(28.027m, invoiceLine.QuantityMt);
     }
 
     [Fact]
@@ -299,7 +305,8 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
                     {
                         Id = "invitem-0001", InvoiceId = "inv-pi-0001", ContractItemId = "item-0001",
                         ReferenceDocumentItemId = "ref-item-1", Product = "Copper Cathode",
-                        QuantityMt = 28.027m, LmePercent = 94.76m, LmeFixed = true,
+                        QuantityMt = 28.027m, GrossMt = 28.227m, TareMt = 0.2m,
+                        LmePercent = 94.76m, LmeFixed = true,
                         FixedPrice = 11_685m, Premium = 0m, Amount = 327_500m, ContainerId = "cnt-0001",
                     },
                 },
