@@ -33,7 +33,7 @@ export const copper: ProductCategory = {
   headingAccent: "Products",
   intro:
     "High-purity copper in every traded form — from bright bare Millberry wire to cast billets and refined ingots. All grades sorted, quality-checked and export-ready.",
-  heroImage: "/assets/products/stock-05.jpeg",
+  heroImage: "/assets/products/copper/copper-wire-bulk.jpg",
   heroTint: "rgba(184,115,51,0.28)",
   ctaTitle: "Need a grade not listed here?",
   ctaText:
@@ -43,14 +43,14 @@ export const copper: ProductCategory = {
       title: "Bulk Copper Wire Scrap",
       description:
         "Mixed copper wire and conductor offcuts supplied in bulk bags for recovery, sorting and high-yield remelting.",
-      image: "/assets/products/stock-05.jpeg",
+      image: "/assets/products/copper/copper-wire-bulk.jpg",
       tag: "Bulk Supply",
     },
     {
       title: "Mixed Copper Wire Bales",
       description:
         "Prepared copper wire bundles with a practical mix of insulated and bare material, graded by recoverable copper content.",
-      image: "/assets/products/stock-06.jpeg",
+      image: "/assets/products/copper/mixed-wire.jpg",
       tag: "Sorted Feedstock",
     },
     {
@@ -64,7 +64,7 @@ export const copper: ProductCategory = {
       title: "Mixed Copper Wire Scrap",
       description:
         "Bright, unalloyed mixed copper wire (grades #1 / #2), sorted and baled — a versatile feedstock for smelters and refiners.",
-      image: "/assets/cu-coil.jpg",
+      image: "/assets/products/copper/mixed-conductor-wire.jpg",
       tag: "Grade #1/#2",
     },
     {
@@ -85,7 +85,7 @@ export const copper: ProductCategory = {
       title: "Copper Wire Rod",
       description:
         "8mm electrolytic copper wire rod for drawing into conductors, cables and enamelled winding wire.",
-      image: "/assets/cu-rod.jpg",
+      image: "/assets/products/copper/copper-rod-stock.jpg",
       tag: "Export Grade",
     },
     {
@@ -99,7 +99,7 @@ export const copper: ProductCategory = {
       title: "Millberry Copper Wire Scrap",
       description:
         "Bare bright Millberry copper wire at 99.9% — the premium global benchmark for copper scrap.",
-      image: "/assets/cu-coil.jpg",
+      image: "/assets/products/copper/bright-copper-wire.jpg",
       tag: "99.9% Millberry",
     },
     {
