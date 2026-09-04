@@ -442,6 +442,14 @@
     "noUninvoicedLines": "لا توجد كمية غير مفوترة متبقية على هذا العقد",
     "uninvoicedHint": "{{mt}} غير مفوترة",
     "exceedsUninvoiced": "يتجاوز الكمية غير المفوترة ({{mt}})",
+    "grossMt": "الوزن القائم (طن)",
+    "tareMt": "الوزن الفارغ (طن)",
+    "netMt": "الوزن الصافي (طن)",
+    "netHint": "الصافي = القائم − الفارغ",
+    "weightsInvalidGross": "يجب أن يكون الوزن القائم أكبر من 0",
+    "weightsInvalidTare": "لا يمكن أن يكون الوزن الفارغ أقل من 0",
+    "weightsInvalidTareExceedsGross": "يجب أن يكون الوزن الفارغ أقل من الوزن القائم",
+    "weightsInvalidQuantity": "يجب أن تكون الكمية أكبر من 0",
     "headerUpdated": "تم تحديث ترويسة المستند",
     "subtotal": "المجموع الفرعي",
     "grandTotal": "الإجمالي الكلي",
@@ -463,6 +471,7 @@
     "margin": "الهامش"
   },
   "warehouse": {
+    "netMt": "الوزن الصافي (طن)",
     "title": "المستودع",
     "subtitle": "المستودعات وحركات المخزون",
     "tabWarehouses": "المستودعات",

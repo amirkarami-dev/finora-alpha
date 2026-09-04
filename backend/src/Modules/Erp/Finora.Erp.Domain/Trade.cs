@@ -202,6 +202,16 @@ public sealed class InvoiceItem
     public required string Product { get; set; }
     public decimal QuantityMt { get; set; }
 
+    /// <summary>
+    /// What the scale showed, on the four invoice types: the net (<see cref="QuantityMt"/>) is
+    /// gross − tare and is set by the server, never by the client. Both are null on an order
+    /// line, which carries a quantity only because it is written before the goods are weighed.
+    /// </summary>
+    public decimal? GrossMt { get; set; }
+
+    /// <summary>Packing and pallet weight. See <see cref="GrossMt"/>.</summary>
+    public decimal? TareMt { get; set; }
+
     // Copied from the contract line when the line is added; read-only on every document type.
     public decimal LmePercent { get; set; }
     public bool LmeFixed { get; set; }

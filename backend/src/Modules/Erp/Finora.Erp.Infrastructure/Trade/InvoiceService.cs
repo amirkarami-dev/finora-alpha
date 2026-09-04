@@ -37,6 +37,7 @@ public sealed class InvoiceService(ErpDbContext db)
         public const string InvalidStatus = "invalid-status";
         public const string InvalidDiscount = "invalid-discount";
         public const string DuplicateNumber = "duplicate-number";
+        public const string WeightsInvalid = "weights-invalid";
     }
 
     /* ---------------------------------- Reads ----------------------------------- */
@@ -173,7 +174,12 @@ public sealed class InvoiceService(ErpDbContext db)
         var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
         var side = InvoiceMath.SideOf(invoice.InvoiceType);
 
-        var quantities = items.Select(i => Rounding.Quantity(i.QuantityMt)).ToList();
+        // Resolved up front, so a bad weight on the third line refuses the whole post before
+        // the first line is staged — same all-or-nothing as the contract guard below.
+        var resolved = items
+            .Select(i => ResolveWeights(invoice.InvoiceType, i.QuantityMt, i.GrossMt, i.TareMt))
+            .ToList();
+        var quantities = resolved.Select(r => r.QuantityMt).ToList();
         var staged = new Dictionary<string, decimal>(StringComparer.Ordinal);
 
         for (var index = 0; index < items.Count; index++)
@@ -214,6 +220,8 @@ public sealed class InvoiceService(ErpDbContext db)
                 // contract line's LME must not silently reprice a confirmed, paid, printed invoice.
                 Product = contractItem.Product,
                 QuantityMt = quantities[index],
+                GrossMt = resolved[index].GrossMt,
+                TareMt = resolved[index].TareMt,
                 LmePercent = contractItem.LmePercent,
                 LmeFixed = contractItem.LmeFixed,
                 FixedPrice = contractItem.FixedLmePrice,
@@ -253,9 +261,21 @@ public sealed class InvoiceService(ErpDbContext db)
         var line = invoice.Items.SingleOrDefault(i => i.Id == itemId)
             ?? throw new NotFoundException("invoice-item-not-found");
 
-        if (patch.QuantityMt is { } requested)
+        // On an invoice type the weights are the input and the net follows; on an order the
+        // quantity is the input. A patch that names none of them leaves the line's quantities.
+        var priced = InvoiceMath.IsPricedType(invoice.InvoiceType);
+        var touchesQuantity = priced
+            ? patch.GrossMt is not null || patch.TareMt is not null
+            : patch.QuantityMt is not null;
+
+        if (touchesQuantity)
         {
-            var quantity = Rounding.Quantity(requested);
+            var (quantity, gross, tare) = ResolveWeights(
+                invoice.InvoiceType,
+                patch.QuantityMt,
+                patch.GrossMt ?? line.GrossMt,
+                patch.TareMt ?? line.TareMt);
+
             if (quantity > line.QuantityMt)
             {
                 var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
@@ -271,6 +291,8 @@ public sealed class InvoiceService(ErpDbContext db)
             }
 
             line.QuantityMt = quantity;
+            line.GrossMt = gross;
+            line.TareMt = tare;
         }
 
         if (patch.ContainerId is not null)
@@ -574,6 +596,11 @@ public sealed class InvoiceService(ErpDbContext db)
                     ReferenceDocumentItemId = line.ReferenceDocumentItemId,
                     Product = line.Product,
                     QuantityMt = line.QuantityMt,
+                    // Every convert target is an invoice type, which must carry weights. A line
+                    // that came from an order has none yet, so gross starts as the quantity and
+                    // tare as zero — valid at once, corrected when the goods are weighed.
+                    GrossMt = line.GrossMt ?? line.QuantityMt,
+                    TareMt = line.TareMt ?? 0m,
                     LmePercent = line.LmePercent,
                     LmeFixed = line.LmeFixed,
                     FixedPrice = line.FixedPrice,
@@ -677,6 +704,46 @@ public sealed class InvoiceService(ErpDbContext db)
             ? value
             : throw new DomainException(Codes.InvalidDiscount,
                 new Dictionary<string, object?> { ["value"] = value });
+
+    /// <summary>
+    /// What a line stores, from what the caller sent, by document type (spec §2).
+    ///
+    /// <para>An order is written before the goods are weighed, so it takes a quantity and
+    /// stores no weights. The four invoice types take gross and tare; the net is gross − tare
+    /// and is computed HERE — a client's <c>quantityMt</c> is ignored on those types, so no
+    /// screen can ever save a net that disagrees with its own gross and tare.</para>
+    /// </summary>
+    private static (decimal QuantityMt, decimal? GrossMt, decimal? TareMt) ResolveWeights(
+        InvoiceType type, decimal? quantityMt, decimal? grossMt, decimal? tareMt)
+    {
+        if (!InvoiceMath.IsPricedType(type))
+        {
+            var quantity = Rounding.Quantity(quantityMt ?? 0m);
+            return quantity > 0m ? (quantity, null, null) : throw WeightsInvalid("quantity");
+        }
+
+        if (grossMt is not { } grossRaw || Rounding.Quantity(grossRaw) <= 0m)
+        {
+            throw WeightsInvalid("gross");
+        }
+
+        if (tareMt is not { } tareRaw || Rounding.Quantity(tareRaw) < 0m)
+        {
+            throw WeightsInvalid("tare");
+        }
+
+        var gross = Rounding.Quantity(grossRaw);
+        var tare = Rounding.Quantity(tareRaw);
+        if (tare >= gross)
+        {
+            throw WeightsInvalid("tare-exceeds-gross");
+        }
+
+        return (Rounding.Quantity(gross - tare), gross, tare);
+    }
+
+    private static DomainException WeightsInvalid(string rule) =>
+        new(Codes.WeightsInvalid, new Dictionary<string, object?> { ["rule"] = rule });
 
     private async Task<Contract> LoadContractAsync(string id, CancellationToken cancellationToken) =>
         await db.Contracts.Include(c => c.Items)

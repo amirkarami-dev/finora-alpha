@@ -195,6 +195,8 @@ internal sealed class InvoiceItemConfiguration : IEntityTypeConfiguration<Invoic
         builder.Property(i => i.ContainerId).HasOptionalIdColumn();
         builder.Property(i => i.Product).HasMaxLength(200).IsRequired();
         builder.Property(i => i.QuantityMt).HasQuantityColumn();
+        builder.Property(i => i.GrossMt).HasQuantityColumn();
+        builder.Property(i => i.TareMt).HasQuantityColumn();
         builder.Property(i => i.LmePercent).HasPercentColumn();
         builder.Property(i => i.DiscountPercent).HasPercentColumn();
         builder.Property(i => i.FixedPrice).HasUnitPriceColumn();

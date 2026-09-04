@@ -119,5 +119,6 @@
   "transfer-not-found",
   "user-not-found",
   "warehouse-not-found",
-  "warehouse-required"
+  "warehouse-required",
+  "weights-invalid"
 ]

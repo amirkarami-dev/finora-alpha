@@ -33,13 +33,18 @@ export interface InvoiceHeaderPayload {
 
 export interface InvoiceItemPayload {
   contractItemId: string;
-  quantityMt: number;
+  /** Orders only — an invoice type ignores it and takes `grossMt`/`tareMt`. */
+  quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   containerId?: string;
   description?: string;
 }
 
 export interface InvoiceItemPatchPayload {
   quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   containerId?: string;
   description?: string;
   discountPercent?: number;

@@ -442,6 +442,14 @@
     "noUninvoicedLines": "مقدار فاکتورنشده‌ای در این قرارداد باقی نمانده است",
     "uninvoicedHint": "{{mt}} فاکتورنشده",
     "exceedsUninvoiced": "از مقدار فاکتورنشده بیشتر است ({{mt}})",
+    "grossMt": "وزن ناخالص (تن)",
+    "tareMt": "وزن ظرف (تن)",
+    "netMt": "وزن خالص (تن)",
+    "netHint": "خالص = ناخالص − ظرف",
+    "weightsInvalidGross": "وزن ناخالص باید بیشتر از 0 باشد",
+    "weightsInvalidTare": "وزن ظرف نمی‌تواند کمتر از 0 باشد",
+    "weightsInvalidTareExceedsGross": "وزن ظرف باید کمتر از وزن ناخالص باشد",
+    "weightsInvalidQuantity": "مقدار باید بیشتر از 0 باشد",
     "headerUpdated": "سربرگ سند به‌روزرسانی شد",
     "subtotal": "جمع جزء",
     "grandTotal": "جمع کل نهایی",
@@ -463,6 +471,7 @@
     "margin": "حاشیه سود"
   },
   "warehouse": {
+    "netMt": "وزن خالص (تن)",
     "title": "انبار",
     "subtitle": "انبارها و حرکات موجودی",
     "tabWarehouses": "انبارها",

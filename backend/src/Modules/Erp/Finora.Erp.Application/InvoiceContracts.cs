@@ -21,16 +21,24 @@ public sealed record InvoiceHeaderPatch(
 /// <summary>
 /// A goods line to add. Pricing is not accepted from the caller — it is copied from the contract
 /// line, so a document cannot quietly disagree with the contract it is raised against.
+///
+/// <para>Which quantity fields count depends on the document (spec 2026-09-04 invoice line
+/// weights, §2): an order takes <see cref="QuantityMt"/>; the four invoice types take
+/// <see cref="GrossMt"/> and <see cref="TareMt"/> and the server sets the net itself.</para>
 /// </summary>
 public sealed record InvoiceItemInput(
     string ContractItemId,
-    decimal QuantityMt,
+    decimal? QuantityMt,
+    decimal? GrossMt,
+    decimal? TareMt,
     string? ContainerId,
     string? Description);
 
 /// <summary>An edit to one line. Every field is optional; absent means unchanged.</summary>
 public sealed record InvoiceItemPatch(
     decimal? QuantityMt,
+    decimal? GrossMt,
+    decimal? TareMt,
     string? ContainerId,
     string? Description,
     decimal? DiscountPercent);

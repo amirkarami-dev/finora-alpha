@@ -77,20 +77,21 @@ Binding details:
   mirrored client-side. `SCHEMA_VERSION` bumps.
 - **Add-items form** (`AddItemsModal`) and **edit-line form** (`EditLineModal`): on an
   invoice type, two inputs **Gross (MT)** and **Tare (MT)** and a read-only **Net (MT)** that
-  updates as they type; the existing read-only unit price and line total sit beside them and
-  the total follows the net. The contract-remaining hint and `max` apply to the net. On an
-  order type the forms are unchanged (one Quantity input).
+  updates as they type. The contract-remaining hint and the ceiling check apply to the net
+  (enforced by the tare validator; the inputs carry no `max`). On an order type the forms are
+  unchanged (one Quantity input).
 - **Invoice detail** line table: on an invoice type, columns Gross, Tare, Net replace
   Quantity; on an order type, Quantity as today. (There is no per-line Excel export on the
   invoice page; the reports' trade export stays on the net quantity it already shows.)
 - **Warehouse receipt and issue forms**: the line quantity they show is the net; its column
   header becomes "Net (MT)" on invoice types (it is the only quantity those forms can ever
   see, since orders cannot be received against).
-- Error handling: `weights-invalid` is shown on the form as a field message on gross or tare
-  according to `rule`.
+- Error handling: `weights-invalid` is shown by the form as a message chosen by `rule` (a
+  toast, like every other server refusal on these forms); client-side rules catch the same
+  cases before the request is sent.
 - i18n: new keys in `en`, `ar`, `fa`, `ku` — `tradeInvoices.grossMt`, `tareMt`, `netMt`,
-  `weightsInvalid.gross`, `weightsInvalid.tare`, `weightsInvalid.tareExceedsGross`, and the
-  warehouse "Net (MT)" header.
+  `netHint`, `weightsInvalidGross`, `weightsInvalidTare`, `weightsInvalidTareExceedsGross`,
+  `weightsInvalidQuantity`, and `warehouse.netMt` for the receipt/issue form.
 - Sample data: every invoice-type line gets a gross and a tare whose difference is its
   quantity; order lines stay as they are.
 - Docs: the user guide's invoice section says how the three weights work (simple English);

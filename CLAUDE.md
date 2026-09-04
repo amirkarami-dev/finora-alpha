@@ -124,6 +124,10 @@ Customer 1─* Payment
 An **Item (goods)** carries: `quantityMt`, `lmePercent`, `lmeFixed`,
 `fixedLmePrice`, `premium`, `incoterm`, `status`, `notes`, `remainingMt`.
 
+An **invoice line** on the four invoice types carries `grossMt` and `tareMt` typed by the user;
+its `quantityMt` is the **net** (gross − tare) and is set by the server. Order lines carry
+`quantityMt` only. See `docs/superpowers/specs/2026-09-04-invoice-line-weights-design.md`.
+
 Conversion documents (Warehouse › Conversions) turn stock of one product into others inside a
 warehouse and carry the cost: every receipt, issue, conversion input and output stores its cost
 per MT; `StockLedger` folds quantity and value per (warehouse, product). See

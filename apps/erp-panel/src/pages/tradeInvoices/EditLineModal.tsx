@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
 import { buildContainerOptions, ltrTruncateStyle, withSelectedContainer } from './containerOptions';
 import { qtyExceedsContractParams } from './qtyExceedsContract';
+import { weightsInvalidMessage } from './weightsInvalid';
+import { isPricedType, netMtOf } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
@@ -11,7 +13,9 @@ const { TextArea } = Input;
 const { Text } = Typography;
 
 interface EditLineFormValues {
-  quantityMt: number;
+  quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   containerId?: string;
   discountPercent?: number;
   description?: string;
@@ -33,6 +37,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const { data: remaining } = useContractRemaining(invoice.contractId, side, invoice.id);
   const { data: containerOptions } = useContainerOptions();
   const updateMut = useUpdateInvoiceItem();
+  const weighed = isPricedType(invoice.invoiceType);
   const [showAllContainers, setShowAllContainers] = useState(false);
 
   // Filtered to this line's good by default (spec §5.2), with the currently-assigned container
@@ -66,10 +71,15 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
 
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
+    grossMt: item.grossMt,
+    tareMt: item.tareMt,
     containerId: item.containerId,
     discountPercent: item.discountPercent,
     description: item.description,
   };
+
+  const watchedGross = Form.useWatch('grossMt', form);
+  const watchedTare = Form.useWatch('tareMt', form);
 
   const submit = async () => {
     let values: EditLineFormValues;
@@ -83,7 +93,9 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         invoiceId: invoice.id,
         itemId: item.id,
         patch: {
-          quantityMt: values.quantityMt,
+          ...(weighed
+            ? { grossMt: values.grossMt, tareMt: values.tareMt }
+            : { quantityMt: values.quantityMt }),
           containerId: values.containerId,
           discountPercent: values.discountPercent,
           description: values.description?.trim() || undefined,
@@ -96,6 +108,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
       if (code === 'qty-exceeds-remaining') {
         const params = qtyExceedsContractParams(err);
         message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else if (code === 'weights-invalid') {
+        message.error(weightsInvalidMessage(err, t));
       } else message.error(t('common.saveFailed'));
     }
   };
@@ -113,24 +127,66 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
       maskClosable={false}
     >
       <Form key={item.id} form={form} layout="vertical" preserve={false} initialValues={initialValues}>
-        <Form.Item
-          name="quantityMt"
-          label={t('items.quantityMt')}
-          rules={[
-            { required: true, message: t('common.required') },
-            {
-              validator: async (_, v) => {
-                if (v === undefined || v === null) return;
-                if (v <= 0) throw new Error(t('common.required'));
-                if (v > ceilingMt + 1e-9) {
-                  throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
-                }
+        {weighed ? (
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Form.Item
+              name="grossMt"
+              label={t('tradeInvoices.grossMt')}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1 }}
+            >
+              <InputNumber min={0.000001} precision={6} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              name="tareMt"
+              label={t('tradeInvoices.tareMt')}
+              dependencies={['grossMt']}
+              style={{ flex: 1 }}
+              rules={[
+                { required: true, message: t('common.required') },
+                {
+                  validator: async (_, v) => {
+                    if (v === undefined || v === null) return;
+                    const gross = form.getFieldValue('grossMt') as number | undefined;
+                    if (v < 0) throw new Error(t('tradeInvoices.weightsInvalidTare'));
+                    if (gross !== undefined && v >= gross) {
+                      throw new Error(t('tradeInvoices.weightsInvalidTareExceedsGross'));
+                    }
+                    if (netMtOf(gross, v) > ceilingMt + 1e-9) {
+                      throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
+                    }
+                  },
+                },
+              ]}
+            >
+              <InputNumber min={0} precision={6} style={{ width: '100%' }} />
+            </Form.Item>
+          </div>
+        ) : (
+          <Form.Item
+            name="quantityMt"
+            label={t('items.quantityMt')}
+            rules={[
+              { required: true, message: t('common.required') },
+              {
+                validator: async (_, v) => {
+                  if (v === undefined || v === null) return;
+                  if (v <= 0) throw new Error(t('common.required'));
+                  if (v > ceilingMt + 1e-9) {
+                    throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
+                  }
+                },
               },
-            },
-          ]}
-        >
-          <InputNumber min={0.000001} max={maxQty} precision={6} style={{ width: '100%' }} />
-        </Form.Item>
+            ]}
+          >
+            <InputNumber min={0.000001} max={maxQty} precision={6} style={{ width: '100%' }} />
+          </Form.Item>
+        )}
+        {weighed && (
+          <Form.Item label={t('tradeInvoices.netMt')} extra={t('tradeInvoices.netHint')}>
+            <Text strong>{formatMt(netMtOf(watchedGross, watchedTare))}</Text>
+          </Form.Item>
+        )}
         <Form.Item
           name="containerId"
           label={t('tradeInvoices.container')}

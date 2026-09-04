@@ -442,6 +442,14 @@
     "noUninvoicedLines": "No uninvoiced quantity remains on this contract",
     "uninvoicedHint": "{{mt}} uninvoiced",
     "exceedsUninvoiced": "Exceeds uninvoiced quantity ({{mt}})",
+    "grossMt": "Gross (MT)",
+    "tareMt": "Tare (MT)",
+    "netMt": "Net (MT)",
+    "netHint": "Net = gross − tare",
+    "weightsInvalidGross": "Gross weight must be more than 0",
+    "weightsInvalidTare": "Tare weight cannot be less than 0",
+    "weightsInvalidTareExceedsGross": "Tare must be less than gross",
+    "weightsInvalidQuantity": "Quantity must be more than 0",
     "headerUpdated": "Document header updated",
     "subtotal": "Subtotal",
     "grandTotal": "Grand total",
@@ -463,6 +471,7 @@
     "margin": "Margin"
   },
   "warehouse": {
+    "netMt": "Net (MT)",
     "title": "Warehouse",
     "subtitle": "Warehouses and inventory movements",
     "tabWarehouses": "Warehouses",

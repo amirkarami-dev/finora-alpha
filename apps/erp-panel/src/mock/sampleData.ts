@@ -610,6 +610,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
     contractItem: Item,
     opts: { lmeDate?: string; lmePrice?: number; discountPercent?: number },
     refKey: string,
+    weighed = false,
   ): InvoiceItem {
     const quantityMt = contractItem.quantityMt;
     const lmePercent = contractItem.lmePercent;
@@ -623,6 +624,11 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       invoiceItemAmount({ lmeFixed, fixedPrice, lmePrice, lmePercent, premium, quantityMt, discountPercent }),
       2,
     );
+    // Invoice-type lines carry the weighed figures; the seed uses a 2 % tare so the numbers
+    // look real. Order lines (PO/SO) get none — gross − tare must equal quantityMt exactly
+    // after rounding, so tare is derived from the ROUNDED gross, not the unrounded ratio.
+    const grossMt = weighed ? round(quantityMt / 0.98, 6) : undefined;
+    const tareMt = weighed ? round(grossMt! - quantityMt, 6) : undefined;
     return {
       id: nextInvoiceItemId(),
       invoiceId,
@@ -630,6 +636,8 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       referenceDocumentItemId: seedUuid(refKey),
       product: contractItem.product,
       quantityMt,
+      grossMt,
+      tareMt,
       lmePercent,
       lmeFixed,
       fixedPrice,
@@ -705,6 +713,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         item,
         { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 },
         `${poId}|${item.id}`,
+        true,
       ),
     );
     const ppTotals = invoiceTotals(ppItems);
@@ -735,6 +744,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
         item,
         { lmeDate: LME_QUOTE_DATE, lmePrice: LME_QUOTE_PRICE, discountPercent: 0 },
         `${poId}|${item.id}`,
+        true,
       ),
     );
     const piTotals = invoiceTotals(piItems);
@@ -901,6 +911,11 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       invoiceItemAmount({ lmeFixed, fixedPrice, lmePrice, lmePercent, premium, quantityMt, discountPercent }),
       2,
     );
+    // Invoice-type lines carry the weighed figures; the seed uses a 2 % tare so the numbers
+    // look real. gross − tare must equal quantityMt exactly after rounding, so tare is derived
+    // from the ROUNDED gross, not the unrounded ratio.
+    const grossMt = round(quantityMt / 0.98, 6);
+    const tareMt = round(grossMt - quantityMt, 6);
     return {
       id: nextInvoiceItemId(),
       invoiceId,
@@ -908,6 +923,8 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       referenceDocumentItemId: seedUuid(raw.id),
       product: contractItem.product,
       quantityMt,
+      grossMt,
+      tareMt,
       lmePercent,
       lmeFixed,
       fixedPrice,

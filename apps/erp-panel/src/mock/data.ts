@@ -72,8 +72,12 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  *
  * Schema v8 (2026-09-03): conversion documents and cost per MT on inventory lines
  * (docs/superpowers/specs/2026-09-03-warehouse-conversion-design.md).
+ *
+ * Schema v9 (2026-09-04): invoice lines gain `grossMt`/`tareMt`; `quantityMt` becomes the net,
+ * computed by the server on the four invoice types
+ * (docs/superpowers/specs/2026-09-04-invoice-line-weights-design.md §2/§4).
  */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {
