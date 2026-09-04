@@ -77,9 +77,9 @@ Binding details:
   mirrored client-side. `SCHEMA_VERSION` bumps.
 - **Add-items form** (`AddItemsModal`) and **edit-line form** (`EditLineModal`): on an
   invoice type, two inputs **Gross (MT)** and **Tare (MT)** and a read-only **Net (MT)** that
-  updates as they type; the existing read-only unit price and line total sit beside them and
-  the total follows the net. The contract-remaining hint and `max` apply to the net. On an
-  order type the forms are unchanged (one Quantity input).
+  updates as they type. The contract-remaining hint and the ceiling check apply to the net
+  (enforced by the tare validator; the inputs carry no `max`). On an order type the forms are
+  unchanged (one Quantity input).
 - **Invoice detail** line table: on an invoice type, columns Gross, Tare, Net replace
   Quantity; on an order type, Quantity as today. (There is no per-line Excel export on the
   invoice page; the reports' trade export stays on the net quantity it already shows.)
