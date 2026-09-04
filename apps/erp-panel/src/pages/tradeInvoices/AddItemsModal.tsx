@@ -3,9 +3,11 @@ import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, 
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import type { InvoiceItemInput } from '@/services/api';
+import { isPricedType, netMtOf } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
 import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
 import { qtyExceedsContractParams } from './qtyExceedsContract';
+import { weightsInvalidMessage } from './weightsInvalid';
 import type { Invoice, InvoiceSide } from '@/types';
 
 const { Text } = Typography;
@@ -16,6 +18,8 @@ interface AddItemsFormRow {
   uninvoicedMt: number;
   include: boolean;
   quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   containerId?: string;
 }
 
@@ -43,6 +47,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const { data: containerOptions } = useContainerOptions();
   const addMut = useAddInvoiceItems();
   const [showAllContainers, setShowAllContainers] = useState(false);
+  const weighed = isPricedType(invoice.invoiceType);
 
   // getContractRemaining is CONFIRMED-only, so a DRAFT's own lines are never in its total —
   // `excludeInvoiceId` (this invoice) is therefore a no-op for capping. Quantity already staged
@@ -67,6 +72,8 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
         uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
         include: false,
         quantityMt: undefined,
+        grossMt: undefined,
+        tareMt: undefined,
         containerId: undefined,
       }))
       .filter((r) => r.uninvoicedMt > 1e-9);
@@ -97,7 +104,11 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
   const includedCount = watchedRows.filter((r) => r?.include).length;
 
   const insertAll = () => {
-    const next = rows.map((r) => ({ ...r, include: true, quantityMt: r.uninvoicedMt }));
+    const next = rows.map((r) =>
+      weighed
+        ? { ...r, include: true, grossMt: r.uninvoicedMt, tareMt: 0 }
+        : { ...r, include: true, quantityMt: r.uninvoicedMt },
+    );
     form.setFieldsValue({ rows: next });
   };
 
@@ -111,11 +122,11 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     const items: InvoiceItemInput[] = values.rows
       .map((r, i) => ({ ...r, contractItemId: rows[i]?.contractItemId ?? r.contractItemId }))
       .filter((r) => r.include)
-      .map((r) => ({
-        contractItemId: r.contractItemId,
-        quantityMt: r.quantityMt ?? 0,
-        containerId: r.containerId,
-      }));
+      .map((r) =>
+        weighed
+          ? { contractItemId: r.contractItemId, grossMt: r.grossMt, tareMt: r.tareMt, containerId: r.containerId }
+          : { contractItemId: r.contractItemId, quantityMt: r.quantityMt ?? 0, containerId: r.containerId },
+      );
     if (items.length === 0) {
       message.error(t('tradeInvoices.selectAtLeastOne'));
       return;
@@ -129,6 +140,8 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       if (code === 'qty-exceeds-remaining') {
         const params = qtyExceedsContractParams(err);
         message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
+      } else if (code === 'weights-invalid') {
+        message.error(weightsInvalidMessage(err, t));
       } else message.error(t('common.saveFailed'));
     }
   };
@@ -201,41 +214,91 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           </Text>
                         </div>
                       </div>
-                      <div style={{ width: 170, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Form.Item
-                          name={[field.name, 'quantityMt']}
-                          style={{ marginBottom: 0, flex: 1 }}
-                          rules={
-                            included
-                              ? [
-                                  { required: true, message: t('common.required') },
-                                  {
-                                    validator: async (_, v) => {
-                                      if (v === undefined || v === null) return;
-                                      if (v <= 0) throw new Error(t('common.required'));
-                                      if (v > row.uninvoicedMt + 1e-9) {
-                                        throw new Error(
-                                          t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(row.uninvoicedMt) }),
-                                        );
-                                      }
+                      {weighed ? (
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                          <Form.Item
+                            name={[field.name, 'grossMt']}
+                            label={t('tradeInvoices.grossMt')}
+                            style={{ marginBottom: 0, width: 130 }}
+                            rules={included ? [{ required: true, message: t('common.required') }] : []}
+                          >
+                            <InputNumber min={0.000001} precision={6} style={{ width: '100%' }} disabled={!included} />
+                          </Form.Item>
+                          <Form.Item
+                            name={[field.name, 'tareMt']}
+                            label={t('tradeInvoices.tareMt')}
+                            style={{ marginBottom: 0, width: 130 }}
+                            dependencies={[['rows', field.name, 'grossMt']]}
+                            rules={
+                              included
+                                ? [
+                                    { required: true, message: t('common.required') },
+                                    {
+                                      validator: async (_, v) => {
+                                        if (v === undefined || v === null) return;
+                                        const gross = form.getFieldValue(['rows', field.name, 'grossMt']) as number | undefined;
+                                        if (v < 0) throw new Error(t('tradeInvoices.weightsInvalidTare'));
+                                        if (gross !== undefined && v >= gross) {
+                                          throw new Error(t('tradeInvoices.weightsInvalidTareExceedsGross'));
+                                        }
+                                        const net = netMtOf(gross, v);
+                                        if (net > row.uninvoicedMt + 1e-9) {
+                                          throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(row.uninvoicedMt) }));
+                                        }
+                                      },
                                     },
-                                  },
-                                ]
-                              : []
-                          }
-                        >
-                          <InputNumber
-                            min={0.000001}
-                            max={row.uninvoicedMt}
-                            precision={6}
-                            style={{ width: '100%' }}
-                            disabled={!included}
-                          />
-                        </Form.Item>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {t('common.mtUnit')}
-                        </Text>
-                      </div>
+                                  ]
+                                : []
+                            }
+                          >
+                            <InputNumber min={0} precision={6} style={{ width: '100%' }} disabled={!included} />
+                          </Form.Item>
+                          <div style={{ width: 130 }}>
+                            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                              {t('tradeInvoices.netMt')}
+                            </Text>
+                            <Text strong>
+                              {formatMt(netMtOf(watchedRows[field.name]?.grossMt, watchedRows[field.name]?.tareMt))}
+                            </Text>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ width: 170, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Form.Item
+                            name={[field.name, 'quantityMt']}
+                            style={{ marginBottom: 0, flex: 1 }}
+                            rules={
+                              included
+                                ? [
+                                    { required: true, message: t('common.required') },
+                                    {
+                                      validator: async (_, v) => {
+                                        if (v === undefined || v === null) return;
+                                        if (v <= 0) throw new Error(t('common.required'));
+                                        if (v > row.uninvoicedMt + 1e-9) {
+                                          throw new Error(
+                                            t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(row.uninvoicedMt) }),
+                                          );
+                                        }
+                                      },
+                                    },
+                                  ]
+                                : []
+                            }
+                          >
+                            <InputNumber
+                              min={0.000001}
+                              max={row.uninvoicedMt}
+                              precision={6}
+                              style={{ width: '100%' }}
+                              disabled={!included}
+                            />
+                          </Form.Item>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t('common.mtUnit')}
+                          </Text>
+                        </div>
+                      )}
                       <Form.Item
                         name={[field.name, 'containerId']}
                         style={{ marginBottom: 0, width: 200 }}

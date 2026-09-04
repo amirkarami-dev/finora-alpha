@@ -56,7 +56,7 @@ import type {
   TransferStatus,
   Warehouse,
 } from '@/types';
-import { contractValue } from '@/utils/calc';
+import { contractValue, isPricedType } from '@/utils/calc';
 import { DEFAULT_FX_IQD_PER_USD } from '@/config/constants';
 import { masterData, type MasterDataResult } from '@/services/masterData';
 import { contractsApi, type ContractResult } from '@/services/contracts';
@@ -1878,7 +1878,10 @@ export async function updateInvoiceHeader(id: string, patch: InvoiceHeaderPatch)
 
 export interface InvoiceItemInput {
   contractItemId: string;
-  quantityMt: number;
+  /** Orders only — an invoice type ignores it and takes `grossMt`/`tareMt`. */
+  quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   /** Container this line's goods were shipped in (optional while drafting; spec §7). */
   containerId?: string;
   description?: string;
@@ -1910,6 +1913,8 @@ export async function addInvoiceItems(
 
 export interface InvoiceItemPatch {
   quantityMt?: number;
+  grossMt?: number;
+  tareMt?: number;
   containerId?: string;
   description?: string;
   discountPercent?: number;
@@ -1939,10 +1944,6 @@ export interface ApplyLmePriceInput {
  */
 export async function applyLmePrice(invoiceId: string, input: ApplyLmePriceInput): Promise<Invoice> {
   return invoiceWrite(() => invoicesApi.applyLmePrice(invoiceId, input));
-}
-
-function isPricedType(type: InvoiceType): boolean {
-  return type !== 'PURCHASE_ORDER' && type !== 'SALE_ORDER';
 }
 
 /**

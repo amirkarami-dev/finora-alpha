@@ -387,6 +387,10 @@ export interface InvoiceItem {
   referenceDocumentItemId: string;
   product: string;
   quantityMt: number;
+  /** Net weight is `quantityMt`. On the four invoice types the user enters these two and the
+   *  server sets `quantityMt = grossMt − tareMt`; on an order line both are undefined. */
+  grossMt?: number;
+  tareMt?: number;
   // Copied from the contract item at insertion; read-only in ALL document types:
   lmePercent: number;
   lmeFixed: boolean;

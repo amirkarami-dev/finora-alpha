@@ -442,6 +442,14 @@
     "noUninvoicedLines": "هیچ بڕێکی پسووڵەنەکراو لەم گرێبەستەدا نەماوە",
     "uninvoicedHint": "{{mt}} پسووڵەنەکراو",
     "exceedsUninvoiced": "لە بڕی پسووڵەنەکراو تێپەڕیوە ({{mt}})",
+    "grossMt": "کێشی گشتی (MT)",
+    "tareMt": "کێشی بەتاڵ (MT)",
+    "netMt": "کێشی پاک (MT)",
+    "netHint": "پاک = گشتی − بەتاڵ",
+    "weightsInvalidGross": "کێشی گشتی دەبێت لە 0 زیاتر بێت",
+    "weightsInvalidTare": "کێشی بەتاڵ ناتوانێت لە 0 کەمتر بێت",
+    "weightsInvalidTareExceedsGross": "کێشی بەتاڵ دەبێت لە کێشی گشتی کەمتر بێت",
+    "weightsInvalidQuantity": "بڕ دەبێت لە 0 زیاتر بێت",
     "headerUpdated": "سەرپەڕەی بەڵگەنامە نوێکرایەوە",
     "subtotal": "کۆی بەشەکی",
     "grandTotal": "کۆی گشتی گەورە",
@@ -463,6 +471,7 @@
     "margin": "قازانج"
   },
   "warehouse": {
+    "netMt": "کێشی پاک (MT)",
     "title": "کۆگا",
     "subtitle": "کۆگاکان و جوڵانەوەی کاڵا",
     "tabWarehouses": "کۆگاکان",

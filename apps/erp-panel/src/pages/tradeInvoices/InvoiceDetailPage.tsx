@@ -48,7 +48,7 @@ import {
   useRemoveInvoiceItem,
   useTradeInvoice,
 } from '@/services/queries';
-import { invoiceItemUnitPrice } from '@/utils/calc';
+import { invoiceItemUnitPrice, isPricedType } from '@/utils/calc';
 import { formatCurrency, formatDate, formatMt } from '@/utils/format';
 import { ROUTES } from '@/config/constants';
 import type { InvoiceItem, InvoiceSide, InvoiceType, Payment } from '@/types';
@@ -63,10 +63,6 @@ const { Text } = Typography;
 
 function invoiceSide(type: InvoiceType): InvoiceSide {
   return type.startsWith('PURCHASE') ? 'PURCHASE' : 'SALE';
-}
-
-function isPricedType(type: InvoiceType): boolean {
-  return type !== 'PURCHASE_ORDER' && type !== 'SALE_ORDER';
 }
 
 const CONVERT_TARGETS: Record<InvoiceType, InvoiceType[]> = {

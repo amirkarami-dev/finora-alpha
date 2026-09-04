@@ -1,4 +1,15 @@
-import type { Contract, Item, InvoiceItem } from '@/types';
+import type { Contract, Item, InvoiceItem, InvoiceType } from '@/types';
+
+/** Orders are promises, not shipments: they carry no price, no container and no weights. */
+export function isPricedType(type: InvoiceType): boolean {
+  return type !== 'PURCHASE_ORDER' && type !== 'SALE_ORDER';
+}
+
+/** Net weight from gross and tare, rounded to six decimals (one gram); mirrors the server's
+ *  `Rounding.Quantity(gross − tare)`. Missing gross/tare are treated as 0. */
+export function netMtOf(gross?: number, tare?: number): number {
+  return Math.round(((gross ?? 0) - (tare ?? 0)) * 1_000_000) / 1_000_000;
+}
 
 /**
  * Effective unit price per MT.
