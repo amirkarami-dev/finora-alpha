@@ -1721,6 +1721,9 @@ export interface TradeInvoiceDetail {
   successor?: Invoice;
   chain: Invoice[];
   payments: PaymentRow[];
+  /** `invoice.totalAmount` converted to USD (`invoiceTotalUSD`) — the figure `paidUSD` and
+   *  `remainingUSD` are comparable with. The page must not compare against `totalAmount`. */
+  totalUSD: number;
   paidUSD: number;
   remainingUSD: number;
 }
@@ -1741,7 +1744,8 @@ export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | 
   // direction EXCLUSION rule (§7) applies only to the separate receivables aggregations
   // (computeAccounts/getKpis/getExecutiveSummary/getCustomerPortalSummary), not here.
   const paidUSD = round(payments.reduce((s, p) => s + p.amountUSD, 0));
-  const remainingUSD = round(Math.max(invoiceTotalUSD(invoice) - paidUSD, 0));
+  const totalUSD = invoiceTotalUSD(invoice);
+  const remainingUSD = round(Math.max(totalUSD - paidUSD, 0));
   return {
     invoice,
     items: invoice.items,
@@ -1751,6 +1755,7 @@ export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | 
     successor: findSuccessor(invoice.id),
     chain,
     payments,
+    totalUSD,
     paidUSD,
     remainingUSD,
   };
