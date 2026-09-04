@@ -5,6 +5,9 @@ import { SidebarNav } from './SidebarNav';
 import { AppHeader } from './AppHeader';
 import { SyncAlert } from './SyncAlert';
 import { useUiStore, isRtl as isRtlLocale } from '@/store/useUiStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { AssistantFab } from '@/components/assistant/AssistantFab';
+import { AssistantPanel } from '@/components/assistant/AssistantPanel';
 
 const { Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -20,6 +23,8 @@ export function AppLayout() {
   const locale = useUiStore((s) => s.locale);
   const themeMode = useUiStore((s) => s.theme);
   const isRtl = isRtlLocale(locale);
+  const permissions = useAuthStore((s) => s.permissions);
+  const canAssist = permissions.includes('assistant');
   // The sidebar follows the theme: white rail in light, dark navy in dark.
   const siderBg = themeMode === 'dark' ? '#0d1626' : '#ffffff';
 
@@ -85,6 +90,13 @@ export function AppLayout() {
           <Outlet />
         </Content>
       </Layout>
+
+      {canAssist && (
+        <>
+          <AssistantFab />
+          <AssistantPanel />
+        </>
+      )}
     </Layout>
   );
 }
