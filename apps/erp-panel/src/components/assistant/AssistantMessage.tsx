@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Typography, theme } from 'antd';
 import { AudioOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
@@ -7,6 +8,12 @@ import { useTranslation } from 'react-i18next';
 import type { UiMessage } from '@/store/useAssistantStore';
 
 const { Text } = Typography;
+
+/** Every block-level markdown element (paragraphs and demoted headings) renders as this,
+ *  so headings in the model's answer don't blow up the bubble's type scale. */
+function Paragraph({ children }: { children?: ReactNode }) {
+  return <p style={{ margin: '0 0 6px' }}>{children}</p>;
+}
 
 /** One bubble. Assistant text is markdown (bold, lists, tables); links into the app become router links. */
 export function AssistantMessage({ message }: { message: UiMessage }) {
@@ -43,7 +50,8 @@ export function AssistantMessage({ message }: { message: UiMessage }) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              h1: 'p', h2: 'p', h3: 'p',
+              h1: Paragraph, h2: Paragraph, h3: Paragraph,
+              h4: Paragraph, h5: Paragraph, h6: Paragraph,
               a: ({ href, children }) =>
                 href && href.startsWith('/app/') ? (
                   <Link to={href} style={{ color: token.colorPrimary, textDecoration: 'underline' }}>{children}</Link>
@@ -57,7 +65,7 @@ export function AssistantMessage({ message }: { message: UiMessage }) {
               ),
               th: ({ children }) => <th style={{ textAlign: 'start', padding: '2px 8px', borderBlockEnd: `1px solid ${token.colorBorder}` }}>{children}</th>,
               td: ({ children }) => <td style={{ padding: '2px 8px' }}>{children}</td>,
-              p: ({ children }) => <p style={{ margin: '0 0 6px' }}>{children}</p>,
+              p: Paragraph,
             }}
           >
             {linkify(message.text, t('assistant.open'))}
@@ -68,7 +76,12 @@ export function AssistantMessage({ message }: { message: UiMessage }) {
   );
 }
 
-/** Turns the model's plain "Open: /app/customers/cust-1" line into a markdown link with the app's label. */
+/** Turns a plain "/app/..." path anywhere in the text into a markdown link with the app's label,
+ *  dropping a preceding "Open:"-style word on the same line. Locale-agnostic: it keys on the path
+ *  itself, not on an English "Open:" label, so it also works for Arabic/Farsi/Sorani answers. */
 function linkify(text: string, label: string): string {
-  return text.replace(/^(Open:)\s*(\/app\/\S+)\s*$/gim, (_m, _prefix, path) => `[${label}](${path})`);
+  return text.replace(
+    /(^|\s)([^\s:]{1,20}:\s*)?(\/app\/[A-Za-z0-9._~/-]+)/g,
+    (_m, lead: string, _prefix, path: string) => `${lead}[${label}](${path})`,
+  );
 }

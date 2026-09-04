@@ -3,9 +3,11 @@ import { Alert, Button, Drawer, Grid, Input, Space, Tooltip, Typography, theme }
 import { AudioOutlined, ClearOutlined, CloseOutlined, SendOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAssistantStore } from '@/store/useAssistantStore';
+import { useUiStore, isRtl as isRtlLocale } from '@/store/useUiStore';
 import { AssistantMessage } from './AssistantMessage';
 import { SparklesIcon } from './SparklesIcon';
 import { useRecorder } from './useRecorder';
+import { focusFab } from './AssistantFab';
 
 const { Text, Title } = Typography;
 
@@ -21,6 +23,9 @@ export function AssistantPanel() {
   const ask = useAssistantStore((s) => s.ask);
   const askVoice = useAssistantStore((s) => s.askVoice);
   const newChat = useAssistantStore((s) => s.newChat);
+  const clearError = useAssistantStore((s) => s.clearError);
+  const locale = useUiStore((s) => s.locale);
+  const isRtl = isRtlLocale(locale);
   const [draft, setDraft] = useState('');
   const [micError, setMicError] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -31,7 +36,8 @@ export function AssistantPanel() {
   );
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
   }, [messages, pending]);
 
   const send = () => {
@@ -55,9 +61,10 @@ export function AssistantPanel() {
       open={open}
       onClose={() => setOpen(false)}
       width={screens.md ? 420 : '100%'}
-      placement={document.documentElement.dir === 'rtl' ? 'left' : 'right'}
+      placement={isRtl ? 'left' : 'right'}
       closable={false}
       mask={false}
+      afterOpenChange={(nowOpen) => { if (!nowOpen) focusFab(); }}
       styles={{
         body: { padding: 0, display: 'flex', flexDirection: 'column' },
         header: { display: 'none' },
@@ -78,7 +85,7 @@ export function AssistantPanel() {
         </div>
 
         {/* messages */}
-        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }} aria-live="polite">
+        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', paddingBlock: 32 }}>
               <span style={{ color: token.colorPrimary, display: 'inline-flex' }}><SparklesIcon size={40} /></span>
@@ -86,25 +93,31 @@ export function AssistantPanel() {
               <Text type="secondary">{t('assistant.emptyHint')}</Text>
               <Space direction="vertical" style={{ marginBlockStart: 20, width: '100%' }} size={8}>
                 {(['example1', 'example2', 'example3'] as const).map((key) => (
-                  <Button key={key} block onClick={() => setDraft(t(`assistant.${key}`))} style={{ textAlign: 'start', whiteSpace: 'normal', height: 'auto', padding: '8px 12px' }}>
+                  <Button key={key} block onClick={() => setDraft(t(`assistant.${key}`))} style={{ textAlign: 'start', whiteSpace: 'normal', height: 'auto', minHeight: 44, padding: '8px 12px' }}>
                     {t(`assistant.${key}`)}
                   </Button>
                 ))}
               </Space>
             </div>
           )}
-          {messages.map((m) => <AssistantMessage key={m.id} message={m} />)}
-          {pending && (
-            <Text type="secondary" style={{ fontSize: 12 }}>{recorder.recording ? t('assistant.listening') : t('assistant.thinking')}</Text>
-          )}
+          <div aria-live="polite">
+            {messages.map((m) => <AssistantMessage key={m.id} message={m} />)}
+            {recorder.recording && (
+              <Text type="secondary" style={{ fontSize: 12 }}>{t('assistant.listening')}</Text>
+            )}
+            {pending && (
+              <Text type="secondary" style={{ fontSize: 12 }}>{t('assistant.thinking')}</Text>
+            )}
+          </div>
           {(error || micError) && (
             <Alert
+              key={micError ? 'mic' : error}
               type="warning"
               showIcon
               style={{ marginBlockStart: 8 }}
               message={t(micError ? 'assistant.micBlocked' : error!)}
               closable
-              onClose={() => setMicError(false)}
+              onClose={() => { setMicError(false); clearError(); }}
             />
           )}
         </div>
@@ -120,6 +133,7 @@ export function AssistantPanel() {
               autoSize={{ minRows: 1, maxRows: 4 }}
               disabled={pending}
               aria-label={t('assistant.placeholder')}
+              style={{ minHeight: 44 }}
             />
             {recorder.supported && (
               <Tooltip title={recorder.recording ? t('assistant.stop') : t('assistant.record')}>

@@ -24,6 +24,7 @@ interface AssistantState {
   ask: (text: string) => Promise<void>;
   askVoice: (recording: Blob) => Promise<void>;
   newChat: () => void;
+  clearError: () => void;
 }
 
 const MAX_TOOL_ROUNDS = 6;
@@ -91,6 +92,7 @@ export const useAssistantStore = create<AssistantState>()((set, get) => ({
   pending: false,
   setOpen: (open) => set({ open }),
   newChat: () => set({ messages: [], wire: [], error: undefined }),
+  clearError: () => set({ error: undefined }),
 
   ask: (text) => ask(get, set, text),
 

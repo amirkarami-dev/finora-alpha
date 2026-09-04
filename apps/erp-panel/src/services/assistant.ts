@@ -144,9 +144,13 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         const w = str('warehouse').toLowerCase();
         const warehouses = await api.getWarehouses();
         const warehouseById = new Map(warehouses.map((wh) => [wh.id, wh]));
-        const rows = (await api.getStockLevels())
-          .map((r) => ({ ...r, warehouseName: warehouseById.get(r.warehouseId)?.name ?? '—' }))
-          .filter((r) => !w || r.warehouseName.toLowerCase().includes(w));
+        const allRows = (await api.getStockLevels())
+          .map((r) => ({ ...r, warehouseName: warehouseById.get(r.warehouseId)?.name ?? '—' }));
+        const filtered = w ? allRows.filter((r) => r.warehouseName.toLowerCase().includes(w)) : allRows;
+        // An unmatched warehouse name (often because the model guessed in the wrong language)
+        // falls back to every warehouse rather than an empty, unhelpful answer.
+        const matched = w && filtered.length === 0 ? false : true;
+        const rows = matched ? filtered : allRows;
         return {
           count: rows.length,
           stock: rows.slice(0, 30).map((r) => ({
@@ -154,6 +158,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
             valueUsd: r.costKnown ? usd(r.valueUsd) : null, unitCostUsd: r.costKnown ? r.unitCostUsd : null,
           })),
           link: ROUTES.warehouse,
+          ...(matched ? {} : { note: 'warehouse-not-matched' }),
         };
       }
       case 'list_contracts': {
