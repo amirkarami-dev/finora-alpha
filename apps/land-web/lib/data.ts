@@ -127,31 +127,45 @@ export const aluminum: ProductCategory = {
   headingAccent: "Products",
   intro:
     "Consistent, foundry-ready aluminum across ingots, granules, pressed bales and UBC scrap — sorted for purity and supplied at scale.",
-  heroImage: "/assets/products/stock-02.jpeg",
+  heroImage: "/assets/products/aluminum/aluminum-ingots.jpg",
   heroTint: "rgba(154,163,173,0.2)",
   ctaTitle: "Looking for a specific alloy or volume?",
   ctaText:
     "Share your specification and destination — we'll confirm availability, packaging and a live quote.",
   products: [
     {
+      title: "Aluminum Profile Scrap",
+      description:
+        "Sorted aluminum window and extrusion profiles recovered from demolition and fabrication streams for efficient remelting.",
+      image: "/assets/products/aluminum/profile-scrap.jpg",
+      tag: "Profile Scrap",
+    },
+    {
+      title: "Container-Ready Aluminum Bales",
+      description:
+        "Dense, strapped aluminum bales prepared for export loading, efficient handling and consistent foundry feed.",
+      image: "/assets/products/aluminum/container-bales.jpg",
+      tag: "Export Bale",
+    },
+    {
       title: "Premium Aluminum Scrap Bales",
       description:
         "Dense, strapped aluminum scrap bales prepared for efficient container loading and foundry charging.",
-      image: "/assets/products/stock-01.jpeg",
+      image: "/assets/products/aluminum/pressed-bales.jpg",
       tag: "Premium Bale",
     },
     {
       title: "Aluminum Ingots",
       description:
         "Strapped aluminum ingot lots for remelting, casting and secondary alloy production with consistent handling units.",
-      image: "/assets/products/stock-02.jpeg",
+      image: "/assets/products/aluminum/aluminum-ingots.jpg",
       tag: "Cast Alloy",
     },
     {
       title: "Aluminum Ingots",
       description:
         "Primary and secondary aluminum ingots cast to standard alloy specifications for foundries and die-casters.",
-      image: "/assets/al-bars.jpg",
+      image: "/assets/products/aluminum/aluminum-ingots.jpg",
       tag: "Alloy Cast",
     },
     {
@@ -165,7 +179,7 @@ export const aluminum: ProductCategory = {
       title: "Aluminum Scrap — Pressed Bales",
       description:
         "Compacted aluminum scrap in dense pressed bales for efficient transport and high melting yield.",
-      image: "/assets/al-bale.jpg",
+      image: "/assets/products/aluminum/pressed-bales.jpg",
       tag: "Pressed Bale",
     },
     {
