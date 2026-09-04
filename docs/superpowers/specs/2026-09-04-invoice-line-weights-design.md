@@ -86,11 +86,12 @@ Binding details:
 - **Warehouse receipt and issue forms**: the line quantity they show is the net; its column
   header becomes "Net (MT)" on invoice types (it is the only quantity those forms can ever
   see, since orders cannot be received against).
-- Error handling: `weights-invalid` is shown on the form as a field message on gross or tare
-  according to `rule`.
+- Error handling: `weights-invalid` is shown by the form as a message chosen by `rule` (a
+  toast, like every other server refusal on these forms); client-side rules catch the same
+  cases before the request is sent.
 - i18n: new keys in `en`, `ar`, `fa`, `ku` — `tradeInvoices.grossMt`, `tareMt`, `netMt`,
-  `weightsInvalid.gross`, `weightsInvalid.tare`, `weightsInvalid.tareExceedsGross`, and the
-  warehouse "Net (MT)" header.
+  `netHint`, `weightsInvalidGross`, `weightsInvalidTare`, `weightsInvalidTareExceedsGross`,
+  `weightsInvalidQuantity`, and `warehouse.netMt` for the receipt/issue form.
 - Sample data: every invoice-type line gets a gross and a tare whose difference is its
   quantity; order lines stay as they are.
 - Docs: the user guide's invoice section says how the three weights work (simple English);
