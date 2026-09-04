@@ -6,11 +6,16 @@
 export async function recordingToWavBase64(blob: Blob): Promise<string> {
   const bytes = await blob.arrayBuffer();
   const decoder = new AudioContext();
-  const decoded = await decoder.decodeAudioData(bytes);
-  await decoder.close();
+  let decoded: AudioBuffer;
+  try {
+    decoded = await decoder.decodeAudioData(bytes);
+  } finally {
+    await decoder.close();
+  }
 
   const targetRate = 16_000;
   const length = Math.ceil(decoded.duration * targetRate);
+  if (length < 1) return '';
   const offline = new OfflineAudioContext(1, length, targetRate);
   const source = offline.createBufferSource();
   source.buffer = decoded;

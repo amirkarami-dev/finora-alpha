@@ -3,6 +3,8 @@ import * as api from './api';
 import { ROUTES } from '@/config/constants';
 import type { InvoiceSide, Locale } from '@/types';
 
+const INVOICE_ROUTE = '/app/invoices';
+
 /* ------------------------------ wire types ------------------------------ */
 
 export interface ContentPart {
@@ -93,7 +95,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         const q = str('query').toLowerCase();
         const all = await api.getCustomers();
         const hits = all
-          .filter((c) => c.active !== false && (c.name.toLowerCase().includes(q) || c.code.toLowerCase() === q))
+          .filter((c) => c.active !== false && (c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)))
           .slice(0, 10)
           .map((c) => ({ id: c.id, name: c.name, code: c.code, type: c.customerType, link: `${ROUTES.customers}/${c.id}` }));
         return { count: hits.length, persons: hits };
@@ -115,7 +117,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
       }
       case 'list_open_invoices': {
         const id = str('personId') || undefined;
-        const side = (str('side') || 'SALE') as InvoiceSide;
+        const side: InvoiceSide = str('side').toUpperCase() === 'PURCHASE' ? 'PURCHASE' : 'SALE';
         if (side === 'SALE') {
           const rows = (await api.getReceivableInvoices(id)).filter((r) => r.displayStatus !== 'PAID').slice(0, 20);
           return {
@@ -123,17 +125,18 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
             invoices: rows.map((r) => ({
               number: r.invoiceNumber, date: r.invoiceDate, person: r.customerName, totalUsd: usd(r.totalAmount),
               paidUsd: usd(r.paidUSD), outstandingUsd: usd(r.totalAmount - r.paidUSD), status: r.displayStatus,
-              link: `/app/invoices/${r.id}`,
+              link: `${INVOICE_ROUTE}/${r.id}`,
             })),
           };
         }
         const rows = (await api.getTradeInvoices('PURCHASE'))
-          .filter((r) => r.status !== 'CANCELLED' && (!id || r.customerId === id)).slice(0, 20);
+          .filter((r) => r.invoiceType === 'PURCHASE_INVOICE' && r.status === 'CONFIRMED' && (!id || r.customerId === id))
+          .slice(0, 20);
         return {
           side, count: rows.length,
           invoices: rows.map((r) => ({
-            number: r.invoiceNumber, date: r.invoiceDate, person: r.customerName, total: usd(r.totalAmount),
-            currency: r.currency, status: r.status, link: `/app/invoices/${r.id}`,
+            number: r.invoiceNumber, date: r.invoiceDate, person: r.customerName, totalUsd: usd(api.invoiceTotalUSD(r)),
+            currency: r.currency, status: r.status, link: `${INVOICE_ROUTE}/${r.id}`,
           })),
         };
       }
@@ -146,7 +149,7 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
           .filter((r) => !w || r.warehouseName.toLowerCase().includes(w));
         return {
           count: rows.length,
-          stock: rows.map((r) => ({
+          stock: rows.slice(0, 30).map((r) => ({
             warehouse: r.warehouseName, product: r.product, quantityMt: r.mt,
             valueUsd: r.costKnown ? usd(r.valueUsd) : null, unitCostUsd: r.costKnown ? r.unitCostUsd : null,
           })),
@@ -180,13 +183,14 @@ export async function runTool(name: string, argsJson: string): Promise<unknown> 
         };
       }
       case 'find_document': {
-        const number = str('number');
+        const number = str('number').toLowerCase();
         const both = [...(await api.getTradeInvoices('SALE')), ...(await api.getTradeInvoices('PURCHASE'))];
-        const doc = both.find((d) => d.invoiceNumber === number);
+        const doc = both.find((d) => d.invoiceNumber.toLowerCase() === number);
         if (!doc) return { error: 'not-found' };
         return {
           number: doc.invoiceNumber, type: doc.invoiceType, person: doc.customerName, date: doc.invoiceDate,
-          total: usd(doc.totalAmount), currency: doc.currency, status: doc.status, link: `/app/invoices/${doc.id}`,
+          totalUsd: usd(api.invoiceTotalUSD(doc)), currency: doc.currency, status: doc.status,
+          link: `${INVOICE_ROUTE}/${doc.id}`,
         };
       }
       case 'get_dashboard_summary': {

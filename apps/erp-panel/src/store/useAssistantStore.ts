@@ -27,8 +27,12 @@ interface AssistantState {
 }
 
 const MAX_TOOL_ROUNDS = 6;
+const SUPPORTED_LOCALES: Locale[] = ['en', 'ar', 'fa', 'ku'];
 const nextId = () => `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-const locale = (): Locale => (i18n.language.slice(0, 2) as Locale) || 'en';
+const locale = (): Locale => {
+  const lang = i18n.language.slice(0, 2) as Locale;
+  return SUPPORTED_LOCALES.includes(lang) ? lang : 'en';
+};
 
 /** Maps a server code to the message key the panel shows. */
 function errorKey(err: unknown): string {
@@ -36,7 +40,7 @@ function errorKey(err: unknown): string {
   if (code === 'assistant-unavailable') return 'assistant.unavailable';
   if (code === 'assistant-rate-limited') return 'assistant.rateLimited';
   if (code === 'assistant-bad-request') return 'assistant.badRequest';
-  return 'common.saveFailed';
+  return 'assistant.failed';
 }
 
 /** Runs one question through the chat/tool loop. `kind` only marks how the user bubble is
@@ -58,6 +62,10 @@ async function ask(get: () => AssistantState, set: (partial: Partial<AssistantSt
       if (calls.length === 0 || round === MAX_TOOL_ROUNDS) {
         const answer = typeof message.content === 'string' ? message.content : '';
         wire = [...wire, { role: 'assistant', content: answer }];
+        if (!answer) {
+          set({ wire, error: 'assistant.failed' });
+          return;
+        }
         set({ wire, messages: [...get().messages, { id: nextId(), role: 'assistant', text: answer }] });
         return;
       }

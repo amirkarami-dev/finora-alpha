@@ -1463,6 +1463,7 @@
     "unavailable": "The assistant is not available right now.",
     "rateLimited": "Too many questions. Please wait a while and try again.",
     "badRequest": "That request could not be sent. Please try again.",
-    "readOnly": "Read-only: the assistant can look, not change."
+    "readOnly": "Read-only: the assistant can look, not change.",
+    "failed": "Something went wrong. Please try again."
   }
 }
