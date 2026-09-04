@@ -126,7 +126,8 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const { invoice, contract, customerName, refInvoice, successor, chain, payments, paidUSD, remainingUSD } = data;
+  const { invoice, contract, customerName, refInvoice, successor, chain, payments, totalUSD, paidUSD, remainingUSD } =
+    data;
   const side = invoiceSide(invoice.invoiceType);
   const isDraft = invoice.status === 'DRAFT';
   const isConfirmed = invoice.status === 'CONFIRMED';
@@ -137,9 +138,11 @@ export default function InvoiceDetailPage() {
   // this gates the read-only payments list only — it no longer implies a "record" action.
   const showsPayments = priced;
   const invoiceNumberById = new Map(chain.map((c) => [c.id, c.invoiceNumber]));
-  const isOverpaid = paidUSD > invoice.totalAmount;
-  const progressPercent =
-    invoice.totalAmount > 0 ? Math.min((paidUSD / invoice.totalAmount) * 100, 100) : 0;
+  // `paidUSD` is USD; `invoice.totalAmount` is in the invoice's currency. Compare like with like
+  // (`totalUSD`), and only call it overpaid past a cent so FX rounding never trips the warning.
+  const overpaidUSD = Math.round((paidUSD - totalUSD) * 100) / 100;
+  const isOverpaid = overpaidUSD > 0;
+  const progressPercent = totalUSD > 0 ? Math.min((paidUSD / totalUSD) * 100, 100) : 0;
 
   const convertTargets = CONVERT_TARGETS[invoice.invoiceType];
   const canConvert = isConfirmed && !successor && convertTargets.length > 0;
@@ -259,7 +262,11 @@ export default function InvoiceDetailPage() {
       align: 'right',
       render: (_, r) => {
         const unit = invoiceItemUnitPrice(r);
-        return unit === null ? <Text type="secondary">—</Text> : <Money value={unit} />;
+        return unit === null ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Money value={unit} currency={invoice.currency} />
+        );
       },
     },
     {
@@ -278,7 +285,7 @@ export default function InvoiceDetailPage() {
         invoiceItemUnitPrice(r) === null ? (
           <Text type="secondary">—</Text>
         ) : (
-          <Money value={v} strong muteZero />
+          <Money value={v} currency={invoice.currency} strong muteZero />
         ),
     },
     {
@@ -532,10 +539,10 @@ export default function InvoiceDetailPage() {
               ? [
                   {
                     key: 'localEq',
-                    label: t('tradeInvoices.localEquivalent', { currency: invoice.currency }),
-                    children: (
-                      <Money value={invoice.totalAmount * invoice.exchangeRate} currency={invoice.currency} />
-                    ),
+                    // The total is already in the invoice's currency; the equivalent worth
+                    // showing is the USD figure the ledger and payments use.
+                    label: t('tradeInvoices.localEquivalent', { currency: 'USD' }),
+                    children: <Money value={totalUSD} />,
                   },
                 ]
               : []),
@@ -547,7 +554,7 @@ export default function InvoiceDetailPage() {
             {
               key: 'total',
               label: t('tradeInvoices.totalAmount'),
-              children: <Money value={invoice.totalAmount} strong />,
+              children: <Money value={invoice.totalAmount} currency={invoice.currency} strong />,
             },
             {
               key: 'discount',
@@ -575,14 +582,7 @@ export default function InvoiceDetailPage() {
                     key: 'margin',
                     label: t('tradeInvoices.margin'),
                     children: (
-                      <Money
-                        value={
-                          (invoice.currency === 'USD'
-                            ? invoice.totalAmount
-                            : invoice.totalAmount / invoice.exchangeRate) - costOfSales.costUsd
-                        }
-                        strong
-                      />
+                      <Money value={totalUSD - costOfSales.costUsd} strong />
                     ),
                   },
                 ]
@@ -705,7 +705,7 @@ export default function InvoiceDetailPage() {
           </div>
           {isOverpaid && (
             <Text type="warning" style={{ display: 'block', marginTop: 8 }}>
-              {t('tradeInvoices.overpaidBy', { amount: formatCurrency(paidUSD - invoice.totalAmount, 'USD') })}
+              {t('tradeInvoices.overpaidBy', { amount: formatCurrency(overpaidUSD, 'USD') })}
             </Text>
           )}
         </Card>
