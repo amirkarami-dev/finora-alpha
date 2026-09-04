@@ -29,7 +29,8 @@ public static class AssistantTools
             """{"type":"object","properties":{"personId":{"type":"string"},"side":{"type":"string","enum":["SALE","PURCHASE"]}}}""",
             ["sale", "purchase", "reports", "executive"]),
         new("get_stock_levels",
-            "Stock per warehouse and product: quantity MT, value USD and cost per MT. Optional warehouse name filter.",
+            "Stock per warehouse and product: quantity MT, value USD and cost per MT. Optional warehouse name " +
+            "filter. Warehouse names are in the app's data language; when unsure omit the filter.",
             """{"type":"object","properties":{"warehouse":{"type":"string"}}}""",
             ["warehouse"]),
         new("list_contracts",
