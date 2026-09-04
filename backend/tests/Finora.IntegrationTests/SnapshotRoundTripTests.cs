@@ -83,8 +83,8 @@ public sealed class SnapshotRoundTripTests(ApiFixture fixture)
 
         var item = Assert.Single(Assert.Single(read.Contracts).Items);
 
-        // 3dp tonnage. At 2dp this reads back 28.03, and a warehouse movement can then
-        // over-consume the line by half a kilo.
+        // Tonnage keeps its decimals (6dp: one gram). At 2dp this reads back 28.03, and a
+        // warehouse movement can then over-consume the line by half a kilo.
         Assert.Equal(28.027m, item.QuantityMt);
         // 4dp percentage, straight from the workbook.
         Assert.Equal(94.7600m, item.LmePercent);

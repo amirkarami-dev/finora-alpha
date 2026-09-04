@@ -337,8 +337,8 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
                       style={{ marginBottom: 8 }}
                     >
                       <InputNumber
-                        min={0.01}
-                        precision={2}
+                        min={0.000001}
+                        precision={6}
                         style={{ width: '100%' }}
                         placeholder={t('containers.quantityMt')}
                       />

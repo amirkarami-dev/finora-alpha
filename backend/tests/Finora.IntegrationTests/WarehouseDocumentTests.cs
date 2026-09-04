@@ -121,6 +121,34 @@ public sealed class WarehouseDocumentTests(ApiFixture fixture)
 
     /* --------------------------------- Stock ---------------------------------- */
 
+    /// <summary>Half a kilo is 0.0005 MT. It must survive the receipt, the fold and the issue
+    /// exactly — at the old three decimals it became 0.001 on the way in and nothing came out.</summary>
+    [Fact]
+    public async Task Half_a_kilo_is_kept_exactly()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+
+        var grn = (await ReceiveAsync(c, 0.0005m)).GetProperty("entity");
+        Assert.Equal(0.0005m, grn.GetProperty("items")[0].GetProperty("quantityMt").GetDecimal());
+
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var positions = await scope.ServiceProvider.GetRequiredService<StockLedger>().PositionsAsync();
+            Assert.Equal(0.0005m, positions[StockLedger.Key("wh-1", Copper)].QuantityMt);
+        }
+
+        var gdn = (await PostAsync(c, "/api/erp/inventory-documents",
+            Move("OUT", "inv-si-0001", "sref-1", 0.0005m))).GetProperty("entity");
+        Assert.Equal(0.0005m, gdn.GetProperty("items")[0].GetProperty("quantityMt").GetDecimal());
+
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var positions = await scope.ServiceProvider.GetRequiredService<StockLedger>().PositionsAsync();
+            Assert.Equal(0m, positions[StockLedger.Key("wh-1", Copper)].QuantityMt);
+        }
+    }
+
     [Fact]
     public async Task An_issue_cannot_take_out_more_than_the_warehouse_holds()
     {

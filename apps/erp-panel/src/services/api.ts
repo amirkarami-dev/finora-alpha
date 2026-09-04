@@ -688,11 +688,12 @@ export async function getPersonLedger(personId: string): Promise<PersonLedger> {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
-// 3-decimal rounding for the warehouse ledger: InvoiceItem.quantityMt routinely carries 3
-// decimals (unlike money, which is 2dp), so a 2dp `round()` there can round a line's remaining
-// quantity ABOVE its actual quantityMt — letting a receipt/issue over-consume by up to 0.005 MT
-// or strand a fully-used line as "remaining". Mirrors recomputeAllRemaining's existing 3dp math.
-const round3 = (n: number) => Math.round(n * 1000) / 1000;
+// Quantity rounding, 6 decimals (one gram) — mirrors the server's `Rounding.Quantity`.
+// InvoiceItem.quantityMt carries more decimals than money (2dp), so a 2dp `round()` can round a
+// line's remaining quantity ABOVE its actual quantityMt — letting a receipt/issue over-consume
+// or strand a fully-used line as "remaining". Six decimals, not three, so that half a kilo is
+// 0.0005 MT and survives every fold exactly.
+const roundMt = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
 
 export async function getAccounts(): Promise<CustomerAccount[]> {
   await delay();
@@ -1672,7 +1673,7 @@ function confirmedClaimsByItem(side: InvoiceSide, excludeInvoiceId?: string): Ma
     }
     if (!deepestConfirmed) continue;
     for (const it of deepestConfirmed.items) {
-      claimed.set(it.contractItemId, round3((claimed.get(it.contractItemId) ?? 0) + it.quantityMt));
+      claimed.set(it.contractItemId, roundMt((claimed.get(it.contractItemId) ?? 0) + it.quantityMt));
     }
   }
   return claimed;
@@ -1771,7 +1772,7 @@ export interface ContractRemainingRow {
 /** Per contract item: quantityMt minus CONFIRMED claims of `side` (one per chain, via
  *  `confirmedClaimsByItem` — see its docstring for why a raw chain-leaf filter is wrong),
  *  optionally excluding one invoice's own chain (the doc currently being edited) (spec §5/§8).
- *  Rounded to 3dp (`round3`), matching `checkContractQty`'s guard — a 2dp `round()` here used to
+ *  Rounded with `roundMt`, matching `checkContractQty`'s guard — a 2dp `round()` here used to
  *  round UP, so the UI hint / input `max` could exceed the API ceiling and be rejected outright. */
 export async function getContractRemaining(
   contractId: string,
@@ -1786,7 +1787,7 @@ export async function getContractRemaining(
     itemId: item.id,
     product: item.product,
     quantityMt: item.quantityMt,
-    uninvoicedMt: round3(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
+    uninvoicedMt: roundMt(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
   }));
 }
 
@@ -1824,7 +1825,7 @@ export async function getStockLevels(): Promise<StockLevelRow[]> {
     const productKey = product.trim().toLowerCase();
     const key = `${warehouseId}::${productKey}`;
     const row = rows.get(key) ?? { warehouseId, productKey, product, mt: 0, valueUsd: 0, unitCostUsd: 0, costKnown: true };
-    row.mt = round3(row.mt + mt);
+    row.mt = roundMt(row.mt + mt);
     row.valueUsd = round(row.valueUsd + cost);
     row.costKnown = row.costKnown && known;
     rows.set(key, row);
@@ -2021,7 +2022,7 @@ export async function getInvoiceLinesForInventory(invoiceId: string): Promise<In
   const invoice = findInvoiceOrThrow(invoiceId);
   const used = usedQtyByReferenceDocumentItemId();
   return invoice.items.map((it) => {
-    const usedMt = round3(used.get(it.referenceDocumentItemId) ?? 0);
+    const usedMt = roundMt(used.get(it.referenceDocumentItemId) ?? 0);
     const usedInDocNumbers = db.inventoryDocs
       .filter(
         (d) =>
@@ -2035,7 +2036,7 @@ export async function getInvoiceLinesForInventory(invoiceId: string): Promise<In
       product: it.product,
       quantityMt: it.quantityMt,
       usedMt,
-      remainingMt: round3(Math.max(it.quantityMt - usedMt, 0)),
+      remainingMt: roundMt(Math.max(it.quantityMt - usedMt, 0)),
       containerId: it.containerId,
       usedInDocNumbers,
     };
@@ -3185,7 +3186,7 @@ export async function getInvoiceChargeSummary(
 
   const byGood = [...byGoodMap.values()].map((r) => ({
     ...r,
-    quantityMt: round3(r.quantityMt),
+    quantityMt: roundMt(r.quantityMt),
     expenseUSD: round(r.expenseUSD),
     revenueUSD: round(r.revenueUSD),
     claimUSD: round(r.claimUSD),
@@ -3398,7 +3399,7 @@ export function computeAccountBalance(accountId: string): AccountBalance {
   return { accountId, currency, balance, baseUSD, bookRate, unmatchedCurrencyCount: skippedCurrency };
 }
 
-/** 4dp, for rates. Money stays on `round`, quantities on `round3`. */
+/** 4dp, for rates. Money stays on `round`, quantities on `roundMt`. */
 function round4(v: number): number {
   return Math.round(v * 10000) / 10000;
 }
@@ -3715,8 +3716,8 @@ export async function getTradeDetailReport(range: DateRange = {}): Promise<Trade
     rows,
     saleUSD: round(sum('SALE', (r) => r.amountUSD)),
     purchaseUSD: round(sum('PURCHASE', (r) => r.amountUSD)),
-    saleMt: round3(sum('SALE', (r) => r.quantityMt)),
-    purchaseMt: round3(sum('PURCHASE', (r) => r.quantityMt)),
+    saleMt: roundMt(sum('SALE', (r) => r.quantityMt)),
+    purchaseMt: roundMt(sum('PURCHASE', (r) => r.quantityMt)),
   };
 }
 

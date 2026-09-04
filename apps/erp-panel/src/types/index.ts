@@ -657,7 +657,7 @@ export interface Good {
   metalType: MetalType;
   /** Physical form. Optional — not every good has a meaningful one. */
   form?: GoodForm;
-  /** Unit of measure. Every quantity in the app is MT (`quantityMt`, `round3`), so adding a
+  /** Unit of measure. Every quantity in the app is MT (`quantityMt`, `roundMt`), so adding a
    *  second unit here would ALSO mean changing `utils/calc.ts` and every `*Mt` field. */
   unit: GoodUnit;
   /** Customs tariff classification, e.g. '7403.11'. Fixed per product. */
@@ -719,7 +719,7 @@ export interface ChargeLine {              // inline on ChargeDoc
    */
   personId?: string;
   description?: string;
-  quantityBasisMt?: number;   // SERVER-DERIVED round3(Σ allocations[].quantityMt)
+  quantityBasisMt?: number;   // SERVER-DERIVED roundMt(Σ allocations[].quantityMt)
   unitPriceUSD?: number;      // SERVER-DERIVED amountUSD / quantityBasisMt (cost per MT)
   allocations: ChargeAllocation[];   // [] on GENERAL; ≥1 on INVOICE
 }

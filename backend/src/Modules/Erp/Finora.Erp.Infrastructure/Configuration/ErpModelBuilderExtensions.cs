@@ -34,18 +34,19 @@ internal static class ErpModelBuilderExtensions
                 wire => wire == null ? null : EnumNames.FromWire<TEnum>(wire)))
             .HasMaxLength(32);
 
-    /// <summary>Quantity in metric tonnes — 3 decimals.
+    /// <summary>Quantity in metric tonnes — 6 decimals (one gram).
     /// <para>
-    /// NOT 2. A line routinely carries three, and rounding a remaining quantity up at 2dp lets a
-    /// warehouse movement over-consume its invoice line by up to 0.005 MT, or strands a
-    /// fully-used line reporting a remainder.
+    /// NOT 2. A line routinely carries more, and rounding a remaining quantity up at 2dp lets a
+    /// warehouse movement over-consume its invoice line, or strands a fully-used line reporting
+    /// a remainder. Six, not three, so that half a kilo is 0.0005 MT and not 0.001 or nothing.
+    /// Must agree with <c>Rounding.Quantity</c>.
     /// </para></summary>
     public static PropertyBuilder<decimal> HasQuantityColumn(this PropertyBuilder<decimal> property) =>
-        property.HasPrecision(18, 3);
+        property.HasPrecision(18, 6);
 
     /// <inheritdoc cref="HasQuantityColumn(PropertyBuilder{decimal})"/>
     public static PropertyBuilder<decimal?> HasQuantityColumn(this PropertyBuilder<decimal?> property) =>
-        property.HasPrecision(18, 3);
+        property.HasPrecision(18, 6);
 
     /// <summary>A price per tonne — 4 decimals, because an LME-derived unit price is not a
     /// rounded amount of money until it is multiplied out.</summary>

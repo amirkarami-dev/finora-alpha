@@ -5,7 +5,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { Money } from '@/components/common/Money';
 import { useTradeDetailReport } from '@/services/queries';
-import { formatDate, formatNumber } from '@/utils/format';
+import { formatDate, formatNumber, formatQty } from '@/utils/format';
 import { datedFileName, downloadXlsx } from '@/utils/exportXlsx';
 import type { DateRange, TradeDetailRow } from '@/services/api';
 
@@ -238,8 +238,8 @@ function TradeItems({ items }: { items: TradeDetailRow[] }) {
       dataIndex: 'quantityMt',
       width: 120,
       align: 'right',
-      // Three decimals: containers ship fractional tonnes and that is the precision stored.
-      render: (v: number) => formatNumber(v, 3),
+      // Only the decimals the figure has, up to the six that are stored (one gram).
+      render: (v: number) => formatQty(v),
     },
     {
       title: t('reports.unitPrice'),
