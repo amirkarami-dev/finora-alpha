@@ -129,7 +129,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
             },
           ]}
         >
-          <InputNumber min={0.01} max={maxQty} precision={3} style={{ width: '100%' }} />
+          <InputNumber min={0.000001} max={maxQty} precision={6} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
           name="containerId"

@@ -14,10 +14,11 @@ namespace Finora.BuildingBlocks.Domain;
 /// </para>
 ///
 /// <para>
-/// Scales mirror the front end exactly: money 2dp, quantity (MT) 3dp, FX rates 4dp. See
-/// <c>apps/erp-panel/src/services/api.ts</c> (<c>round</c>, <c>round3</c>, <c>round4</c>) — the
+/// Scales mirror the front end exactly: money 2dp, quantity (MT) 6dp, FX rates 4dp. See
+/// <c>apps/erp-panel/src/services/api.ts</c> (<c>round</c>, <c>roundMt</c>, <c>round4</c>) — the
 /// tonnage comment there records why quantity is NOT 2dp: rounding a remaining quantity up can
-/// let a warehouse receipt over-consume an invoice line by up to 0.005 MT.
+/// let a warehouse receipt over-consume an invoice line. Six decimals is one gram, so the desk
+/// can book half a kilo as 0.0005 MT and get exactly that back.
 /// </para>
 /// </summary>
 public static class Rounding
@@ -25,8 +26,8 @@ public static class Rounding
     /// <summary>Money — 2 decimal places.</summary>
     public static decimal Money(decimal value) => Half(value, 2);
 
-    /// <summary>Quantity in metric tonnes — 3 decimal places.</summary>
-    public static decimal Quantity(decimal value) => Half(value, 3);
+    /// <summary>Quantity in metric tonnes — 6 decimal places (one gram).</summary>
+    public static decimal Quantity(decimal value) => Half(value, 6);
 
     /// <summary>Exchange rates — 4 decimal places.</summary>
     public static decimal Rate(decimal value) => Half(value, 4);

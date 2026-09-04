@@ -225,9 +225,9 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           }
                         >
                           <InputNumber
-                            min={0.01}
+                            min={0.000001}
                             max={row.uninvoicedMt}
-                            precision={3}
+                            precision={6}
                             style={{ width: '100%' }}
                             disabled={!included}
                           />

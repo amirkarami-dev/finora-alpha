@@ -343,8 +343,9 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
       width: 160,
       render: (_, r) => (
         <InputNumber
-          min={0.001}
+          min={0.000001}
           step={0.001}
+          precision={6}
           style={{ width: '100%' }}
           value={r.quantityMt}
           onChange={(v) => updateInput(r.key, { quantityMt: v ?? undefined })}
@@ -390,8 +391,9 @@ export function ConversionFormModal({ open, onClose, conversion }: ConversionFor
       width: 160,
       render: (_, r) => (
         <InputNumber
-          min={0.001}
+          min={0.000001}
           step={0.001}
+          precision={6}
           style={{ width: '100%' }}
           value={r.quantityMt}
           onChange={(v) => updateOutput(r.key, { quantityMt: v ?? undefined })}

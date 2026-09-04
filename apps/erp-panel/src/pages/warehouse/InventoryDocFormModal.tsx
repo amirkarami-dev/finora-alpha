@@ -416,9 +416,9 @@ export function InventoryDocFormModal({ open, onClose, type }: InventoryDocFormM
                             }
                           >
                             <InputNumber
-                              min={0.01}
+                              min={0.000001}
                               max={row.remainingMt}
-                              precision={2}
+                              precision={6}
                               style={{ width: '100%' }}
                               disabled={!included || exhausted}
                             />

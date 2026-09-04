@@ -203,7 +203,7 @@ export function ItemFormModal({ open, onClose, contractId, item, contractType }:
               label={t('items.quantityMt')}
               rules={[{ required: true, message: t('common.required') }]}
             >
-              <InputNumber min={0} step={1} style={{ width: '100%' }} />
+              <InputNumber min={0} step={1} precision={6} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>

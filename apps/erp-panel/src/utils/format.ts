@@ -35,12 +35,17 @@ export function formatNumber(value: number, fractionDigits = 0): string {
   }).format(value);
 }
 
-/** Metric tonnes with up to 3 decimals (containers ship fractional MT). */
-export function formatMt(value: number): string {
-  return `${new Intl.NumberFormat(NUMBER_LOCALE, {
+/** A quantity in metric tonnes, no unit: as many decimals as it has, up to 6 (one gram). */
+export function formatQty(value: number): string {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(value)} MT`;
+    maximumFractionDigits: 6,
+  }).format(value);
+}
+
+/** Metric tonnes with up to 6 decimals (half a kilo is 0.0005 MT), unit appended. */
+export function formatMt(value: number): string {
+  return `${formatQty(value)} MT`;
 }
 
 export function formatPercent(value: number, fractionDigits = 1): string {

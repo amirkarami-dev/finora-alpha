@@ -37,11 +37,12 @@ public sealed class RoundingTests
     }
 
     [Theory]
-    [InlineData(28.0265, 28.027)]
-    [InlineData(23.9725, 23.973)]
-    [InlineData(0.0005, 0.001)]
-    [InlineData(258.7615, 258.762)]
-    public void Quantity_keeps_three_decimals(decimal input, decimal expected) =>
+    [InlineData(28.0265, 28.0265)]
+    [InlineData(0.0005, 0.0005)]          // half a kilo, kept exactly
+    [InlineData(0.0000005, 0.000001)]     // half a gram rounds up to one gram
+    [InlineData(0.00000049, 0)]           // below half a gram is nothing
+    [InlineData(258.7615, 258.7615)]
+    public void Quantity_keeps_six_decimals(decimal input, decimal expected) =>
         Assert.Equal(expected, Rounding.Quantity(input));
 
     [Theory]
