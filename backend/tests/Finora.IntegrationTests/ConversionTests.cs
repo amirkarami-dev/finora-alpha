@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Finora.Erp.Domain;
 using Finora.Erp.Infrastructure.Snapshot;
+using Finora.Erp.Infrastructure.Trade;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -203,6 +204,33 @@ public sealed class ConversionTests(ApiFixture fixture)
         var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.Equal("insufficient-stock", problem.GetProperty("code").GetString());
         Assert.Equal(1m, problem.GetProperty("available").GetDecimal());
+    }
+
+    /// <summary>Two drafts each want the whole tonne. Fired together, exactly one may have it:
+    /// the warehouse lock makes the second confirm wait and then fold a ledger that already
+    /// shows the cable gone. Without the lock both could pass and stock would read -1.000 MT.</summary>
+    [Fact]
+    public async Task Two_confirms_racing_for_the_same_stock_let_exactly_one_through()
+    {
+        await ResetAsync();
+        var manager = await AsManagerAsync(fixture);
+        var first = Id(await PostAsync(manager, "/api/erp/conversions", Strip()));
+        var second = Id(await PostAsync(manager, "/api/erp/conversions", Strip()));
+
+        var responses = await Task.WhenAll(
+            manager.PostAsync(new Uri($"/api/erp/conversions/{first}/confirm", UriKind.Relative), null),
+            manager.PostAsync(new Uri($"/api/erp/conversions/{second}/confirm", UriKind.Relative), null));
+
+        Assert.Single(responses, r => r.IsSuccessStatusCode);
+        var refused = responses.Single(r => !r.IsSuccessStatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal("insufficient-stock", problem.GetProperty("code").GetString());
+        Assert.Equal(0m, problem.GetProperty("available").GetDecimal());
+
+        using var scope = fixture.Services.CreateScope();
+        var positions = await scope.ServiceProvider.GetRequiredService<StockLedger>().PositionsAsync();
+        Assert.Equal(0m, positions[StockLedger.Key("wh-1", "Copper cable")].QuantityMt);
+        Assert.Equal(0.65m, positions[StockLedger.Key("wh-1", "Stripped copper")].QuantityMt);
     }
 
     [Fact]

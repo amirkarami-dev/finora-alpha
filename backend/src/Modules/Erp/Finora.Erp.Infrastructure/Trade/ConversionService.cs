@@ -100,6 +100,9 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // One confirm at a time per warehouse: a second one waits here, then folds a ledger that
+        // already contains the first.
+        await ledger.LockWarehouseAsync(doc.WarehouseId, cancellationToken);
 
         // Inputs of one product are summed before the check, so two lines cannot each pass
         // against the same stock.
@@ -181,6 +184,7 @@ public sealed class ConversionService(ErpDbContext db, StockLedger ledger, Charg
 
         if (doc.Status == ConversionStatus.CONFIRMED)
         {
+            await ledger.LockWarehouseAsync(doc.WarehouseId, cancellationToken);
             var positions = await ledger.PositionsAsync(cancellationToken);
             var running = new Dictionary<string, decimal>(StringComparer.Ordinal);
             foreach (var output in doc.Outputs)
