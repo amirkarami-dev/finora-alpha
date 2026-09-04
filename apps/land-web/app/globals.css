@@ -267,24 +267,6 @@ img {
   .jjm-desktop-nav { display: none; }
   .jjm-contactbtn { display: none; }
   .jjm-burger { display: flex; }
-  .hero-content {
-    grid-template-columns: 1fr;
-    gap: 40px;
-    padding-top: 112px !important;
-    padding-bottom: 88px !important;
-  }
-  .hero-video-stack {
-    width: min(100%, 520px);
-    margin: 0 auto;
-    padding-left: 12px;
-  }
-  .hero-video-stack .yard-frame {
-    aspect-ratio: 16 / 10 !important;
-  }
-  .hero-video-secondary {
-    right: -8px;
-    bottom: -22px;
-  }
 }
 
 /* ---------- Mobile overlay menu ---------- */
@@ -579,28 +561,6 @@ select.jjm-field {
   0%, 100% { opacity: 0.6; transform: translateY(-10px); }
   50% { opacity: 1; transform: translateY(12px); }
 }
-@media (max-width: 939px) {
-  .hero-copy {
-    padding-inline-start: 19px;
-  }
-  .hero-title {
-    max-width: 100%;
-    font-size: 56px !important;
-    line-height: 0.96 !important;
-  }
-  .hero-subtitle {
-    font-size: 30px !important;
-  }
-  .hero-description {
-    max-width: 100% !important;
-    font-size: 15px !important;
-    line-height: 1.65 !important;
-  }
-  .hero-actions {
-    gap: 10px !important;
-    margin-top: 28px !important;
-  }
-}
 .hero-video-stack {
   position: relative;
   min-width: 0;
@@ -684,6 +644,95 @@ select.jjm-field {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   text-shadow: 0 1px 8px #000;
+}
+@media (max-width: 939px) {
+  .hero-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+    padding-top: 112px !important;
+    padding-bottom: 96px !important;
+  }
+  .hero-copy {
+    width: 100%;
+    max-width: 620px;
+    padding-inline-start: 19px;
+  }
+  .hero-title {
+    max-width: 100%;
+    font-size: 56px !important;
+    line-height: 0.96 !important;
+  }
+  .hero-subtitle {
+    font-size: 30px !important;
+  }
+  .hero-description {
+    max-width: 560px !important;
+    font-size: 15px !important;
+    line-height: 1.65 !important;
+  }
+  .hero-actions {
+    gap: 10px !important;
+    margin-top: 28px !important;
+  }
+  .hero-video-stack {
+    width: min(100%, 620px);
+    margin: 0 auto;
+    padding: 14px 12px 0;
+  }
+  .hero-video-stack .yard-frame {
+    aspect-ratio: 16 / 10 !important;
+  }
+  .hero-video-secondary {
+    right: 0;
+    bottom: -22px;
+  }
+}
+@media (max-width: 560px) {
+  .hero-content {
+    gap: 38px;
+    padding-inline: 20px !important;
+    padding-top: 108px !important;
+    padding-bottom: 82px !important;
+  }
+  .hero-copy {
+    padding-inline-start: 15px;
+  }
+  .hero-copy > span:first-child {
+    max-width: 100%;
+    padding: 7px 11px !important;
+    border-radius: 8px !important;
+    font-size: 10px !important;
+    line-height: 1.5;
+    letter-spacing: 0.14em !important;
+  }
+  .hero-title {
+    font-size: 50px !important;
+    line-height: 0.94 !important;
+    margin-top: 22px !important;
+  }
+  .hero-subtitle {
+    font-size: 27px !important;
+    line-height: 1.08;
+    margin-top: 12px !important;
+  }
+  .hero-description {
+    margin-top: 22px !important;
+  }
+  .hero-actions > a {
+    justify-content: center;
+    padding: 14px 20px !important;
+  }
+  .hero-video-stack {
+    padding-inline: 8px;
+  }
+  .hero-brand-stamp {
+    right: 8px;
+    font-size: 9px;
+  }
+  .hero-video-secondary {
+    right: 0;
+    width: 42%;
+  }
 }
 select.jjm-field option {
   background: #15191d;
