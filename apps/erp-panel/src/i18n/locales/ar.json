@@ -264,6 +264,9 @@
     "updated": "تم تحديث العقد",
     "selectCustomer": "اختر عميلاً",
     "destinationPlaceholder": "مثال: نينغبو",
+    "changeDeltaZero": "لا يمكن أن يكون التغيير 0",
+    "changeNoteRequired": "يرجى كتابة ملاحظة لهذا التغيير",
+    "changeBelowZero": "ستصبح الكمية 0 أو أقل (الآن {{mt}} طن)",
     "errors": {
       "contract-not-found": "لم يعد هذا العقد موجودًا",
       "contract-item-not-found": "لم يعد بند البضاعة هذا موجودًا",

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Finora.Api.Infrastructure;
 using Finora.Erp.Application;
 using Finora.Erp.Domain;
@@ -50,6 +51,18 @@ internal static class ContractEndpoints
                 CancellationToken cancellationToken) =>
                 Results.Ok(await ResultAsync(service, await service.UpdateItemAsync(id, itemId, input, cancellationToken), cancellationToken)))
             .WithName("UpdateContractItem");
+
+        group.MapPost("/{id}/items/{itemId}/changes", async (
+                string id, string itemId, ContractItemChangeInput input, ClaimsPrincipal principal,
+                ContractService service, CancellationToken cancellationToken) =>
+            {
+                // Who made the change is stamped from the session, never taken from the body.
+                var userId = Guid.Parse(principal.FindFirstValue(IdentityEndpoints.UserIdClaim)!);
+                var userName = principal.FindFirstValue(ClaimTypes.Name) ?? "";
+                var contract = await service.ChangeItemQuantityAsync(id, itemId, input, userId, userName, cancellationToken);
+                return Results.Ok(await ResultAsync(service, contract, cancellationToken));
+            })
+            .WithName("ChangeContractItemQuantity");
 
         return app;
     }

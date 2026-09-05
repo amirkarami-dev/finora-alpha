@@ -264,6 +264,9 @@
     "updated": "قرارداد به‌روزرسانی شد",
     "selectCustomer": "یک مشتری انتخاب کنید",
     "destinationPlaceholder": "مثال: نینگبو",
+    "changeDeltaZero": "تغییر نمی‌تواند 0 باشد",
+    "changeNoteRequired": "لطفاً برای این تغییر یادداشتی بنویسید",
+    "changeBelowZero": "مقدار به 0 یا کمتر می‌رسد (اکنون {{mt}} تن)",
     "errors": {
       "contract-not-found": "این قرارداد دیگر وجود ندارد",
       "contract-item-not-found": "این ردیف کالا دیگر وجود ندارد",

@@ -62,4 +62,10 @@ export const contractsApi = {
       `/api/erp/contracts/${encodeURIComponent(contractId)}/items/${encodeURIComponent(itemId)}`,
       { method: 'PUT', body: JSON.stringify(input) },
     ),
+
+  changeItemQuantity: (contractId: string, itemId: string, input: { deltaMt: number; note: string }) =>
+    request<ContractResult>(
+      `/api/erp/contracts/${encodeURIComponent(contractId)}/items/${encodeURIComponent(itemId)}/changes`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
 };

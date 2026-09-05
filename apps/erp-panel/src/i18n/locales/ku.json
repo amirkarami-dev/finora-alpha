@@ -264,6 +264,9 @@
     "updated": "گرێبەست نوێکرایەوە",
     "selectCustomer": "کڕیارێک هەڵبژێرە",
     "destinationPlaceholder": "بۆ نموونە: NINGBO",
+    "changeDeltaZero": "گۆڕانکاری ناتوانێت 0 بێت",
+    "changeNoteRequired": "تکایە تێبینییەک بۆ ئەم گۆڕانکارییە بنووسە",
+    "changeBelowZero": "بڕەکە دەگاتە 0 یان کەمتر (ئێستا {{mt}} تەن)",
     "errors": {
       "contract-not-found": "ئەم گرێبەستە چیتر بوونی نییە",
       "contract-item-not-found": "ئەم دێڕی کاڵایە چیتر بوونی نییە",

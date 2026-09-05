@@ -351,4 +351,95 @@ public sealed class ContractTests(ApiFixture fixture)
         var snapshot = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/snapshot", UriKind.Relative), Json);
         Assert.Equal(1, snapshot.GetProperty("contracts")[0].GetProperty("items")[0].GetProperty("changes").GetArrayLength());
     }
+
+    /* --------------------------- Changing a quantity --------------------------- */
+
+    private static async Task<(string ContractId, string ItemId)> ContractWithLineAsync(HttpClient client, decimal quantity = 100m)
+    {
+        var id = (await PostAsync(client, "/api/erp/contracts", Header()))
+            .GetProperty("entity").GetProperty("id").GetString()!;
+        var created = await PostAsync(client, $"/api/erp/contracts/{id}/items", Line(quantity));
+        var itemId = created.GetProperty("entity").GetProperty("items")[0].GetProperty("id").GetString()!;
+        return (id, itemId);
+    }
+
+    private static Task<HttpResponseMessage> ChangeAsync(HttpClient client, string contractId, string itemId, decimal deltaMt, string? note) =>
+        client.PostAsJsonAsync(new Uri($"/api/erp/contracts/{contractId}/items/{itemId}/changes", UriKind.Relative),
+            new { deltaMt, note });
+
+    [Fact]
+    public async Task A_change_moves_the_quantity_and_writes_one_history_row()
+    {
+        await ResetAsync();
+        using var client = await AsManagerAsync(fixture);
+        var (contractId, itemId) = await ContractWithLineAsync(client);
+        var me = (await client.GetFromJsonAsync<JsonElement>(new Uri("/api/identity/me", UriKind.Relative), Json))
+            .GetProperty("user").GetProperty("name").GetString();
+
+        var response = await ChangeAsync(client, contractId, itemId, 20m, "  Client asked for two more trucks ");
+        response.EnsureSuccessStatusCode();
+
+        var item = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(120m, item.GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(120m, item.GetProperty("remainingMt").GetDecimal());
+
+        var change = item.GetProperty("changes").EnumerateArray().Single();
+        Assert.Equal(20m, change.GetProperty("deltaMt").GetDecimal());
+        Assert.Equal(100m, change.GetProperty("beforeMt").GetDecimal());
+        Assert.Equal(120m, change.GetProperty("afterMt").GetDecimal());
+        Assert.Equal(me, change.GetProperty("userName").GetString());
+        Assert.Equal("Client asked for two more trucks", change.GetProperty("note").GetString());
+        Assert.True(change.GetProperty("at").GetDateTimeOffset() > DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        // A second, negative change stacks: 120 − 30 = 90, two rows, oldest first.
+        var again = await ChangeAsync(client, contractId, itemId, -30m, "Shipment cut");
+        again.EnsureSuccessStatusCode();
+        var after = (await again.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(90m, after.GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(2, after.GetProperty("changes").GetArrayLength());
+        Assert.Equal(120m, after.GetProperty("changes")[1].GetProperty("beforeMt").GetDecimal());
+    }
+
+    [Theory]
+    [InlineData(0, "why", "change-delta-zero")]
+    [InlineData(0.0000004, "why", "change-delta-zero")]
+    [InlineData(-100, "why", "change-below-zero")]
+    [InlineData(-150, "why", "change-below-zero")]
+    [InlineData(5, "", "change-note-required")]
+    [InlineData(5, "   ", "change-note-required")]
+    [InlineData(5, null, "change-note-required")]
+    public async Task A_change_is_refused_rule_by_rule(decimal deltaMt, string? note, string code)
+    {
+        await ResetAsync();
+        using var client = await AsManagerAsync(fixture);
+        var (contractId, itemId) = await ContractWithLineAsync(client);
+
+        var response = await ChangeAsync(client, contractId, itemId, deltaMt, note);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal(code, problem.GetProperty("code").GetString());
+        if (code == "change-below-zero")
+        {
+            Assert.Equal(100m, problem.GetProperty("quantityMt").GetDecimal());
+            Assert.Equal(deltaMt, problem.GetProperty("deltaMt").GetDecimal());
+        }
+
+        // Nothing moved and nothing was written.
+        var contracts = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/contracts", UriKind.Relative), Json);
+        var item = contracts.EnumerateArray().Single().GetProperty("items")[0];
+        Assert.Equal(100m, item.GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(0, item.GetProperty("changes").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task A_change_on_a_goods_line_that_does_not_exist_is_a_404()
+    {
+        await ResetAsync();
+        using var client = await AsManagerAsync(fixture);
+        var (contractId, _) = await ContractWithLineAsync(client);
+
+        var response = await ChangeAsync(client, contractId, "nope", 5m, "why");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
 }

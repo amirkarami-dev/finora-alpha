@@ -30,7 +30,7 @@ public sealed class ContractService(ErpDbContext db)
         await db.Contracts
             .AsNoTracking()
             .Include(c => c.Items).ThenInclude(i => i.Partners)
-            .Include(c => c.Items).ThenInclude(i => i.Changes)
+            .Include(c => c.Items).ThenInclude(i => i.Changes.OrderBy(ch => ch.At))
             .OrderBy(c => c.Id)
             .ToListAsync(cancellationToken);
 
@@ -146,6 +146,62 @@ public sealed class ContractService(ErpDbContext db)
         return await SingleAsync(contract.Id, cancellationToken);
     }
 
+    /// <summary>
+    /// Changes a goods line's quantity the formal way: the line moves by <c>DeltaMt</c> and one
+    /// history row records who, when, by how much and why. The plain edit (<see cref="UpdateItemAsync"/>)
+    /// still changes the quantity directly and writes no row; only this path keeps history.
+    /// </summary>
+    public async Task<Contract> ChangeItemQuantityAsync(
+        string contractId, string itemId, ContractItemChangeInput input, Guid userId, string userName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var contract = await LoadAsync(contractId, cancellationToken);
+        var item = contract.Items.SingleOrDefault(i => i.Id == itemId)
+            ?? throw new NotFoundException(Codes.ContractItemNotFound);
+
+        var delta = Rounding.Quantity(input.DeltaMt);
+        if (delta == 0m)
+        {
+            throw new DomainException(Codes.ChangeDeltaZero);
+        }
+
+        var note = Blank(input.Note) ?? throw new DomainException(Codes.ChangeNoteRequired);
+        if (note.Length > 300)
+        {
+            note = note[..300];
+        }
+
+        var before = item.QuantityMt;
+        var after = Rounding.Quantity(before + delta);
+        if (after <= 0m)
+        {
+            throw new DomainException(Codes.ChangeBelowZero, new Dictionary<string, object?>
+            {
+                ["quantityMt"] = before,
+                ["deltaMt"] = delta,
+            });
+        }
+
+        item.QuantityMt = after;
+        item.Changes.Add(new ContractItemChange
+        {
+            Id = Guid.CreateVersion7().ToString(),
+            At = DateTimeOffset.UtcNow,
+            UserId = userId,
+            UserName = userName,
+            DeltaMt = delta,
+            BeforeMt = before,
+            AfterMt = after,
+            Note = note,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await InvoiceService.RecomputeAllRemainingAsync(db, cancellationToken);
+        return await SingleAsync(contract.Id, cancellationToken);
+    }
+
     /* ---------------------------------- Shared ---------------------------------- */
 
     private static class Codes
@@ -157,6 +213,9 @@ public sealed class ContractService(ErpDbContext db)
         public const string InvalidStatus = "invalid-status";
         public const string InvalidContractType = "invalid-contract-type";
         public const string InvalidIncoterm = "invalid-incoterm";
+        public const string ChangeDeltaZero = "change-delta-zero";
+        public const string ChangeBelowZero = "change-below-zero";
+        public const string ChangeNoteRequired = "change-note-required";
     }
 
     private static void Apply(ContractItem item, ContractItemInput input)
@@ -282,7 +341,7 @@ public sealed class ContractService(ErpDbContext db)
     private async Task<Contract> LoadAsync(string id, CancellationToken cancellationToken) =>
         await db.Contracts
             .Include(c => c.Items).ThenInclude(i => i.Partners)
-            .Include(c => c.Items).ThenInclude(i => i.Changes)
+            .Include(c => c.Items).ThenInclude(i => i.Changes.OrderBy(ch => ch.At))
             .SingleOrDefaultAsync(c => c.Id == id, cancellationToken)
         ?? throw new NotFoundException(Codes.ContractNotFound);
 

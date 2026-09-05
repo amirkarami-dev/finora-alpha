@@ -31,3 +31,6 @@ public sealed record ContractItemInput(
     IReadOnlyList<ItemPartnerInput>? Partners);
 
 public sealed record ItemPartnerInput(string PartnerId, decimal Percent);
+
+/// <summary>A formal change to a goods line's quantity: signed MT and the reason.</summary>
+public sealed record ContractItemChangeInput(decimal DeltaMt, string? Note);

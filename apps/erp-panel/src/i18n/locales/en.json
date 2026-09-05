@@ -264,6 +264,9 @@
     "updated": "Contract updated",
     "selectCustomer": "Select a customer",
     "destinationPlaceholder": "e.g. NINGBO",
+    "changeDeltaZero": "The change cannot be 0",
+    "changeNoteRequired": "Please write a note for this change",
+    "changeBelowZero": "The quantity would go to 0 or below (now {{mt}} MT)",
     "errors": {
       "contract-not-found": "That contract no longer exists",
       "contract-item-not-found": "That goods line no longer exists",
