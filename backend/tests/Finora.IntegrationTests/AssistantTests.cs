@@ -282,4 +282,24 @@ public sealed class AssistantTests(ApiFixture fixture)
         var response = await PostAsync(portal, Ask("hi"));
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    [Fact]
+    public void The_upstream_client_has_no_shared_resilience_handler()
+    {
+        // ServiceDefaults wraps every HttpClient in the standard resilience pipeline: 10 s per
+        // attempt, three retries, 30 s in total. A model answering with tool calls can take
+        // longer than 10 s, and a retry re-sends the whole conversation, so the assistant's
+        // client must run on its own 60 s timeout with no retries.
+        var factory = fixture.Services.GetRequiredService<IHttpMessageHandlerFactory>();
+        var handler = factory.CreateHandler(nameof(Finora.Api.Assistant.AssistantClient));
+
+        var chain = new List<string>();
+        for (HttpMessageHandler? h = handler; h is not null; h = (h as DelegatingHandler)?.InnerHandler)
+        {
+            chain.Add(h.GetType().FullName ?? h.GetType().Name);
+        }
+
+        Assert.DoesNotContain(chain, name => name.Contains("Resilience", StringComparison.Ordinal));
+        Assert.Contains(chain, name => name.EndsWith(nameof(FakeAssistantUpstream), StringComparison.Ordinal));
+    }
 }
