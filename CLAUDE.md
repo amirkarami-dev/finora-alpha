@@ -128,6 +128,11 @@ An **invoice line** on the four invoice types carries `grossMt` and `tareMt` typ
 its `quantityMt` is the **net** (gross − tare) and is set by the server. Order lines carry
 `quantityMt` only. See `docs/superpowers/specs/2026-09-04-invoice-line-weights-design.md`.
 
+A document may claim **more** of a goods line than the contract holds: nothing refuses it, the
+document and the contract page show the overrun, and the contract page's "Change quantity"
+writes a `ContractItemChange` history row. See
+`docs/superpowers/specs/2026-09-05-contract-quantity-changes-design.md`.
+
 Conversion documents (Warehouse › Conversions) turn stock of one product into others inside a
 warehouse and carry the cost: every receipt, issue, conversion input and output stores its cost
 per MT; `StockLedger` folds quantity and value per (warehouse, product). See
