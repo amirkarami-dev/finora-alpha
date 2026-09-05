@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { Button, Card, Col, Descriptions, Empty, Progress, Result, Row, Space, Table, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckCircleTwoTone, CloseCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, CloseCircleOutlined, EditOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { StatusTag } from '@/components/common/StatusTag';
-import { useContract, usePartners } from '@/services/queries';
+import { useContract, useContractItemOverview, usePartners } from '@/services/queries';
 import { unitPrice } from '@/utils/calc';
 import { formatDate, formatMt, formatNumber } from '@/utils/format';
-import type { Item } from '@/types';
+import type { Item, ItemChange } from '@/types';
 import { ContractFormModal } from './ContractFormModal';
 import { ItemFormModal } from './ItemFormModal';
+import { ChangeQuantityModal } from './ChangeQuantityModal';
 
 const { Text } = Typography;
 
@@ -23,10 +24,13 @@ export default function ContractDetailPage() {
   const contractId = decodeURIComponent(id);
   const { data: contract, isLoading } = useContract(contractId);
   const { data: partners } = usePartners();
+  const { data: overview } = useContractItemOverview(contractId);
+  const overviewById = new Map((overview ?? []).map((o) => [o.itemId, o]));
   const partnerName = (id: string) => partners?.find((p) => p.id === id)?.name ?? id;
   const isPurchase = contract?.contractType === 'PURCHASE';
   const [contractFormOpen, setContractFormOpen] = useState(false);
   const [itemForm, setItemForm] = useState<{ open: boolean; item?: Item }>({ open: false });
+  const [changeFor, setChangeFor] = useState<Item | undefined>(undefined);
 
   if (!isLoading && !contract) {
     return <Result status="404" title={t('errors.notFoundTitle')} subTitle={t('errors.notFoundDesc')} />;
@@ -66,6 +70,34 @@ export default function ContractDetailPage() {
       width: 120,
       align: 'right',
       render: (v) => formatMt(v),
+    },
+    {
+      title: t('contracts.originalMt'),
+      key: 'originalMt',
+      width: 120,
+      align: 'right',
+      render: (_, r) => formatMt(overviewById.get(r.id)?.originalMt ?? r.quantityMt),
+    },
+    {
+      title: t('contracts.changesMt'),
+      key: 'changesMt',
+      width: 120,
+      align: 'right',
+      render: (_, r) => {
+        const v = overviewById.get(r.id)?.changesMt ?? 0;
+        if (Math.abs(v) < 1e-9) return <Text type="secondary">—</Text>;
+        return <Text type={v > 0 ? 'success' : 'danger'}>{v > 0 ? `+${formatMt(v)}` : formatMt(v)}</Text>;
+      },
+    },
+    {
+      title: t('contracts.overMt'),
+      key: 'overMt',
+      width: 130,
+      align: 'right',
+      render: (_, r) => {
+        const v = overviewById.get(r.id)?.overMt ?? 0;
+        return v > 1e-9 ? <Text type="warning" strong>{formatMt(v)}</Text> : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: t('items.lmePercent'),
@@ -141,17 +173,17 @@ export default function ContractDetailPage() {
       title: t('common.actions'),
       key: 'actions',
       fixed: 'right',
-      width: 90,
+      width: 200,
       align: 'center',
       render: (_, r) => (
-        <Button
-          type="link"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={() => setItemForm({ open: true, item: r })}
-        >
-          {t('common.edit')}
-        </Button>
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => setItemForm({ open: true, item: r })}>
+            {t('common.edit')}
+          </Button>
+          <Button type="link" size="small" icon={<SwapOutlined />} onClick={() => setChangeFor(r)}>
+            {t('contracts.changeQuantity')}
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -232,7 +264,7 @@ export default function ContractDetailPage() {
           columns={itemColumns}
           dataSource={contract?.items ?? []}
           pagination={false}
-          scroll={{ x: isPurchase ? 1670 : 1410 }}
+          scroll={{ x: isPurchase ? 2150 : 1890 }}
           expandable={{
             expandedRowRender: (r) =>
               r.notes ? (
@@ -245,6 +277,40 @@ export default function ContractDetailPage() {
           locale={{ emptyText: <Empty description={t('contracts.noItems')} /> }}
         />
       </Card>
+
+      {contract && contract.items.some((i) => i.changes.length > 0) && (
+        <Card variant="borderless" title={t('contracts.quantityHistory')} style={{ marginTop: 16 }} styles={{ body: { padding: 12 } }}>
+          <Table<ItemChange & { product: string }>
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={contract.items
+              .flatMap((i) => i.changes.map((c) => ({ ...c, product: i.product })))
+              .sort((a, b) => b.at.localeCompare(a.at))}
+            columns={[
+              { title: t('contracts.historyWhen'), dataIndex: 'at', width: 160, render: (v: string) => formatDate(v, 'DD MMM YYYY HH:mm') },
+              { title: t('items.product'), dataIndex: 'product', width: 200, render: (v: string) => <Text strong>{v}</Text> },
+              { title: t('contracts.historyWho'), dataIndex: 'userName', width: 160 },
+              {
+                title: t('contracts.deltaMt'),
+                dataIndex: 'deltaMt',
+                width: 120,
+                align: 'right',
+                render: (v: number) => <Text type={v > 0 ? 'success' : 'danger'}>{v > 0 ? `+${formatMt(v)}` : formatMt(v)}</Text>,
+              },
+              {
+                title: t('contracts.historyBeforeAfter'),
+                key: 'beforeAfter',
+                width: 180,
+                align: 'right',
+                render: (_: unknown, r: ItemChange) => `${formatMt(r.beforeMt)} → ${formatMt(r.afterMt)}`,
+              },
+              { title: t('contracts.changeNote'), dataIndex: 'note' },
+            ]}
+            scroll={{ x: 1000 }}
+          />
+        </Card>
+      )}
 
       {contract && (
         <ContractFormModal
@@ -261,6 +327,9 @@ export default function ContractDetailPage() {
         item={itemForm.item}
         contractType={contract?.contractType}
       />
+      {changeFor && (
+        <ChangeQuantityModal open onClose={() => setChangeFor(undefined)} item={changeFor} />
+      )}
     </div>
   );
 }

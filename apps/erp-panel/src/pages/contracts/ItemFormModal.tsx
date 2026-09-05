@@ -134,14 +134,8 @@ export function ItemFormModal({ open, onClose, contractId, item, contractType }:
         message.success(t('items.created'));
       }
       onClose();
-    } catch (err) {
-      // The server refuses a quantity below what documents have already claimed off this line.
-      // It carries the figure, because "too low" without it leaves the user guessing.
-      const code = err instanceof Error ? err.message : '';
-      const invoiced = (err as { invoicedMt?: number } | null)?.invoicedMt;
-      if (code === 'quantity-below-invoiced' && typeof invoiced === 'number') {
-        message.error(t('items.quantityBelowInvoiced', { invoiced }));
-      } else message.error(t('common.saveFailed'));
+    } catch {
+      message.error(t('common.saveFailed'));
     }
   };
 

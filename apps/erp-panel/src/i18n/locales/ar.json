@@ -266,7 +266,22 @@
     "destinationPlaceholder": "مثال: نينغبو",
     "changeDeltaZero": "لا يمكن أن يكون التغيير 0",
     "changeNoteRequired": "يرجى كتابة ملاحظة لهذا التغيير",
-    "changeBelowZero": "ستصبح الكمية 0 أو أقل (الآن {{mt}} طن)",
+    "changeBelowZero": "ستصبح الكمية 0 أو أقل (الآن {{mt}})",
+    "changeQuantity": "تغيير الكمية",
+    "changeQuantityTitle": "تغيير الكمية: {{product}}",
+    "deltaMt": "التغيير (+/− طن)",
+    "currentQuantity": "الكمية الحالية",
+    "newQuantity": "الكمية الجديدة",
+    "changeNote": "ملاحظة (السبب)",
+    "quantityChanged": "تم تغيير الكمية",
+    "originalMt": "الأصلي (طن)",
+    "changesMt": "التغييرات (طن)",
+    "overMt": "فوق العقد (طن)",
+    "overTag": "تجاوز",
+    "quantityHistory": "سجل الكمية",
+    "historyWhen": "متى",
+    "historyWho": "من",
+    "historyBeforeAfter": "قبل ← بعد",
     "errors": {
       "contract-not-found": "لم يعد هذا العقد موجودًا",
       "contract-item-not-found": "لم يعد بند البضاعة هذا موجودًا",
@@ -302,8 +317,7 @@
     "ownShare": "حصتنا: {{percent}}%",
     "partnerTag": "{{name}} {{percent}}%",
     "partnerSumError": "إجمالي حصص الشركاء {{sum}}% — يجب ألا يتجاوز 100%",
-    "partnerDupError": "لا يمكن إضافة الشريك أكثر من مرة",
-    "quantityBelowInvoiced": "لا يمكن أن تقل الكمية عن {{invoiced}} طن متري تمت فوترتها على هذا البند."
+    "partnerDupError": "لا يمكن إضافة الشريك أكثر من مرة"
   },
   "containers": {
     "title": "الحاويات",
@@ -476,7 +490,7 @@
     "margin": "الهامش",
     "goodsNotActive": "غير نشط - لا يمكن اختياره",
     "contractItemNotActive": "{{product}} غير نشط في العقد، لذا لا يمكن إضافته",
-    "goodsNotActiveEditHint": "بند البضاعة هذا غير نشط في العقد. يمكن تقليل الكمية لكن لا يمكن أن تتجاوز {{mt}} طن."
+    "goodsNotActiveEditHint": "بند البضاعة هذا غير نشط في العقد. يمكن تقليل الكمية لكن لا يمكن أن تتجاوز {{mt}}."
   },
   "warehouse": {
     "netMt": "الوزن الصافي (طن)",

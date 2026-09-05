@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Input, Progress, Segmented, Table, Tabs, Tag, Typography, theme } from 'antd';
+import { Button, Card, Input, Progress, Segmented, Space, Table, Tabs, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -83,7 +83,16 @@ export default function ContractsPage() {
       width: 130,
       align: 'right',
       sorter: (a, b) => a.quantityMt - b.quantityMt,
-      render: (v) => formatMt(v),
+      render: (v, r) => (
+        <Space size={6}>
+          <span>{formatMt(v)}</span>
+          {r.overMt > 1e-9 && (
+            <Tag color="warning" bordered={false}>
+              {t('contracts.overTag')}
+            </Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: t('contracts.value'),

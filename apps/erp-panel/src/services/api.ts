@@ -1952,22 +1952,6 @@ export interface InvoiceItemInput {
   description?: string;
 }
 
-/** Full breakdown behind a contract-quantity guard (spec §3.1/§3.2): what's contracted, what's
- *  already claimed elsewhere, what this document itself already carries, what's left, and what
- *  was requested. */
-export interface ContractQtyCheck {
-  /** The contract item's own `quantityMt`. */
-  contractQuantityMt: number;
-  /** Chain-leaf CONFIRMED claims for this contract item on `side`, excluding this invoice. */
-  alreadyInvoicedMt: number;
-  /** This document's own lines for the same contract item, excluding the line(s) under test. */
-  onThisDocMt: number;
-  /** max(contractQuantityMt − alreadyInvoicedMt − onThisDocMt, 0). */
-  remainingMt: number;
-  requestedMt: number;
-  exceeds: boolean;
-}
-
 /** Copies the pricing snapshot from the contract item and validates remaining qty (spec §2/§5). */
 export async function addInvoiceItems(
   invoiceId: string,

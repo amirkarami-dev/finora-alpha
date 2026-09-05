@@ -266,7 +266,22 @@
     "destinationPlaceholder": "بۆ نموونە: NINGBO",
     "changeDeltaZero": "گۆڕانکاری ناتوانێت 0 بێت",
     "changeNoteRequired": "تکایە تێبینییەک بۆ ئەم گۆڕانکارییە بنووسە",
-    "changeBelowZero": "بڕەکە دەگاتە 0 یان کەمتر (ئێستا {{mt}} تەن)",
+    "changeBelowZero": "بڕەکە دەگاتە 0 یان کەمتر (ئێستا {{mt}})",
+    "changeQuantity": "گۆڕینی بڕ",
+    "changeQuantityTitle": "گۆڕینی بڕ: {{product}}",
+    "deltaMt": "گۆڕانکاری (+/− تەن)",
+    "currentQuantity": "بڕی ئێستا",
+    "newQuantity": "بڕی نوێ",
+    "changeNote": "تێبینی (بۆچی)",
+    "quantityChanged": "بڕ گۆڕدرا",
+    "originalMt": "ڕەسەن (تەن)",
+    "changesMt": "گۆڕانکارییەکان (تەن)",
+    "overMt": "زیاتر لە گرێبەست (تەن)",
+    "overTag": "زیاتر",
+    "quantityHistory": "مێژووی بڕ",
+    "historyWhen": "کەی",
+    "historyWho": "کێ",
+    "historyBeforeAfter": "پێش ← دوای",
     "errors": {
       "contract-not-found": "ئەم گرێبەستە چیتر بوونی نییە",
       "contract-item-not-found": "ئەم دێڕی کاڵایە چیتر بوونی نییە",
@@ -302,8 +317,7 @@
     "ownShare": "پشکی خۆمان: {{percent}}%",
     "partnerTag": "{{name}} {{percent}}%",
     "partnerSumError": "کۆی پشکی هاوبەشەکان {{sum}}% ە — نابێت لە 100% تێپەڕێت",
-    "partnerDupError": "هەر هاوبەشێک تەنها جارێک دەتوانرێت زیاد بکرێت",
-    "quantityBelowInvoiced": "بڕ ناتوانێت کەمتر بێت لەو {{invoiced}} MT ـەی پێشتر لەسەر ئەم دێڕە پسووڵە کراوە."
+    "partnerDupError": "هەر هاوبەشێک تەنها جارێک دەتوانرێت زیاد بکرێت"
   },
   "containers": {
     "title": "کۆنتەینەرەکان",
@@ -476,7 +490,7 @@
     "margin": "قازانج",
     "goodsNotActive": "چالاک نییە - ناتوانرێت هەڵبژێردرێت",
     "contractItemNotActive": "{{product}} لە گرێبەستەکەدا چالاک نییە، بۆیە ناتوانرێت زیاد بکرێت",
-    "goodsNotActiveEditHint": "ئەم ڕیزی کاڵایە لە گرێبەستەکەدا چالاک نییە. بڕەکە دەتوانێت کەم بێتەوە بەڵام ناتوانێت لە {{mt}} تەن زیاتر بێت."
+    "goodsNotActiveEditHint": "ئەم ڕیزی کاڵایە لە گرێبەستەکەدا چالاک نییە. بڕەکە دەتوانێت کەم بێتەوە بەڵام ناتوانێت لە {{mt}} زیاتر بێت."
   },
   "warehouse": {
     "netMt": "کێشی پاک (MT)",

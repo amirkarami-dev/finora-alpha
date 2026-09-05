@@ -266,7 +266,22 @@
     "destinationPlaceholder": "مثال: نینگبو",
     "changeDeltaZero": "تغییر نمی‌تواند 0 باشد",
     "changeNoteRequired": "لطفاً برای این تغییر یادداشتی بنویسید",
-    "changeBelowZero": "مقدار به 0 یا کمتر می‌رسد (اکنون {{mt}} تن)",
+    "changeBelowZero": "مقدار به 0 یا کمتر می‌رسد (اکنون {{mt}})",
+    "changeQuantity": "تغییر مقدار",
+    "changeQuantityTitle": "تغییر مقدار: {{product}}",
+    "deltaMt": "تغییر (+/− تن)",
+    "currentQuantity": "مقدار فعلی",
+    "newQuantity": "مقدار جدید",
+    "changeNote": "یادداشت (دلیل)",
+    "quantityChanged": "مقدار تغییر کرد",
+    "originalMt": "اولیه (تن)",
+    "changesMt": "تغییرات (تن)",
+    "overMt": "بیش از قرارداد (تن)",
+    "overTag": "بیش از حد",
+    "quantityHistory": "تاریخچه مقدار",
+    "historyWhen": "زمان",
+    "historyWho": "چه کسی",
+    "historyBeforeAfter": "قبل ← بعد",
     "errors": {
       "contract-not-found": "این قرارداد دیگر وجود ندارد",
       "contract-item-not-found": "این ردیف کالا دیگر وجود ندارد",
@@ -302,8 +317,7 @@
     "ownShare": "سهم ما: {{percent}}%",
     "partnerTag": "{{name}} {{percent}}%",
     "partnerSumError": "مجموع سهم شرکا {{sum}}٪ است — نباید از ۱۰۰٪ بیشتر شود",
-    "partnerDupError": "هر شریک فقط یک‌بار قابل افزودن است",
-    "quantityBelowInvoiced": "مقدار نمی‌تواند کمتر از {{invoiced}} تن متریک باشد که قبلاً برای این سطر فاکتور شده است."
+    "partnerDupError": "هر شریک فقط یک‌بار قابل افزودن است"
   },
   "containers": {
     "title": "کانتینرها",
@@ -476,7 +490,7 @@
     "margin": "حاشیه سود",
     "goodsNotActive": "غیرفعال - قابل انتخاب نیست",
     "contractItemNotActive": "{{product}} در قرارداد فعال نیست، بنابراین نمی‌توان آن را اضافه کرد",
-    "goodsNotActiveEditHint": "این ردیف کالا در قرارداد فعال نیست. مقدار می‌تواند کم شود اما نمی‌تواند از {{mt}} تن بیشتر باشد."
+    "goodsNotActiveEditHint": "این ردیف کالا در قرارداد فعال نیست. مقدار می‌تواند کم شود اما نمی‌تواند از {{mt}} بیشتر باشد."
   },
   "warehouse": {
     "netMt": "وزن خالص (تن)",

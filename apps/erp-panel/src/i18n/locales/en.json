@@ -266,7 +266,22 @@
     "destinationPlaceholder": "e.g. NINGBO",
     "changeDeltaZero": "The change cannot be 0",
     "changeNoteRequired": "Please write a note for this change",
-    "changeBelowZero": "The quantity would go to 0 or below (now {{mt}} MT)",
+    "changeBelowZero": "The quantity would go to 0 or below (now {{mt}})",
+    "changeQuantity": "Change quantity",
+    "changeQuantityTitle": "Change quantity: {{product}}",
+    "deltaMt": "Change (+/− MT)",
+    "currentQuantity": "Current quantity",
+    "newQuantity": "New quantity",
+    "changeNote": "Note (why)",
+    "quantityChanged": "Quantity changed",
+    "originalMt": "Original (MT)",
+    "changesMt": "Changes (MT)",
+    "overMt": "Over contract (MT)",
+    "overTag": "over",
+    "quantityHistory": "Quantity history",
+    "historyWhen": "When",
+    "historyWho": "Who",
+    "historyBeforeAfter": "Before → after",
     "errors": {
       "contract-not-found": "That contract no longer exists",
       "contract-item-not-found": "That goods line no longer exists",
@@ -302,8 +317,7 @@
     "ownShare": "Own share: {{percent}}%",
     "partnerTag": "{{name}} {{percent}}%",
     "partnerSumError": "Partner shares total {{sum}}% — must not exceed 100%",
-    "partnerDupError": "Each partner can be added only once",
-    "quantityBelowInvoiced": "Quantity cannot be less than the {{invoiced}} MT already invoiced against this line."
+    "partnerDupError": "Each partner can be added only once"
   },
   "containers": {
     "title": "Containers",
@@ -476,7 +490,7 @@
     "margin": "Margin",
     "goodsNotActive": "Not active - cannot be selected",
     "contractItemNotActive": "{{product}} is not active on the contract, so it cannot be added",
-    "goodsNotActiveEditHint": "This goods line is not active on the contract. The quantity can go down but not above {{mt}} MT."
+    "goodsNotActiveEditHint": "This goods line is not active on the contract. The quantity can go down but not above {{mt}}."
   },
   "warehouse": {
     "netMt": "Net (MT)",
