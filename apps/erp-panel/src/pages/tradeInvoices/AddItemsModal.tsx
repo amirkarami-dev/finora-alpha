@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Switch, Typography, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
 import { StatusTag } from '@/components/common/StatusTag';
 import type { InvoiceItemInput } from '@/services/api';
 import { isPricedType, netMtOf } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
+import { ROUTES } from '@/config/constants';
 import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
-import { qtyExceedsContractParams } from './qtyExceedsContract';
 import { weightsInvalidMessage } from './weightsInvalid';
 import type { Invoice, InvoiceSide, ItemStatus } from '@/types';
 
@@ -143,10 +144,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       onClose();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
-      if (code === 'qty-exceeds-remaining') {
-        const params = qtyExceedsContractParams(err);
-        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
-      } else if (code === 'weights-invalid') {
+      if (code === 'weights-invalid') {
         message.error(weightsInvalidMessage(err, t));
       } else if (code === 'contract-item-not-active') {
         message.error(t('tradeInvoices.contractItemNotActive', { product: (err as { product?: string }).product ?? '' }));
@@ -230,6 +228,21 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           </Text>
                         </div>
                       </div>
+                      {(() => {
+                        const w = watchedRows[field.name];
+                        const qty = weighed ? netMtOf(w?.grossMt, w?.tareMt) : (w?.quantityMt ?? 0);
+                        const over = included ? qty - row.uninvoicedMt : 0;
+                        return over > 1e-9 ? (
+                          <div style={{ flexBasis: '100%' }}>
+                            <Text type="warning" style={{ fontSize: 12 }}>
+                              {t('tradeInvoices.overContractHint', { mt: formatMt(over) })}
+                            </Text>{' '}
+                            <Link to={`${ROUTES.contracts}/${encodeURIComponent(invoice.contractId)}`} style={{ fontSize: 12 }}>
+                              {t('tradeInvoices.openContract')}
+                            </Link>
+                          </div>
+                        ) : null;
+                      })()}
                       {weighed ? (
                         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
                           <Form.Item
@@ -256,10 +269,6 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                                         if (v < 0) throw new Error(t('tradeInvoices.weightsInvalidTare'));
                                         if (gross !== undefined && v >= gross) {
                                           throw new Error(t('tradeInvoices.weightsInvalidTareExceedsGross'));
-                                        }
-                                        const net = netMtOf(gross, v);
-                                        if (net > row.uninvoicedMt + 1e-9) {
-                                          throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(row.uninvoicedMt) }));
                                         }
                                       },
                                     },
@@ -291,11 +300,6 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                                       validator: async (_, v) => {
                                         if (v === undefined || v === null) return;
                                         if (v <= 0) throw new Error(t('common.required'));
-                                        if (v > row.uninvoicedMt + 1e-9) {
-                                          throw new Error(
-                                            t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(row.uninvoicedMt) }),
-                                          );
-                                        }
                                       },
                                     },
                                   ]
@@ -304,7 +308,6 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                           >
                             <InputNumber
                               min={0.000001}
-                              max={row.uninvoicedMt}
                               precision={6}
                               style={{ width: '100%' }}
                               disabled={!included}

@@ -2015,9 +2015,10 @@ export async function applyLmePrice(invoiceId: string, input: ApplyLmePriceInput
  * Guards IN ORDER (spec §5/§7/§8, warehouse-decoupling spec §4): 'not-draft' → 'no-items' →
  * 'missing-lme-price' (provisional/final with a floating line lacking lmePrice) →
  * 'missing-container' (provisional/final: every line must carry a containerId; orders are
- * exempt) → 'qty-exceeds-remaining' (re-validate §5 invariant 3). Confirming an invoice no
- * longer touches warehouse stock or creates inventory documents — those are created by hand
- * via `createInventoryDocument` against a chain-leaf CONFIRMED invoice (warehouse spec §6.1).
+ * exempt). A document above the contract's remaining quantity is allowed through — the caller
+ * warns and links to the contract instead. Confirming an invoice no longer touches warehouse
+ * stock or creates inventory documents — those are created by hand via `createInventoryDocument`
+ * against a chain-leaf CONFIRMED invoice (warehouse spec §6.1).
  */
 export async function confirmInvoice(id: string): Promise<Invoice> {
   return invoiceWrite(() => invoicesApi.confirm(id));

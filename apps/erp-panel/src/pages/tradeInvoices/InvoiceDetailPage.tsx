@@ -16,6 +16,8 @@ import {
   Statistic,
   Table,
   Tag,
+  theme,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -30,6 +32,7 @@ import {
   PrinterOutlined,
   SendOutlined,
   SwapOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +61,7 @@ import { AddItemsModal } from './AddItemsModal';
 import { ConfirmInvoiceModal } from './ConfirmInvoiceModal';
 import { ConvertInvoiceModal } from './ConvertInvoiceModal';
 import { EditLineModal } from './EditLineModal';
+import { overContractByItem } from './overContract';
 
 const { Text } = Typography;
 
@@ -79,6 +83,7 @@ type ActiveModal = 'editHeader' | 'addItems' | 'editLine' | 'confirm' | 'convert
 export default function InvoiceDetailPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const navigate = useNavigate();
   const { id = '' } = useParams();
   const invoiceId = decodeURIComponent(id);
@@ -105,6 +110,11 @@ export default function InvoiceDetailPage() {
     data?.invoice.contractId ?? '',
     data ? invoiceSide(data.invoice.invoiceType) : 'SALE',
   );
+  const { data: remainingExcludingThis } = useContractRemaining(
+    data?.invoice.contractId ?? '',
+    data ? invoiceSide(data.invoice.invoiceType) : 'SALE',
+    invoiceId,
+  );
 
   // Hooks must run unconditionally (this call sits above the early returns below), so the
   // sale/confirmed gate lives only in what gets rendered from `costOfSales` further down.
@@ -124,6 +134,7 @@ export default function InvoiceDetailPage() {
 
   const { invoice, contract, customerName, refInvoice, successor, chain, payments, totalUSD, paidUSD, remainingUSD } =
     data;
+  const overByItem = overContractByItem(invoice, remainingExcludingThis);
   const side = invoiceSide(invoice.invoiceType);
   const isDraft = invoice.status === 'DRAFT';
   const isConfirmed = invoice.status === 'CONFIRMED';
@@ -212,7 +223,19 @@ export default function InvoiceDetailPage() {
       title: t('items.product'),
       dataIndex: 'product',
       width: 180,
-      render: (v) => <Text strong>{v}</Text>,
+      render: (v, r) => {
+        const over = overByItem.get(r.contractItemId);
+        return (
+          <Space size={6}>
+            <Text strong>{v}</Text>
+            {over !== undefined && (
+              <Tooltip title={t('tradeInvoices.overContractHint', { mt: formatMt(over) })}>
+                <WarningOutlined style={{ color: token.colorWarning }} />
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     ...(priced
       ? ([
@@ -508,6 +531,38 @@ export default function InvoiceDetailPage() {
         }
       />
 
+      {overByItem.size > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('tradeInvoices.overContractAlertTitle')}
+          description={
+            <div>
+              <ul style={{ margin: 0, paddingInlineStart: 20 }}>
+                {[...overByItem].map(([itemId, mt]) => (
+                  <li key={itemId}>
+                    {t('tradeInvoices.overContractLine', {
+                      product: invoice.items.find((l) => l.contractItemId === itemId)?.product ?? itemId,
+                      mt: formatMt(mt),
+                    })}
+                  </li>
+                ))}
+              </ul>
+              {contract && (
+                <Button
+                  type="link"
+                  style={{ padding: 0, height: 'auto' }}
+                  onClick={() => navigate(`${ROUTES.contracts}/${encodeURIComponent(contract.id)}`)}
+                >
+                  {t('tradeInvoices.openContract')}
+                </Button>
+              )}
+            </div>
+          }
+        />
+      )}
+
       {showUninvoicedAlert && uninvoicedRows.length > 0 && (
         <Alert
           type="info"
@@ -769,6 +824,7 @@ export default function InvoiceDetailPage() {
             open={activeModal === 'confirm'}
             onClose={() => setActiveModal(null)}
             invoice={invoice}
+            side={side}
             onConfirmed={() => setShowUninvoicedAlert(true)}
           />
         </>

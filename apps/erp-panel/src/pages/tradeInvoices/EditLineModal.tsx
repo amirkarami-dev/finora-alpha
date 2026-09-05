@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { App, Empty, Form, Input, InputNumber, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { useContainerOptions, useContractRemaining, useUpdateInvoiceItem } from '@/services/queries';
 import { buildContainerOptions, ltrTruncateStyle, withSelectedContainer } from './containerOptions';
-import { qtyExceedsContractParams } from './qtyExceedsContract';
 import { weightsInvalidMessage } from './weightsInvalid';
 import { isPricedType, netMtOf } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
+import { ROUTES } from '@/config/constants';
 import type { Invoice, InvoiceItem, InvoiceSide } from '@/types';
 
 const { TextArea } = Input;
@@ -62,18 +63,9 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   const otherLinesQty = invoice.items
     .filter((it) => it.id !== item.id && it.contractItemId === item.contractItemId)
     .reduce((s, it) => s + it.quantityMt, 0);
-  // The true ceiling for a NEW value on this line — may sit below the field's current value once
-  // a rival document has confirmed and shrunk the remaining amount.
-  const ceilingMt = goodsInactive
-    ? item.quantityMt
-    : remainingRow
-      ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0)
-      : item.quantityMt;
-  // The InputNumber's `max` must never sit below the field's initial value: rc-input-number
-  // clamps an out-of-range value to `max` on blur and fires onChange, so `max < item.quantityMt`
-  // silently rewrote the line to the (too-low) ceiling with no message. The real ceiling is
-  // enforced below via an inline validator instead, which can show an error and reject the save.
-  const maxQty = Math.max(ceilingMt, item.quantityMt);
+  // What the contract has left for this line's goods, this document's other lines included.
+  // Not a ceiling any more: a value above it is allowed and shows a warning instead.
+  const contractLeftMt = remainingRow ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) : item.quantityMt;
 
   const initialValues: EditLineFormValues = {
     quantityMt: item.quantityMt,
@@ -86,6 +78,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
 
   const watchedGross = Form.useWatch('grossMt', form);
   const watchedTare = Form.useWatch('tareMt', form);
+  const watchedQuantity = Form.useWatch('quantityMt', form);
 
   const submit = async () => {
     let values: EditLineFormValues;
@@ -111,10 +104,7 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
       onClose();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
-      if (code === 'qty-exceeds-remaining') {
-        const params = qtyExceedsContractParams(err);
-        message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
-      } else if (code === 'weights-invalid') {
+      if (code === 'weights-invalid') {
         message.error(weightsInvalidMessage(err, t));
       } else if (code === 'contract-item-not-active') {
         message.error(t('tradeInvoices.contractItemNotActive', { product: (err as { product?: string }).product ?? item.product }));
@@ -160,8 +150,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
                     if (gross !== undefined && v >= gross) {
                       throw new Error(t('tradeInvoices.weightsInvalidTareExceedsGross'));
                     }
-                    if (netMtOf(gross, v) > ceilingMt + 1e-9) {
-                      throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
+                    if (goodsInactive && netMtOf(gross, v) > item.quantityMt + 1e-9) {
+                      throw new Error(t('tradeInvoices.goodsNotActiveEditHint', { mt: formatMt(item.quantityMt) }));
                     }
                   },
                 },
@@ -180,16 +170,30 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
                 validator: async (_, v) => {
                   if (v === undefined || v === null) return;
                   if (v <= 0) throw new Error(t('common.required'));
-                  if (v > ceilingMt + 1e-9) {
-                    throw new Error(t('tradeInvoices.exceedsUninvoiced', { mt: formatMt(ceilingMt) }));
+                  if (goodsInactive && v > item.quantityMt + 1e-9) {
+                    throw new Error(t('tradeInvoices.goodsNotActiveEditHint', { mt: formatMt(item.quantityMt) }));
                   }
                 },
               },
             ]}
           >
-            <InputNumber min={0.000001} max={maxQty} precision={6} style={{ width: '100%' }} />
+            <InputNumber min={0.000001} precision={6} style={{ width: '100%' }} />
           </Form.Item>
         )}
+        {(() => {
+          const qty = weighed ? netMtOf(watchedGross, watchedTare) : (watchedQuantity ?? 0);
+          const over = qty - contractLeftMt;
+          return over > 1e-9 ? (
+            <Form.Item style={{ marginTop: -12 }}>
+              <Text type="warning" style={{ fontSize: 12 }}>
+                {t('tradeInvoices.overContractHint', { mt: formatMt(over) })}
+              </Text>{' '}
+              <Link to={`${ROUTES.contracts}/${encodeURIComponent(invoice.contractId)}`} style={{ fontSize: 12 }}>
+                {t('tradeInvoices.openContract')}
+              </Link>
+            </Form.Item>
+          ) : null;
+        })()}
         {goodsInactive && (
           <Form.Item style={{ marginTop: -12 }}>
             <Text type="warning" style={{ fontSize: 12 }}>
