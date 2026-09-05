@@ -40,6 +40,45 @@ export function PinIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function PhoneIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path
+        d="M7.4 3.5 9.8 7.8 7.9 9.4c1.2 2.6 3.3 4.7 5.9 5.9l1.6-1.9 4.3 2.4-.6 3.4c-.2 1-1.1 1.7-2.1 1.6C9.7 20.1 3.9 14.3 3.2 7c-.1-1 .6-1.9 1.6-2.1l2.6-.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function MailIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m5 7 7 5 7-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function ArrowUpRight(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function ArrowUp(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /** Brand logo mark — copper rounded square with a rotated inner square. */
 export function LogoMark({ size = 38 }: { size?: number }) {
   const inner = Math.round(size * 0.4);
