@@ -38,7 +38,7 @@ public sealed class SnapshotService(ErpDbContext db)
 
             Contracts = await db.Contracts.AsNoTracking()
                 .Include(c => c.Items).ThenInclude(i => i.Partners)
-                .Include(c => c.Items).ThenInclude(i => i.Changes)
+                .Include(c => c.Items).ThenInclude(i => i.Changes.OrderBy(ch => ch.At).ThenBy(ch => ch.Id))
                 .ToListAsync(cancellationToken),
 
             Containers = await db.Containers.AsNoTracking()
