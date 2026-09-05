@@ -33,10 +33,10 @@ Words: "goods line" = `ContractItem` / `Item`; "document" = any of the six trade
   the goods line's confirmed claims on the contract's own side (`InvoiceMath.ConfirmedClaimsByItem`
   on the server, `confirmedClaimsByItem` in `services/api.ts`), rounded with `Rounding.Quantity`
   / `roundMt`. Drafts never count.
-- A **document line's** over figure (for the warning on the document) is what the guard computes:
-  `requested − remaining` when positive, with this document's other lines for the same goods
-  already inside `onThisDocMt`. In the browser it is computed by `checkContractQty` (existing
-  function; its result is no longer used to refuse).
+- A **document line's** over figure (for the warning on the document) is, per goods line, this
+  document's own lines for that goods minus what the contract has left for it with this
+  document excluded (`getContractRemaining(contractId, side, invoice.id)`), when positive.
+  The browser computes it in `pages/tradeInvoices/overContract.ts`.
 - Shrinking a goods line below what is already invoiced is now allowed. `quantity-below-invoiced`
   is removed from the code list, from `ContractService.UpdateItemAsync` and from
   `ItemFormModal`. The over-contract column shows the effect.
@@ -96,9 +96,9 @@ Warehouse documents, stock, cost of sales, allocations, claims and reports keep 
 - `ContractEndpoints`: the new `MapPost` on the existing group (the group already carries
   `.RequirePermission("contracts")`); user id from `IdentityEndpoints.UserIdClaim` and the
   name from `ClaimTypes.Name`, both set at sign-in.
-- `InvoiceService`: remove the three `Exceeds` throws; keep calling `Check` where its result is
-  needed for nothing else → remove those calls too (dead code). `ContractQuantityGuard`
-  keeps `Check` (the client's warning mirrors it and a test pins it) and loses `Exceeded`.
+- `InvoiceService`: remove the three `Exceeds` throws and the `Check` calls that only fed them.
+  `ContractQuantityGuard.cs` (with `ContractQtyCheck`) is deleted: nothing else reads it and no
+  test references it.
 - `ContractService.UpdateItemAsync`: remove the `BelowInvoiced` refusal.
 - `contracts/error-codes.json`: remove `qty-exceeds-remaining` and `quantity-below-invoiced`;
   add `change-delta-zero`, `change-below-zero`, `change-note-required`.
@@ -121,7 +121,6 @@ Warehouse documents, stock, cost of sales, allocations, claims and reports keep 
   `services/queries.ts`: `useChangeItemQuantity()` invalidating contracts and the snapshot the way
   the goods-line mutations do.
 - `services/api.ts`:
-  - `checkContractQty` stays; callers stop refusing on `exceeds`.
   - new selector `getContractItemOverview(contractId)` → per goods line
     `{ itemId, quantityMt, originalMt, changesMt, confirmedInvoicedMt, overMt, remainingMt }`;
     exposed through `useContractItemOverview(contractId)` in `queries.ts`.
