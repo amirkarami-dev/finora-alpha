@@ -91,6 +91,29 @@ internal sealed class ItemPartnerConfiguration : IEntityTypeConfiguration<ItemPa
     }
 }
 
+internal sealed class ContractItemChangeConfiguration : IEntityTypeConfiguration<ContractItemChange>
+{
+    public void Configure(EntityTypeBuilder<ContractItemChange> builder)
+    {
+        builder.ToTable("contract_item_changes", t =>
+            t.HasCheckConstraint("ck_contract_item_changes_delta", "delta_mt <> 0"));
+
+        builder.HasKey(c => c.Id);
+        builder.Property(c => c.Id).HasIdColumn();
+        builder.Property(c => c.ContractItemId).HasIdColumn();
+        builder.Property(c => c.UserName).HasMaxLength(200);
+        builder.Property(c => c.DeltaMt).HasQuantityColumn();
+        builder.Property(c => c.BeforeMt).HasQuantityColumn();
+        builder.Property(c => c.AfterMt).HasQuantityColumn();
+        builder.Property(c => c.Note).HasMaxLength(300);
+
+        builder.HasOne(c => c.ContractItem).WithMany(i => i!.Changes)
+            .HasForeignKey(c => c.ContractItemId).OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(c => c.ContractItemId);
+    }
+}
+
 internal sealed class ContainerConfiguration : IEntityTypeConfiguration<Container>
 {
     public void Configure(EntityTypeBuilder<Container> builder)

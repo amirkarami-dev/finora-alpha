@@ -298,4 +298,57 @@ public sealed class ContractTests(ApiFixture fixture)
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         client.Dispose();
     }
+
+    [Fact]
+    public async Task A_quantity_change_travels_inside_its_goods_line()
+    {
+        // Written straight into the store, the way the snapshot replace path does, then read
+        // back over the contract list: the rows are children of the goods line, so they must
+        // come out wherever the goods line comes out.
+        using (var scope = fixture.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<SnapshotService>().ReplaceAsync(new ErpSnapshot
+            {
+                Customers = [new Customer { Id = "cust-am", Name = "Alco Metal Trading", Code = "AM" }],
+                Contracts =
+                [
+                    new Contract
+                    {
+                        Id = "ctr-1", CustomerId = "cust-am", Destination = "NINGBO",
+                        Items =
+                        [
+                            new ContractItem
+                            {
+                                Id = "item-1", ContractId = "ctr-1", Product = "98% Copper Ingots",
+                                QuantityMt = 120m, RemainingMt = 120m,
+                                Changes =
+                                [
+                                    new ContractItemChange
+                                    {
+                                        Id = "chg-1", At = DateTimeOffset.Parse("2026-09-05T08:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+                                        UserId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                                        UserName = "Amir Karami", DeltaMt = 20m, BeforeMt = 100m, AfterMt = 120m,
+                                        Note = "Client asked for two more trucks",
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            });
+        }
+
+        using var client = await AsManagerAsync(fixture);
+        var contracts = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/contracts", UriKind.Relative), Json);
+        var change = contracts.EnumerateArray().Single().GetProperty("items")[0].GetProperty("changes")[0];
+
+        Assert.Equal(20m, change.GetProperty("deltaMt").GetDecimal());
+        Assert.Equal(100m, change.GetProperty("beforeMt").GetDecimal());
+        Assert.Equal(120m, change.GetProperty("afterMt").GetDecimal());
+        Assert.Equal("Amir Karami", change.GetProperty("userName").GetString());
+        Assert.Equal("Client asked for two more trucks", change.GetProperty("note").GetString());
+
+        var snapshot = await client.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/snapshot", UriKind.Relative), Json);
+        Assert.Equal(1, snapshot.GetProperty("contracts")[0].GetProperty("items")[0].GetProperty("changes").GetArrayLength());
+    }
 }

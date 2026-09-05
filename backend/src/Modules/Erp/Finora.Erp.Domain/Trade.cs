@@ -63,6 +63,10 @@ public sealed class ContractItem
 
     /// <summary>Profit/cost-share partners. Purchase contracts only; empty otherwise.</summary>
     public ICollection<ItemPartner> Partners { get; init; } = [];
+
+    /// <summary>Formal quantity changes, oldest first. The quantity above is the current truth;
+    /// these rows say how it got there. Never edited or deleted.</summary>
+    public ICollection<ContractItemChange> Changes { get; init; } = [];
 }
 
 /// <summary>A partner's share of one goods line. Each is &gt; 0 and they sum to ≤ 100 — the
@@ -79,6 +83,33 @@ public sealed class ItemPartner
     [JsonIgnore] public Partner? Partner { get; init; }
 
     public decimal Percent { get; set; }
+}
+
+/// <summary>
+/// One formal change to a goods line's quantity: who, when, by how much, and why.
+///
+/// <para>The goods line's <see cref="ContractItem.QuantityMt"/> is already updated when a row is
+/// written; <see cref="BeforeMt"/> and <see cref="AfterMt"/> are copied so the row reads on its
+/// own. The original quantity is <c>QuantityMt − Σ DeltaMt</c>, derived, never stored.</para>
+/// </summary>
+public sealed class ContractItemChange
+{
+    public required string Id { get; init; }
+
+    /// <summary>Set by EF from the parent when the graph is saved — a change only ever arrives
+    /// nested inside its goods line.</summary>
+    public string ContractItemId { get; init; } = string.Empty;
+    [JsonIgnore] public ContractItem? ContractItem { get; init; }
+
+    public DateTimeOffset At { get; init; }
+    public Guid UserId { get; init; }
+    public required string UserName { get; init; }
+
+    /// <summary>Positive or negative, never zero.</summary>
+    public decimal DeltaMt { get; init; }
+    public decimal BeforeMt { get; init; }
+    public decimal AfterMt { get; init; }
+    public required string Note { get; init; }
 }
 
 /// <summary>

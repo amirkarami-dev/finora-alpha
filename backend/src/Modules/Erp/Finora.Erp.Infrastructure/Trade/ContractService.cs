@@ -30,6 +30,7 @@ public sealed class ContractService(ErpDbContext db)
         await db.Contracts
             .AsNoTracking()
             .Include(c => c.Items).ThenInclude(i => i.Partners)
+            .Include(c => c.Items).ThenInclude(i => i.Changes)
             .OrderBy(c => c.Id)
             .ToListAsync(cancellationToken);
 
@@ -310,6 +311,7 @@ public sealed class ContractService(ErpDbContext db)
     private async Task<Contract> LoadAsync(string id, CancellationToken cancellationToken) =>
         await db.Contracts
             .Include(c => c.Items).ThenInclude(i => i.Partners)
+            .Include(c => c.Items).ThenInclude(i => i.Changes)
             .SingleOrDefaultAsync(c => c.Id == id, cancellationToken)
         ?? throw new NotFoundException(Codes.ContractNotFound);
 

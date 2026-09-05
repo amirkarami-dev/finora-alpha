@@ -47,6 +47,7 @@ public sealed class ErpDbContext(DbContextOptions<ErpDbContext> options) : DbCon
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<ContractItem> ContractItems => Set<ContractItem>();
     public DbSet<ItemPartner> ItemPartners => Set<ItemPartner>();
+    public DbSet<ContractItemChange> ContractItemChanges => Set<ContractItemChange>();
     public DbSet<Container> Containers => Set<Container>();
     public DbSet<ContainerGood> ContainerGoods => Set<ContainerGood>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
