@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "@/components/icons";
 import SourcingVideo from "@/components/SourcingVideo";
+import { useLocale } from "@/components/LocaleProvider";
 
 const accentGradient = {
   background: "linear-gradient(135deg,#E8A87C,#B87333,#7C4A1E)",
@@ -111,6 +112,7 @@ const whyCards = [
 ];
 
 export default function Home() {
+  const { t } = useLocale();
   const [stats, setStats] = useState({ countries: 0, products: 0, clients: 0, years: 0 });
   const heroBg = useRef<HTMLDivElement>(null);
   const heroContent = useRef<HTMLDivElement>(null);
@@ -197,30 +199,27 @@ export default function Home() {
             style={{ display: "inline-flex", alignItems: "center", gap: 9, fontFamily: "var(--ff-body)", fontSize: 12.5, fontWeight: 500, letterSpacing: ".22em", textTransform: "uppercase", color: "var(--accent)", padding: "8px 16px", border: "1px solid rgba(184,115,51,0.4)", borderRadius: 30, background: "rgba(184,115,51,0.08)", backdropFilter: "blur(8px)" }}
           >
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--copper-light)", boxShadow: "0 0 10px #E8A87C" }} />
-            Dubai · Iraq · Worldwide Non-Ferrous Metals Trade
+            {t.home.eyebrow}
           </span>
 
           <h1 className="hero-title" style={{ fontFamily: "var(--ff-display)", fontWeight: 700, fontSize: "clamp(46px,9vw,112px)", lineHeight: 0.98, color: "var(--text)", margin: "26px 0 0", letterSpacing: "-0.02em" }}>
-            <span className="reveal reveal-sm" data-delay="80" style={heroWord}>Metal</span>
-            <span className="reveal reveal-sm" data-delay="180" style={heroWord}>&nbsp;is</span>
-            <span className="reveal reveal-sm" data-delay="280" style={heroWord}>&nbsp;Our</span>
-            <span className="reveal reveal-sm" data-delay="380" style={{ ...heroWord, ...accentGradient }}>&nbsp;Craft</span>
+            <span className="reveal reveal-sm" data-delay="80" style={heroWord}>{t.home.heroTitle}</span>
           </h1>
           <p className="hero-subtitle reveal reveal-sm" data-delay="480" style={{ fontFamily: "var(--ff-display)", fontStyle: "italic", fontWeight: 500, fontSize: "clamp(24px,4.5vw,46px)", color: "var(--accent)", margin: "6px 0 0" }}>
-            Trust is Our Core
+            {t.home.heroSubtitle}
           </p>
 
           <p className="hero-description reveal reveal-sm" data-delay="560" style={{ fontFamily: "var(--ff-body)", fontSize: "clamp(15px,1.7vw,18px)", lineHeight: 1.75, color: "#C8BFB5", maxWidth: 560, margin: "26px 0 0" }}>
-            We source, process and export copper, aluminum, lead and brass to foundries, manufacturers and recyclers across the Gulf and beyond — clean material, transparent trade, dependable supply.
+            {t.home.heroDescription}
           </p>
 
           <div className="hero-actions reveal reveal-sm" data-delay="640" style={{ display: "flex", flexWrap: "wrap", gap: 15, marginTop: 38 }}>
             <Link href="/copper" className="btn-copper" style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "16px 30px", borderRadius: 34, background: "var(--copper-gradient)", color: "var(--bg)", fontFamily: "var(--ff-body)", fontSize: 15.5, fontWeight: 700, boxShadow: "0 14px 36px rgba(184,115,51,0.42)" }}>
-              Explore Products
+              {t.actions.exploreProducts}
               <ArrowRight width={17} height={17} />
             </Link>
             <Link href="/about-us" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "16px 30px", borderRadius: 34, border: "1px solid rgba(245,240,235,0.28)", color: "var(--text)", fontFamily: "var(--ff-body)", fontSize: 15.5, fontWeight: 600, background: "rgba(245,240,235,0.03)", backdropFilter: "blur(8px)" }}>
-              About Us
+              {t.actions.aboutUs}
             </Link>
           </div>
           </div>

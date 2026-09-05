@@ -1,6 +1,8 @@
 import type { Product } from "@/lib/data";
+import { useLocale } from "./LocaleProvider";
 
 export default function ProductCard({ product, onContact }: { product: Product; onContact: () => void }) {
+  const { t } = useLocale();
   return (
     <article className="jjm-pcard">
       <div style={{ position: "relative", height: 212, overflow: "hidden", background: "var(--copper-gradient)" }}>
@@ -83,7 +85,7 @@ export default function ProductCard({ product, onContact }: { product: Product; 
             transition: "all .3s",
           }}
         >
-          <span>Contact for Price</span>
+          <span>{t.actions.contactForPrice}</span>
           <svg className="jjm-parrow" width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ transition: "transform .3s" }}>
             <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

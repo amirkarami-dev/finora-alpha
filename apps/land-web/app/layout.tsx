@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
 import ScrollReveal from "@/components/ScrollReveal";
 import { site } from "@/lib/site";
+import { LocaleProvider } from "@/components/LocaleProvider";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -59,16 +60,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
       <body>
-        {/* Without JS the reveal animations never fire — show everything. */}
-        <noscript>
-          <style>{`.reveal{opacity:1!important;transform:none!important}`}</style>
-        </noscript>
-        <ScrollReveal />
-        <Navbar />
-        {/* The footer's "Top" link scrolls here. */}
-        <main id="top">{children}</main>
-        <Footer />
-        <WhatsAppFloat />
+        <LocaleProvider>
+          {/* Without JS the reveal animations never fire — show everything. */}
+          <noscript>
+            <style>{`.reveal{opacity:1!important;transform:none!important}`}</style>
+          </noscript>
+          <ScrollReveal />
+          <Navbar />
+          {/* The footer's "Top" link scrolls here. */}
+          <main id="top">{children}</main>
+          <Footer />
+          <WhatsAppFloat />
+        </LocaleProvider>
       </body>
     </html>
   );

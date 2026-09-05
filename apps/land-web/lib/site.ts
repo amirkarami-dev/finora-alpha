@@ -6,11 +6,18 @@ export const site = {
   tagline: "METALS TRADING L.L.C.",
   email: "jalil.jalal.metals@gmail.com",
   phones: {
+    uaeCeo: { label: "UAE CEO", display: "+971 50 154 4468", tel: "+971501544468" },
     uae: { label: "UAE MOBILE", display: "+971 50 154 4497", tel: "+971501544497" },
     iraq: { label: "IRAQ MOBILE", display: "+964 770 154 4498", tel: "+9647701544498" },
     office: { label: "DUBAI OFFICE", display: "+971 4 261 0230", tel: "+97142610230" },
   },
   whatsapp: "https://wa.me/971501544497",
+  whatsappContacts: [
+    { role: "uaeCeo", display: "+971 50 154 4468", href: "https://wa.me/971501544468" },
+    { role: "uaeTeam", display: "+971 50 154 4497", href: "https://wa.me/971501544497" },
+    { role: "iraqTeam", display: "+964 770 154 4498", href: "https://wa.me/9647701544498" },
+    { role: "dubaiOffice", display: "+971 4 261 0230", href: "https://wa.me/97142610230" },
+  ],
   erp: "https://erp.metal-uae.com",
   offices: {
     dubai: {

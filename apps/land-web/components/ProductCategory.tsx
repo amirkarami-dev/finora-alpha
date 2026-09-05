@@ -6,6 +6,7 @@ import type { ProductCategory as Category } from "@/lib/data";
 import ProductCard from "./ProductCard";
 import ContactModal from "./ContactModal";
 import { ArrowRight } from "./icons";
+import { useLocale } from "./LocaleProvider";
 
 const accentGradient = {
   background: "linear-gradient(135deg,#E8A87C,#B87333,#7C4A1E)",
@@ -15,6 +16,7 @@ const accentGradient = {
 } as const;
 
 export default function ProductCategory({ data }: { data: Category }) {
+  const { t } = useLocale();
   const [modalOpen, setModalOpen] = useState(false);
   const bgRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,7 @@ export default function ProductCategory({ data }: { data: Category }) {
             data-delay="0"
             style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "var(--ff-body)", fontSize: 13, color: "var(--muted)", marginBottom: 20 }}
           >
-            <Link href="/" style={{ color: "var(--muted)", textDecoration: "none" }}>Home</Link>
+            <Link href="/" style={{ color: "var(--muted)", textDecoration: "none" }}>{t.catalogue.home}</Link>
             <span style={{ color: "var(--copper)" }}>/</span>
             <span style={{ color: "var(--accent)" }}>{data.breadcrumb}</span>
           </div>
@@ -142,7 +144,7 @@ export default function ProductCategory({ data }: { data: Category }) {
               whiteSpace: "nowrap",
             }}
           >
-            Request a Quote <ArrowRight width={16} height={16} />
+            {t.actions.requestQuote} <ArrowRight width={16} height={16} />
           </button>
         </div>
       </section>
