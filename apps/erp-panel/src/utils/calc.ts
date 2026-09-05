@@ -11,6 +11,9 @@ export function netMtOf(gross?: number, tare?: number): number {
   return Math.round(((gross ?? 0) - (tare ?? 0)) * 1_000_000) / 1_000_000;
 }
 
+/** Six decimals — one gram — the app's quantity precision (mirrors `Rounding.Quantity`). */
+export const roundMt = (n: number): number => Math.round(n * 1_000_000) / 1_000_000;
+
 /**
  * Effective unit price per MT.
  *   unitPrice = fixedLmePrice * (lmePercent / 100) + premium

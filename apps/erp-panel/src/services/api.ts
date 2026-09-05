@@ -783,13 +783,17 @@ export interface ContractRow extends Contract {
   value: number;
   remainingMt: number;
   shippedPct: number;
+  overMt: number;
 }
 
 export function buildContractRows(): ContractRow[] {
+  const claimsBySide = { SALE: confirmedClaimsByItem('SALE'), PURCHASE: confirmedClaimsByItem('PURCHASE') };
   return db.contracts.map((contract) => {
     const customer = customerById.get(contract.customerId);
     const quantityMt = contract.items.reduce((s, i) => s + i.quantityMt, 0);
     const remainingMt = contract.items.reduce((s, i) => s + i.remainingMt, 0);
+    const claims = claimsBySide[contractSide(contract)];
+    const overMt = contract.items.reduce((s, i) => s + overContractMt(claims, i), 0);
     return {
       ...contract,
       customerName: customer?.name ?? '—',
@@ -797,6 +801,54 @@ export function buildContractRows(): ContractRow[] {
       value: round(contractValue(contract)),
       remainingMt: round(remainingMt),
       shippedPct: quantityMt > 0 ? round(((quantityMt - remainingMt) / quantityMt) * 100) : 0,
+      overMt: roundMt(overMt),
+    };
+  });
+}
+
+/** A contract's documents live on its own side: a SELL contract is claimed by sale documents. */
+function contractSide(contract: Contract): InvoiceSide {
+  return contract.contractType === 'SELL' ? 'SALE' : 'PURCHASE';
+}
+
+/** Confirmed claims above the goods line's quantity, floored at zero. Drafts never count. */
+function overContractMt(claims: Map<string, number>, item: Item): number {
+  return roundMt(Math.max((claims.get(item.id) ?? 0) - item.quantityMt, 0));
+}
+
+export interface ContractItemOverview {
+  itemId: string;
+  product: string;
+  quantityMt: number;
+  /** quantityMt − Σ changes. */
+  originalMt: number;
+  /** Σ deltaMt of the history rows (signed). */
+  changesMt: number;
+  /** Confirmed claims on the contract's side. */
+  confirmedInvoicedMt: number;
+  /** max(confirmedInvoicedMt − quantityMt, 0). */
+  overMt: number;
+  remainingMt: number;
+}
+
+/** Per goods line: where the quantity came from and how the documents stand against it. */
+export async function getContractItemOverview(contractId: string): Promise<ContractItemOverview[]> {
+  await delay(120);
+  const contract = contractById.get(contractId);
+  if (!contract) return [];
+  const claims = confirmedClaimsByItem(contractSide(contract));
+  return contract.items.map((item) => {
+    const changesMt = roundMt(item.changes.reduce((s, c) => s + c.deltaMt, 0));
+    const confirmedInvoicedMt = roundMt(claims.get(item.id) ?? 0);
+    return {
+      itemId: item.id,
+      product: item.product,
+      quantityMt: item.quantityMt,
+      originalMt: roundMt(item.quantityMt - changesMt),
+      changesMt,
+      confirmedInvoicedMt,
+      overMt: roundMt(Math.max(confirmedInvoicedMt - item.quantityMt, 0)),
+      remainingMt: item.remainingMt,
     };
   });
 }
@@ -1220,6 +1272,16 @@ export async function updateItem(itemId: string, input: ItemInput): Promise<Item
   const contract = await contractWrite(() =>
     contractsApi.updateItem(owner.id, itemId, toItemPayload(input)),
   );
+  return contract.items.find((i) => i.id === itemId)!;
+}
+
+export async function changeItemQuantity(
+  itemId: string,
+  input: { deltaMt: number; note: string },
+): Promise<Item> {
+  const owner = db.contracts.find((c) => c.items.some((i) => i.id === itemId));
+  if (!owner) throw new Error(`Item ${itemId} not found`);
+  const contract = await contractWrite(() => contractsApi.changeItemQuantity(owner.id, itemId, input));
   return contract.items.find((i) => i.id === itemId)!;
 }
 

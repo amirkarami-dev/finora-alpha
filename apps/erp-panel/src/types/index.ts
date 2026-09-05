@@ -94,6 +94,21 @@ export interface Customer {
   portalAccount?: boolean;
 }
 
+/** One formal change to a goods line's quantity. Never edited; oldest first. */
+export interface ItemChange {
+  id: string;
+  contractItemId: string;
+  /** ISO date-time. */
+  at: string;
+  userId: string;
+  userName: string;
+  /** Signed MT, never 0. */
+  deltaMt: number;
+  beforeMt: number;
+  afterMt: number;
+  note: string;
+}
+
 export interface Item {
   id: string;
   contractId: string;
@@ -113,6 +128,8 @@ export interface Item {
   remainingMt: number;
   /** Profit/cost-share partners (purchase contracts only; [] otherwise). */
   partners: ItemPartner[];
+  /** Formal quantity changes, oldest first. `quantityMt − Σ deltaMt` is the original quantity. */
+  changes: ItemChange[];
 }
 
 export interface Contract {

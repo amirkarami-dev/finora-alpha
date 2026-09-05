@@ -76,8 +76,11 @@ import { DEFAULT_FX_AED_PER_USD } from '@/config/constants';
  * Schema v9 (2026-09-04): invoice lines gain `grossMt`/`tareMt`; `quantityMt` becomes the net,
  * computed by the server on the four invoice types
  * (docs/superpowers/specs/2026-09-04-invoice-line-weights-design.md §2/§4).
+ *
+ * Schema v10 (2026-09-05): goods lines gain `changes` — the formal quantity-change history
+ * (docs/superpowers/specs/2026-09-05-contract-quantity-changes-design.md).
  */
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 const STORAGE_KEY = `finora-db-v${SCHEMA_VERSION}`;
 
 const seed = {

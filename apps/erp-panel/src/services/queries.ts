@@ -26,6 +26,7 @@ export const qk = {
   productNames: ['productNames'] as const,
   contracts: ['contracts'] as const,
   contract: (id: string) => ['contract', id] as const,
+  contractOverview: (id: string) => ['contractOverview', id] as const,
   contractsByCustomer: (id: string) => ['contracts', 'customer', id] as const,
   containers: ['containers'] as const,
   containersByContract: (id: string) => ['containers', 'contract', id] as const,
@@ -121,6 +122,12 @@ export const usePersonLedger = (id: string, opts?: { enabled?: boolean }) =>
 export const useContracts = () => useQuery({ queryKey: qk.contracts, queryFn: api.getContracts });
 export const useContract = (id: string) =>
   useQuery({ queryKey: qk.contract(id), queryFn: () => api.getContract(id), enabled: !!id });
+export const useContractItemOverview = (id: string) =>
+  useQuery({
+    queryKey: qk.contractOverview(id),
+    queryFn: () => api.getContractItemOverview(id),
+    enabled: !!id,
+  });
 export const useContractsByCustomer = (id: string) =>
   useQuery({
     queryKey: qk.contractsByCustomer(id),
@@ -218,6 +225,8 @@ function useInvalidateTrade() {
   return (contractId?: string) => {
     qc.invalidateQueries({ queryKey: qk.contracts });
     if (contractId) qc.invalidateQueries({ queryKey: qk.contract(contractId) });
+    qc.invalidateQueries({ queryKey: ['contractOverview'] });
+    qc.invalidateQueries({ queryKey: ['contractRemaining'] });
     qc.invalidateQueries({ queryKey: qk.accounts });
     qc.invalidateQueries({ queryKey: qk.kpis });
     qc.invalidateQueries({ queryKey: qk.statusBreakdown });
@@ -259,6 +268,15 @@ export const useUpdateItem = () => {
   const invalidate = useInvalidateTrade();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: api.ItemInput }) => api.updateItem(id, input),
+    onSuccess: (item) => invalidate(item.contractId),
+  });
+};
+
+export const useChangeItemQuantity = () => {
+  const invalidate = useInvalidateTrade();
+  return useMutation({
+    mutationFn: ({ itemId, input }: { itemId: string; input: { deltaMt: number; note: string } }) =>
+      api.changeItemQuantity(itemId, input),
     onSuccess: (item) => invalidate(item.contractId),
   });
 };
@@ -470,6 +488,8 @@ function useInvalidateInvoices() {
       qc.invalidateQueries({ queryKey: ['contractRemaining', opts.contractId, opts.side] });
     }
     qc.invalidateQueries({ queryKey: qk.invoiceOptions });
+    // Confirming/cancelling a document changes "over contract" on the affected goods lines.
+    qc.invalidateQueries({ queryKey: ['contractOverview'] });
     // Bare prefixes: confirming/cancelling/converting changes which invoices are chain-leaf
     // CONFIRMED, which is exactly what the Receipt/Issue invoice picker and its line list are
     // keyed on (getInventorySourceInvoices / getInvoiceLinesForInventory) — without these the

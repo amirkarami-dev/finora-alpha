@@ -266,6 +266,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
   }
 
   const customerCodes: string[] = [];
+  let historySeeded = false;
   CUSTOMER_SEEDS.forEach((seed, ci) => {
     const code = nextIntegerCode(customerCodes);
     customerCodes.push(code);
@@ -322,8 +323,43 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
           notes: '',
           remainingMt: quantityMt,
           partners: [],
+          changes: [],
         };
         items.push(item);
+      }
+
+      // The first generated contract carries two formal quantity changes so the history panel
+      // has something to show after "Load sample data".
+      if (!historySeeded && items.length > 0) {
+        historySeeded = true;
+        const first = items[0];
+        const original = first.quantityMt;
+        first.changes = [
+          {
+            id: `${first.id}-C1`,
+            contractItemId: first.id,
+            at: contractDate.add(3, 'day').toISOString(),
+            userId: '00000000-0000-0000-0000-000000000001',
+            userName: 'Amir Karami',
+            deltaMt: 20,
+            beforeMt: original,
+            afterMt: original + 20,
+            note: 'Client asked for two more trucks',
+          },
+          {
+            id: `${first.id}-C2`,
+            contractItemId: first.id,
+            at: contractDate.add(9, 'day').toISOString(),
+            userId: '00000000-0000-0000-0000-000000000001',
+            userName: 'Amir Karami',
+            deltaMt: -5,
+            beforeMt: original + 20,
+            afterMt: original + 15,
+            note: 'Short-loaded container',
+          },
+        ];
+        first.quantityMt = original + 15;
+        first.remainingMt = original + 15;
       }
 
       const contract: Contract = {
@@ -438,6 +474,7 @@ export function buildSampleData(anchor: Dayjs = dayjs()): Db {
       notes: 'Reference contract migrated from the legacy workbook.',
       remainingMt: 0,
       partners: [],
+      changes: [],
     };
     const contract: Contract = {
       id: contractId,
