@@ -116,13 +116,8 @@ public sealed class ContractService(ErpDbContext db)
     }
 
     /// <summary>
-    /// Edits a goods line.
-    ///
-    /// <para>
-    /// Shrinking below what documents have already claimed is refused. The browser allows it and
-    /// floors the remainder at zero, which over-commits the contract in silence — the guard reads
-    /// healthy while more tonnes are invoiced than the line holds.
-    /// </para>
+    /// Edits a goods line. Shrinking below what documents already claim is allowed: the remaining
+    /// figure floors at zero and the contract page reports the overrun.
     /// </summary>
     public async Task<Contract> UpdateItemAsync(
         string contractId, string itemId, ContractItemInput input,
@@ -135,17 +130,6 @@ public sealed class ContractService(ErpDbContext db)
             ?? throw new NotFoundException(Codes.ContractItemNotFound);
 
         await RequirePartnersExistAsync(input.Partners, cancellationToken);
-
-        var claimed = await ClaimedMtAsync(item.Id, cancellationToken);
-        if (Rounding.Quantity(input.QuantityMt) < claimed)
-        {
-            throw new DomainException(Codes.BelowInvoiced, new Dictionary<string, object?>
-            {
-                ["product"] = item.Product,
-                ["requestedMt"] = Rounding.Quantity(input.QuantityMt),
-                ["invoicedMt"] = claimed,
-            });
-        }
 
         item.Product = input.Product.Trim();
         Apply(item, input);
@@ -162,18 +146,6 @@ public sealed class ContractService(ErpDbContext db)
         return await SingleAsync(contract.Id, cancellationToken);
     }
 
-    /// <summary>
-    /// How much of a goods line the trade documents have committed.
-    ///
-    /// <para>The same figure the line's own <c>RemainingMt</c> is derived from, asked directly so
-    /// an edit can refuse to shrink beneath it.</para>
-    /// </summary>
-    private async Task<decimal> ClaimedMtAsync(string contractItemId, CancellationToken cancellationToken)
-    {
-        var all = await db.Invoices.AsNoTracking().Include(i => i.Items).ToListAsync(cancellationToken);
-        return Rounding.Quantity(InvoiceMath.ShippedMtForItem(all, contractItemId));
-    }
-
     /* ---------------------------------- Shared ---------------------------------- */
 
     private static class Codes
@@ -185,7 +157,6 @@ public sealed class ContractService(ErpDbContext db)
         public const string InvalidStatus = "invalid-status";
         public const string InvalidContractType = "invalid-contract-type";
         public const string InvalidIncoterm = "invalid-incoterm";
-        public const string BelowInvoiced = "quantity-below-invoiced";
     }
 
     private static void Apply(ContractItem item, ContractItemInput input)

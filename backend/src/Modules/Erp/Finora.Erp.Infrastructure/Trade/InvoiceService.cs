@@ -157,10 +157,9 @@ public sealed class InvoiceService(ErpDbContext db)
     ///
     /// <para>
     /// Validated in a full pass before anything is written, because a call that added two lines
-    /// and then refused the third would leave a document the user never asked for. Each entry is
-    /// measured against the ceiling INCLUDING the entries staged before it in the same call —
-    /// without that, three lines of forty tonnes each pass individually against a hundred-tonne
-    /// contract line.
+    /// and then refused the third would leave a document the user never asked for. A document may
+    /// claim more of a contract line than it has left — the contract's own quantity is not a
+    /// ceiling — but every line still needs an ACTIVE goods line and a real weight.
     /// </para>
     /// </summary>
     public async Task<Invoice> AddItemsAsync(
@@ -173,33 +172,21 @@ public sealed class InvoiceService(ErpDbContext db)
         RequireDraft(invoice);
 
         var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
-        var side = InvoiceMath.SideOf(invoice.InvoiceType);
 
         // Resolved up front, so a bad weight on the third line refuses the whole post before
-        // the first line is staged — same all-or-nothing as the contract guard below.
+        // the first line is staged.
         var resolved = items
             .Select(i => ResolveWeights(invoice.InvoiceType, i.QuantityMt, i.GrossMt, i.TareMt))
             .ToList();
         var quantities = resolved.Select(r => r.QuantityMt).ToList();
-        var staged = new Dictionary<string, decimal>(StringComparer.Ordinal);
 
-        for (var index = 0; index < items.Count; index++)
+        // A document may claim more than the contract holds — the contract page reports the
+        // overrun — but never a goods line that is not ACTIVE, and never one that is not there.
+        foreach (var entry in items)
         {
-            var entry = items[index];
             var contractItem = contract.Items.SingleOrDefault(i => i.Id == entry.ContractItemId)
                 ?? throw new NotFoundException(Codes.ContractItemNotFound);
             RequireActive(contractItem);
-
-            var check = ContractQuantityGuard.Check(
-                all, contractItem, side, invoice.Id, quantities[index],
-                extraOnDocMt: staged.GetValueOrDefault(contractItem.Id));
-
-            if (check.Exceeds)
-            {
-                throw ContractQuantityGuard.Exceeded(check, contractItem.Product);
-            }
-
-            staged[contractItem.Id] = staged.GetValueOrDefault(contractItem.Id) + quantities[index];
         }
 
         for (var index = 0; index < items.Count; index++)
@@ -245,10 +232,11 @@ public sealed class InvoiceService(ErpDbContext db)
     /// Edits one line.
     ///
     /// <para>
-    /// The quantity ceiling is checked only when the quantity goes UP. That is deliberate, not an
-    /// oversight: the edit form posts every field back, so a rival document confirming in the
-    /// meantime would otherwise make an unrelated container correction impossible to save.
-    /// Lowering a quantity, or resubmitting it unchanged, can never make an overshoot worse.
+    /// The goods line's ACTIVE status is checked only when the quantity goes UP. That is
+    /// deliberate, not an oversight: the edit form posts every field back, so a rival document
+    /// confirming in the meantime would otherwise make an unrelated container correction
+    /// impossible to save. Lowering a quantity, or resubmitting it unchanged, is never a new claim
+    /// on the goods. The contract's own quantity is not a ceiling on growing it either.
     /// </para>
     /// </summary>
     public async Task<Invoice> UpdateItemAsync(
@@ -280,19 +268,12 @@ public sealed class InvoiceService(ErpDbContext db)
 
             if (quantity > line.QuantityMt)
             {
+                // Growing a line is a new claim on the goods; a smaller weight, a container or a
+                // description is not, so those stay editable after the goods line closes. The
+                // contract's own quantity is not a ceiling any more.
                 var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
                 var contractItem = contract.Items.SingleOrDefault(i => i.Id == line.ContractItemId);
-                // Growing a line is a new claim on the goods; a smaller weight, a container or a
-                // description is not, so those stay editable after the goods line closes.
                 if (contractItem is not null) RequireActive(contractItem);
-                var check = ContractQuantityGuard.Check(
-                    all, contractItem, InvoiceMath.SideOf(invoice.InvoiceType), invoice.Id, quantity,
-                    excludeInvoiceItemIds: [line.Id]);
-
-                if (check.Exceeds)
-                {
-                    throw ContractQuantityGuard.Exceeded(check, line.Product);
-                }
             }
 
             line.QuantityMt = quantity;
@@ -428,14 +409,9 @@ public sealed class InvoiceService(ErpDbContext db)
     /* --------------------------------- Lifecycle -------------------------------- */
 
     /// <summary>
-    /// Confirms a draft. Guards in order: still a draft, has lines, priced, containers assigned,
-    /// and within the contract.
-    ///
-    /// <para>
-    /// The quantity re-check groups this document's lines by contract line and tests each group's
-    /// total once. Checked line by line, three lines of thirty tonnes each pass against a
-    /// forty-tonne remainder and jointly overshoot by fifty.
-    /// </para>
+    /// Confirms a draft. Guards in order: still a draft, has lines, priced, containers assigned.
+    /// A document may confirm above what the contract line has left — the contract page reports
+    /// the overrun instead of refusing the document.
     /// </summary>
     public async Task<Invoice> ConfirmAsync(string id, CancellationToken cancellationToken = default)
     {
@@ -467,23 +443,6 @@ public sealed class InvoiceService(ErpDbContext db)
                 {
                     ["products"] = withoutContainer,
                 });
-            }
-        }
-
-        var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
-        var side = InvoiceMath.SideOf(invoice.InvoiceType);
-
-        foreach (var group in invoice.Items.GroupBy(i => i.ContractItemId, StringComparer.Ordinal))
-        {
-            var contractItem = contract.Items.SingleOrDefault(i => i.Id == group.Key);
-            var check = ContractQuantityGuard.Check(
-                all, contractItem, side, invoice.Id,
-                requestedMt: group.Sum(i => i.QuantityMt),
-                excludeInvoiceItemIds: group.Select(i => i.Id).ToList());
-
-            if (check.Exceeds)
-            {
-                throw ContractQuantityGuard.Exceeded(check, group.First().Product);
             }
         }
 

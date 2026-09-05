@@ -68,15 +68,13 @@ public sealed class ErrorCodeContractTests
         "invalid-contract-type",
         "invalid-incoterm",
 
-        // Trade documents. Three of these guard things a single browser could not get wrong and a
-        // database can: a line another record already points at, a discount outside the range its
-        // column CHECKs, and a contract line shrunk below what has been invoiced off it. Each is
-        // reachable from a form somebody is filling in, so each is translated —
-        // `tradeInvoices.lineInUse`, `tradeInvoices.invalidDiscount`,
-        // `items.quantityBelowInvoiced` — in all three locale files.
+        // Trade documents. Two of these guard things a single browser could not get wrong and a
+        // database can: a line another record already points at, and a discount outside the range
+        // its column CHECKs. Each is reachable from a form somebody is filling in, so each is
+        // translated — `tradeInvoices.lineInUse`, `tradeInvoices.invalidDiscount` — in all three
+        // locale files.
         "line-in-use",
         "invalid-discount",
-        "quantity-below-invoiced",
 
         // Untranslated, deliberately. A stale line id needs the generic failure message, exactly
         // as the master-data not-founds above do. `invoice-cancelled` guards `markInvoiceSent`,

@@ -204,18 +204,17 @@ public sealed class InvoiceTests(ApiFixture fixture)
         await PostAsync(c, $"/api/erp/invoices/{provisional}/convert", new { targetType = "SALE_INVOICE" });
 
         // The provisional is CONFIRMED with a DRAFT successor. Written as "confirmed AND has no
-        // successor", its 60 tonnes vanish from the ceiling and this next document is allowed to
-        // claim the same metal a second time.
+        // successor", its 60 tonnes would vanish from the remaining figure and the contract page
+        // would show 100 left instead of 40.
         var second = await DraftAsync(c, "SALE_PROVISIONAL");
         var response = await c.PostAsJsonAsync(
             new Uri($"/api/erp/invoices/{second}/items", UriKind.Relative),
             new[] { new { contractItemId = "item-1", quantityMt = 50m, grossMt = 50m, tareMt = 0m, containerId = "cnt-1" } });
+        response.EnsureSuccessStatusCode();
 
-        var problem = await ProblemAsync(response);
-        Assert.Equal("qty-exceeds-remaining", problem.GetProperty("code").GetString());
-        Assert.Equal(60m, problem.GetProperty("alreadyInvoicedMt").GetDecimal());
-        Assert.Equal(40m, problem.GetProperty("remainingMt").GetDecimal());
-        Assert.Equal(50m, problem.GetProperty("requestedMt").GetDecimal());
+        var item = (await response.Content.ReadFromJsonAsync<JsonElement>(Json))
+            .GetProperty("contracts")[0].GetProperty("items")[0];
+        Assert.Equal(0m, item.GetProperty("remainingMt").GetDecimal());
     }
 
     [Fact]
@@ -247,27 +246,27 @@ public sealed class InvoiceTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task An_exact_fit_passes_and_a_thousandth_over_does_not()
+    public async Task A_line_above_the_contract_is_accepted_and_remaining_floors_at_zero()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
+        var id = await DraftAsync(c);
 
-        var exact = await DraftAsync(c);
-        (await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{exact}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 100m, grossMt = 100m, tareMt = 0m, containerId = "cnt-1" } }))
-            .EnsureSuccessStatusCode();
-
-        await ResetAsync();
-        var over = await DraftAsync(c);
         var response = await c.PostAsJsonAsync(
-            new Uri($"/api/erp/invoices/{over}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 100.001m, grossMt = 100.001m, tareMt = 0m, containerId = "cnt-1" } });
+            new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
+            new[] { new { contractItemId = "item-1", grossMt = 150m, tareMt = 0m, containerId = "cnt-1" } });
+        response.EnsureSuccessStatusCode();
 
-        Assert.Equal("qty-exceeds-remaining", (await ProblemAsync(response)).GetProperty("code").GetString());
+        // 150 against a 100 MT line: the document keeps the 150 and the contract shows nothing
+        // left, never a negative figure.
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.Equal(150m, result.GetProperty("entity").GetProperty("items")[0].GetProperty("quantityMt").GetDecimal());
+        var item = result.GetProperty("contracts")[0].GetProperty("items")[0];
+        Assert.Equal(0m, item.GetProperty("remainingMt").GetDecimal());
     }
 
     [Fact]
-    public async Task Adding_several_lines_at_once_is_all_or_nothing_and_counts_them_against_each_other()
+    public async Task Several_lines_that_together_exceed_the_contract_are_all_accepted()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
@@ -277,74 +276,39 @@ public sealed class InvoiceTests(ApiFixture fixture)
             new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
             new[]
             {
-                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
-                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
-                new { contractItemId = "item-1", quantityMt = 40m, grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
+                new { contractItemId = "item-1", grossMt = 40m, tareMt = 0m, containerId = "cnt-1" },
             });
+        response.EnsureSuccessStatusCode();
 
-        // Each is under the 100 ceiling on its own; together they are not.
-        Assert.Equal("qty-exceeds-remaining", (await ProblemAsync(response)).GetProperty("code").GetString());
-
-        var invoice = (await c.GetFromJsonAsync<JsonElement>(new Uri("/api/erp/invoices", UriKind.Relative), Json))
-            .EnumerateArray().Single(i => i.GetProperty("id").GetString() == id);
-        Assert.Equal(0, invoice.GetProperty("items").GetArrayLength());
+        var invoice = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity");
+        Assert.Equal(3, invoice.GetProperty("items").GetArrayLength());
+        Assert.Equal(120m, invoice.GetProperty("totalWeightMt").GetDecimal());
     }
 
     [Fact]
-    public async Task Confirming_totals_a_contract_line_across_every_line_that_names_it()
+    public async Task Confirming_a_document_that_exceeds_the_contract_succeeds()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
 
-        // Three lines of 30 on a draft: 90 against 100, so every add is legitimate.
         var second = await DraftAsync(c, "SALE_ORDER");
         foreach (var _ in Enumerable.Range(0, 3))
         {
             await PostAsync(c, $"/api/erp/invoices/{second}/items",
-                new[] { new { contractItemId = "item-1", quantityMt = 30m, grossMt = 30m, tareMt = 0m, containerId = (string?)null } });
+                new[] { new { contractItemId = "item-1", quantityMt = 30m, containerId = (string?)null } });
         }
 
-        // Then a rival claims 60 and confirms — allowed, because a draft reserves nothing.
         var first = await DraftAsync(c, "SALE_PROVISIONAL");
         await AddLineAsync(c, first, 60m);
         await PriceAsync(c, first);
         await PostAsync(c, $"/api/erp/invoices/{first}/confirm");
 
-        // Now the order's own three lines have to be totalled AS A GROUP against the 40 that is
-        // left. Checked line by line, each 30 fits under 40 and the document confirms itself into
-        // a 150%-sold contract.
-        var response = await c.PostAsync(new Uri($"/api/erp/invoices/{second}/confirm", UriKind.Relative), null);
-
-        var problem = await ProblemAsync(response);
-        Assert.Equal("qty-exceeds-remaining", problem.GetProperty("code").GetString());
-        Assert.Equal(90m, problem.GetProperty("requestedMt").GetDecimal());
-    }
-
-    [Fact]
-    public async Task The_quantity_error_carries_the_whole_breakdown()
-    {
-        await ResetAsync();
-        using var c = await AsManagerAsync(fixture);
-        var id = await DraftAsync(c);
-
-        var response = await c.PostAsJsonAsync(
-            new Uri($"/api/erp/invoices/{id}/items", UriKind.Relative),
-            new[] { new { contractItemId = "item-1", quantityMt = 150m, grossMt = 150m, tareMt = 0m, containerId = "cnt-1" } });
-
-        // The dialog adds these up in front of the user, so every one crosses the wire separately
-        // and `alreadyInvoicedMt` is NOT pre-summed with `onThisDocMt`.
-        var p = await ProblemAsync(response);
-        foreach (var field in new[]
-                 {
-                     "contractQuantityMt", "alreadyInvoicedMt", "onThisDocMt",
-                     "remainingMt", "requestedMt", "exceeds", "product", "available",
-                 })
-        {
-            Assert.True(p.TryGetProperty(field, out _), $"missing {field}");
-        }
-
-        Assert.Equal(p.GetProperty("remainingMt").GetDecimal(), p.GetProperty("available").GetDecimal());
-        Assert.Equal("98% Copper Ingots", p.GetProperty("product").GetString());
+        // 90 on this order plus 60 confirmed elsewhere is 150 against a 100 MT line. The
+        // business sells what it sells; the contract page shows the overrun instead.
+        var confirmed = await PostAsync(c, $"/api/erp/invoices/{second}/confirm");
+        Assert.Equal("CONFIRMED", confirmed.GetProperty("entity").GetProperty("status").GetString());
     }
 
     /* --------------------------- Chain and line identity ------------------------ */
@@ -575,7 +539,7 @@ public sealed class InvoiceTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task A_contract_line_cannot_shrink_below_what_is_already_invoiced()
+    public async Task A_contract_line_may_shrink_below_what_is_already_invoiced()
     {
         await ResetAsync();
         using var c = await AsManagerAsync(fixture);
@@ -591,11 +555,13 @@ public sealed class InvoiceTests(ApiFixture fixture)
                 lmeFixed = true, fixedLmePrice = FixedLme, premium = 0m, incoterm = "CNF",
                 status = "ACTIVE",
             });
+        response.EnsureSuccessStatusCode();
 
-        // The browser floors the remainder at zero and over-commits the contract in silence.
-        var problem = await ProblemAsync(response);
-        Assert.Equal("quantity-below-invoiced", problem.GetProperty("code").GetString());
-        Assert.Equal(60m, problem.GetProperty("invoicedMt").GetDecimal());
+        // The documents already claim 60; the line now holds 50; remaining floors at zero and
+        // the contract page reports 10 over.
+        var item = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(50m, item.GetProperty("quantityMt").GetDecimal());
+        Assert.Equal(0m, item.GetProperty("remainingMt").GetDecimal());
     }
 
     /* -------------------------------- Lifecycle ------------------------------- */
