@@ -1765,6 +1765,8 @@ export async function getTradeInvoice(id: string): Promise<TradeInvoiceDetail | 
 export interface ContractRemainingRow {
   itemId: string;
   product: string;
+  /** Only ACTIVE goods can be added to a document; the forms grey the others out. */
+  status: ItemStatus;
   quantityMt: number;
   uninvoicedMt: number;
 }
@@ -1786,6 +1788,7 @@ export async function getContractRemaining(
   return contract.items.map((item) => ({
     itemId: item.id,
     product: item.product,
+    status: item.status,
     quantityMt: item.quantityMt,
     uninvoicedMt: roundMt(Math.max(item.quantityMt - (claimedByItem.get(item.id) ?? 0), 0)),
   }));

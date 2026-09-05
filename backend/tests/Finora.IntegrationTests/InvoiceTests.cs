@@ -526,6 +526,54 @@ public sealed class InvoiceTests(ApiFixture fixture)
         Assert.Equal(40m, contract.GetProperty("items")[0].GetProperty("remainingMt").GetDecimal());
     }
 
+    private static Task<HttpResponseMessage> SetGoodsStatusAsync(HttpClient c, string status) =>
+        c.PutAsJsonAsync(new Uri("/api/erp/contracts/ctr-1/items/item-1", UriKind.Relative), new
+        {
+            product = "98% Copper Ingots", quantityMt = 100m, lmePercent = LmePercent,
+            lmeFixed = true, fixedLmePrice = FixedLme, premium = 0m, incoterm = "CNF", status,
+        });
+
+    [Theory]
+    [InlineData("CLOSED")]
+    [InlineData("ON HOLD")]
+    [InlineData("CANCELLED")]
+    public async Task A_goods_line_that_is_not_active_cannot_be_added_to_a_document(string status)
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        (await SetGoodsStatusAsync(c, status)).EnsureSuccessStatusCode();
+        var draft = await DraftAsync(c);
+
+        var response = await c.PostAsJsonAsync(new Uri($"/api/erp/invoices/{draft}/items", UriKind.Relative),
+            new[] { new { contractItemId = "item-1", grossMt = 10m, tareMt = 0m, containerId = "cnt-1" } });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var problem = await ProblemAsync(response);
+        Assert.Equal("contract-item-not-active", problem.GetProperty("code").GetString());
+        Assert.Equal(422, problem.GetProperty("status").GetInt32());
+        Assert.Equal(status, problem.GetProperty("goodsStatus").GetString());
+        Assert.Equal("98% Copper Ingots", problem.GetProperty("product").GetString());
+    }
+
+    [Fact]
+    public async Task A_line_on_goods_that_went_inactive_keeps_its_quantity_but_cannot_grow()
+    {
+        await ResetAsync();
+        using var c = await AsManagerAsync(fixture);
+        var draft = await DraftAsync(c);
+        var lineId = (await AddLineAsync(c, draft, 40m)).GetProperty("entity").GetProperty("items")[0].GetProperty("id").GetString();
+        (await SetGoodsStatusAsync(c, "CLOSED")).EnsureSuccessStatusCode();
+
+        var grow = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{draft}/items/{lineId}", UriKind.Relative),
+            new { grossMt = 50m, tareMt = 0m });
+        Assert.Equal("contract-item-not-active", (await ProblemAsync(grow)).GetProperty("code").GetString());
+
+        // The line itself stays editable: a smaller weight or a description is not a new claim.
+        var shrink = await c.PutAsJsonAsync(new Uri($"/api/erp/invoices/{draft}/items/{lineId}", UriKind.Relative),
+            new { grossMt = 30m, tareMt = 0m, description = "re-weighed" });
+        shrink.EnsureSuccessStatusCode();
+    }
+
     [Fact]
     public async Task A_contract_line_cannot_shrink_below_what_is_already_invoiced()
     {

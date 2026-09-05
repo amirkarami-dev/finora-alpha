@@ -2,19 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Checkbox, Empty, Form, InputNumber, Modal, Select, Space, Switch, Typography, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useContainerOptions, useContractRemaining, useAddInvoiceItems } from '@/services/queries';
+import { StatusTag } from '@/components/common/StatusTag';
 import type { InvoiceItemInput } from '@/services/api';
 import { isPricedType, netMtOf } from '@/utils/calc';
 import { formatMt } from '@/utils/format';
 import { buildContainerOptions, ltrTruncateStyle } from './containerOptions';
 import { qtyExceedsContractParams } from './qtyExceedsContract';
 import { weightsInvalidMessage } from './weightsInvalid';
-import type { Invoice, InvoiceSide } from '@/types';
+import type { Invoice, InvoiceSide, ItemStatus } from '@/types';
 
 const { Text } = Typography;
 
 interface AddItemsFormRow {
   contractItemId: string;
   product: string;
+  /** Only ACTIVE goods can be selected; the others stay visible, greyed out, so the user sees why. */
+  status: ItemStatus;
   uninvoicedMt: number;
   include: boolean;
   quantityMt?: number;
@@ -69,6 +72,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       .map((r) => ({
         contractItemId: r.itemId,
         product: r.product,
+        status: r.status,
         uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
         include: false,
         quantityMt: undefined,
@@ -102,13 +106,15 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
 
   const watchedRows = Form.useWatch('rows', form) ?? rows;
   const includedCount = watchedRows.filter((r) => r?.include).length;
+  const selectableCount = rows.filter((r) => r.status === 'ACTIVE').length;
 
   const insertAll = () => {
-    const next = rows.map((r) =>
-      weighed
+    const next = rows.map((r) => {
+      if (r.status !== 'ACTIVE') return { ...r, include: false };
+      return weighed
         ? { ...r, include: true, grossMt: r.uninvoicedMt, tareMt: 0 }
-        : { ...r, include: true, quantityMt: r.uninvoicedMt },
-    );
+        : { ...r, include: true, quantityMt: r.uninvoicedMt };
+    });
     form.setFieldsValue({ rows: next });
   };
 
@@ -121,7 +127,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     }
     const items: InvoiceItemInput[] = values.rows
       .map((r, i) => ({ ...r, contractItemId: rows[i]?.contractItemId ?? r.contractItemId }))
-      .filter((r) => r.include)
+      .filter((r) => r.include && rows.some((row) => row.contractItemId === r.contractItemId && row.status === 'ACTIVE'))
       .map((r) =>
         weighed
           ? { contractItemId: r.contractItemId, grossMt: r.grossMt, tareMt: r.tareMt, containerId: r.containerId }
@@ -142,6 +148,8 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
         message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
       } else if (code === 'weights-invalid') {
         message.error(weightsInvalidMessage(err, t));
+      } else if (code === 'contract-item-not-active') {
+        message.error(t('tradeInvoices.contractItemNotActive', { product: (err as { product?: string }).product ?? '' }));
       } else message.error(t('common.saveFailed'));
     }
   };
@@ -160,11 +168,11 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
       maskClosable={false}
     >
       <Space style={{ marginBottom: 12 }} wrap>
-        <Button size="small" onClick={insertAll} disabled={rows.length === 0}>
+        <Button size="small" onClick={insertAll} disabled={selectableCount === 0}>
           {t('tradeInvoices.insertAllFromContract')}
         </Button>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {t('tradeInvoices.selectedCount', { count: includedCount, total: rows.length })}
+          {t('tradeInvoices.selectedCount', { count: includedCount, total: selectableCount })}
         </Text>
         <Space size={6}>
           <Switch size="small" checked={showAllContainers} onChange={setShowAllContainers} />
@@ -185,10 +193,12 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
               <Space direction="vertical" style={{ width: '100%' }} size={8}>
                 {fields.map((field) => {
                   const row = rows[field.name];
-                  const included = watchedRows[field.name]?.include;
+                  const selectable = row.status === 'ACTIVE';
+                  const included = selectable && Boolean(watchedRows[field.name]?.include);
                   return (
                     <div
                       key={row.contractItemId}
+                      aria-disabled={!selectable}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -197,6 +207,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                         padding: '8px 12px',
                         border: `1px solid ${token.colorBorderSecondary}`,
                         borderRadius: 8,
+                        opacity: selectable ? 1 : 0.6,
                       }}
                     >
                       <Form.Item
@@ -204,13 +215,18 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
                         valuePropName="checked"
                         style={{ marginBottom: 0 }}
                       >
-                        <Checkbox />
+                        <Checkbox disabled={!selectable} aria-label={row.product} />
                       </Form.Item>
                       <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-                        <Text strong>{row.product}</Text>
+                        <Space size={6} wrap>
+                          <Text strong>{row.product}</Text>
+                          {!selectable && <StatusTag status={row.status} />}
+                        </Space>
                         <div>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            {t('tradeInvoices.uninvoicedHint', { mt: formatMt(row.uninvoicedMt) })}
+                            {selectable
+                              ? t('tradeInvoices.uninvoicedHint', { mt: formatMt(row.uninvoicedMt) })
+                              : t('tradeInvoices.goodsNotActive')}
                           </Text>
                         </div>
                       </div>

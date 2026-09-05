@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Finora.BuildingBlocks.Domain;
 using Finora.Erp.Application;
 using Finora.Erp.Domain;
@@ -273,6 +275,14 @@ public sealed class ContractService(ErpDbContext db)
         return string.Create(CultureInfo.InvariantCulture, $"{contract.Id}-I{highest + 1}");
     }
 
+    // Enum values are read the way the JSON layer writes them, so a member whose wire spelling
+    // differs from its C# name ([JsonStringEnumMemberName("ON HOLD")] OnHold) round-trips.
+    // Enum.TryParse only knew the identifiers, which made ON HOLD unreachable from the app.
+    private static readonly JsonSerializerOptions EnumJson = new()
+    {
+        Converters = { new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false) },
+    };
+
     private static TEnum ParseEnum<TEnum>(string? value, TEnum fallback, string code)
         where TEnum : struct, Enum
     {
@@ -281,9 +291,14 @@ public sealed class ContractService(ErpDbContext db)
             return fallback;
         }
 
-        return Enum.TryParse<TEnum>(value, ignoreCase: false, out var parsed)
-            ? parsed
-            : throw new DomainException(code, new Dictionary<string, object?> { ["value"] = value });
+        try
+        {
+            return JsonSerializer.Deserialize<TEnum>(JsonSerializer.Serialize(value), EnumJson);
+        }
+        catch (JsonException)
+        {
+            throw new DomainException(code, new Dictionary<string, object?> { ["value"] = value });
+        }
     }
 
     private static string? Blank(string? value)

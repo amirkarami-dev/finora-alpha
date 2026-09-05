@@ -56,13 +56,19 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
   }, [containerOptions, showAllContainers, item.contractItemId, item.containerId, t]);
 
   const remainingRow = remaining?.find((r) => r.itemId === item.contractItemId);
+  // A goods line that is no longer ACTIVE takes no new claim: the quantity may shrink, never grow.
+  const goodsInactive = remainingRow !== undefined && remainingRow.status !== 'ACTIVE';
   // Other lines on THIS invoice already claiming the same contract item must be excluded too.
   const otherLinesQty = invoice.items
     .filter((it) => it.id !== item.id && it.contractItemId === item.contractItemId)
     .reduce((s, it) => s + it.quantityMt, 0);
   // The true ceiling for a NEW value on this line — may sit below the field's current value once
   // a rival document has confirmed and shrunk the remaining amount.
-  const ceilingMt = remainingRow ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0) : item.quantityMt;
+  const ceilingMt = goodsInactive
+    ? item.quantityMt
+    : remainingRow
+      ? Math.max(remainingRow.uninvoicedMt - otherLinesQty, 0)
+      : item.quantityMt;
   // The InputNumber's `max` must never sit below the field's initial value: rc-input-number
   // clamps an out-of-range value to `max` on blur and fires onChange, so `max < item.quantityMt`
   // silently rewrote the line to the (too-low) ceiling with no message. The real ceiling is
@@ -110,6 +116,8 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
         message.error(params ? t('tradeInvoices.qtyExceedsContract', params) : t('tradeInvoices.qtyExceedsRemaining'));
       } else if (code === 'weights-invalid') {
         message.error(weightsInvalidMessage(err, t));
+      } else if (code === 'contract-item-not-active') {
+        message.error(t('tradeInvoices.contractItemNotActive', { product: (err as { product?: string }).product ?? item.product }));
       } else message.error(t('common.saveFailed'));
     }
   };
@@ -180,6 +188,13 @@ export function EditLineModal({ open, onClose, invoice, item, side }: EditLineMo
             ]}
           >
             <InputNumber min={0.000001} max={maxQty} precision={6} style={{ width: '100%' }} />
+          </Form.Item>
+        )}
+        {goodsInactive && (
+          <Form.Item style={{ marginTop: -12 }}>
+            <Text type="warning" style={{ fontSize: 12 }}>
+              {t('tradeInvoices.goodsNotActiveEditHint', { mt: formatMt(item.quantityMt) })}
+            </Text>
           </Form.Item>
         )}
         {weighed && (

@@ -23,6 +23,7 @@ public sealed class InvoiceService(ErpDbContext db)
         public const string InvoiceNotFound = "invoice-not-found";
         public const string ContractNotFound = "contract-not-found";
         public const string ContractItemNotFound = "contract-item-not-found";
+        public const string ContractItemNotActive = "contract-item-not-active";
         public const string NotDraft = "not-draft";
         public const string NoItems = "no-items";
         public const string MissingLmePrice = "missing-lme-price";
@@ -187,6 +188,7 @@ public sealed class InvoiceService(ErpDbContext db)
             var entry = items[index];
             var contractItem = contract.Items.SingleOrDefault(i => i.Id == entry.ContractItemId)
                 ?? throw new NotFoundException(Codes.ContractItemNotFound);
+            RequireActive(contractItem);
 
             var check = ContractQuantityGuard.Check(
                 all, contractItem, side, invoice.Id, quantities[index],
@@ -280,6 +282,9 @@ public sealed class InvoiceService(ErpDbContext db)
             {
                 var contract = await LoadContractAsync(invoice.ContractId, cancellationToken);
                 var contractItem = contract.Items.SingleOrDefault(i => i.Id == line.ContractItemId);
+                // Growing a line is a new claim on the goods; a smaller weight, a container or a
+                // description is not, so those stay editable after the goods line closes.
+                if (contractItem is not null) RequireActive(contractItem);
                 var check = ContractQuantityGuard.Check(
                     all, contractItem, InvoiceMath.SideOf(invoice.InvoiceType), invoice.Id, quantity,
                     excludeInvoiceItemIds: [line.Id]);
@@ -740,6 +745,25 @@ public sealed class InvoiceService(ErpDbContext db)
         }
 
         return (Rounding.Quantity(gross - tare), gross, tare);
+    }
+
+    /// <summary>Only an ACTIVE goods line can be claimed by a document. The wire spelling of the
+    /// status travels in the payload so the form can name it ("ON HOLD", not "OnHold").</summary>
+    private static void RequireActive(ContractItem item)
+    {
+        if (item.Status == ContractStatus.ACTIVE) return;
+
+        var status = item.Status switch
+        {
+            ContractStatus.OnHold => "ON HOLD",
+            var other => other.ToString(),
+        };
+        throw new DomainException(Codes.ContractItemNotActive, new Dictionary<string, object?>
+        {
+            ["product"] = item.Product,
+            // Not "status": ProblemDetails already carries the HTTP status under that name.
+            ["goodsStatus"] = status,
+        });
     }
 
     private static DomainException WeightsInvalid(string rule) =>

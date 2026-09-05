@@ -468,7 +468,10 @@
     "lineInUse": "This line cannot be removed: a warehouse document, cost, claim or payment already refers to it. Remove that record first.",
     "invalidDiscount": "Discount must be between 0 and 100 percent.",
     "costOfSales": "Cost of sales",
-    "margin": "Margin"
+    "margin": "Margin",
+    "goodsNotActive": "Not active - cannot be selected",
+    "contractItemNotActive": "{{product}} is not active on the contract, so it cannot be added",
+    "goodsNotActiveEditHint": "This goods line is not active on the contract. The quantity can go down but not above {{mt}} MT."
   },
   "warehouse": {
     "netMt": "Net (MT)",
