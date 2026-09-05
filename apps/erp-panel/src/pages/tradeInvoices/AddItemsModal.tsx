@@ -69,19 +69,29 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
     for (const it of invoice.items) {
       alreadyOnDoc.set(it.contractItemId, (alreadyOnDoc.get(it.contractItemId) ?? 0) + it.quantityMt);
     }
-    return (remaining ?? [])
-      .map((r) => ({
-        contractItemId: r.itemId,
-        product: r.product,
-        status: r.status,
-        uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
-        include: false,
-        quantityMt: undefined,
-        grossMt: undefined,
-        tareMt: undefined,
-        containerId: undefined,
-      }))
-      .filter((r) => r.uninvoicedMt > 1e-9);
+    const mapped = (remaining ?? []).map((r) => ({
+      contractItemId: r.itemId,
+      product: r.product,
+      status: r.status,
+      uninvoicedMt: Math.max(r.uninvoicedMt - (alreadyOnDoc.get(r.itemId) ?? 0), 0),
+      include: false,
+      quantityMt: undefined,
+      grossMt: undefined,
+      tareMt: undefined,
+      containerId: undefined,
+    }));
+    // Lines with nothing left are still offered — the feature's main case is adding MORE than
+    // the contract has — but they sink to the bottom so the usually-larger uninvoiced set stays
+    // on top. Array#sort is stable, so each group keeps the contract's own order.
+    return mapped
+      .map((r, index) => ({ r, index }))
+      .sort((a, b) => {
+        const aHas = a.r.uninvoicedMt > 1e-9;
+        const bHas = b.r.uninvoicedMt > 1e-9;
+        if (aHas === bHas) return a.index - b.index;
+        return aHas ? -1 : 1;
+      })
+      .map(({ r }) => r);
   }, [remaining, invoice.items]);
 
   useEffect(() => {
@@ -111,7 +121,7 @@ export function AddItemsModal({ open, onClose, invoice, side }: AddItemsModalPro
 
   const insertAll = () => {
     const next = rows.map((r) => {
-      if (r.status !== 'ACTIVE') return { ...r, include: false };
+      if (r.status !== 'ACTIVE' || r.uninvoicedMt <= 1e-9) return { ...r, include: false };
       return weighed
         ? { ...r, include: true, grossMt: r.uninvoicedMt, tareMt: 0 }
         : { ...r, include: true, quantityMt: r.uninvoicedMt };

@@ -238,6 +238,12 @@ internal static class InvoiceMath
     /// tonnage — 110 MT sold against a 100 MT contract line, with the contract page still
     /// reporting healthy remaining because the figure is floored at zero.
     /// </para>
+    ///
+    /// <para>
+    /// This is the server-side twin of <c>confirmedClaimsByItem</c> in the panel's
+    /// <c>services/api.ts</c>, kept here for when contract-remaining reads move server-side; it
+    /// has no caller yet, and the browser's copy must stay in step with this one until then.
+    /// </para>
     /// </summary>
     public static Dictionary<string, decimal> ConfirmedClaimsByItem(
         IReadOnlyCollection<Invoice> all, InvoiceSide side, string? excludeInvoiceId)

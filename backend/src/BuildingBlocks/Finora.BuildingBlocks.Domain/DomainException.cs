@@ -25,7 +25,7 @@ public sealed class DomainException : Exception
         Payload = payload ?? new Dictionary<string, object?>();
     }
 
-    /// <summary>The machine-readable code, e.g. <c>qty-exceeds-remaining</c>.</summary>
+    /// <summary>The machine-readable code, e.g. <c>payment-total-mismatch</c>.</summary>
     public string Code { get; }
 
     /// <summary>Extra context the UI renders inside the message for this code.</summary>

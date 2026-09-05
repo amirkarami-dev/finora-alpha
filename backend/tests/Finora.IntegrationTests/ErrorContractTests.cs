@@ -33,7 +33,7 @@ public sealed class ErrorContractTests(ErrorContractTests.ThrowingApiFactory fac
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
 
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal("qty-exceeds-remaining", problem.GetProperty("code").GetString());
+        Assert.Equal("diagnostic-domain-error", problem.GetProperty("code").GetString());
     }
 
     [Fact]

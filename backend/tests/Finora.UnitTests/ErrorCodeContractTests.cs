@@ -5,15 +5,15 @@ namespace Finora.UnitTests;
 
 /// <summary>
 /// The error codes are a wire contract with the SPA: components branch on the exact string, and
-/// each one has a translation in three locale files. A code the server can return but the client
-/// cannot translate reaches the user as a raw slug like <c>qty-exceeds-remaining</c>.
+/// each one has a translation in four locale files. A code the server can return but the client
+/// cannot translate reaches the user as a raw slug like <c>payment-total-mismatch</c>.
 /// </summary>
 public sealed class ErrorCodeContractTests
 {
     /// <summary>
     /// Codes the server can return that the mock <c>api.ts</c> never had a reason to throw.
     /// The list is short and explicit so it cannot become a dumping ground: anything added here
-    /// needs a translation in all three locale files, or the user sees the raw slug.
+    /// needs a translation in all four locale files, or the user sees the raw slug.
     /// </summary>
     private static readonly string[] BackendOnlyCodes =
     [
@@ -47,7 +47,7 @@ public sealed class ErrorCodeContractTests
 
         // User administration. These live on the server because `api.ts` never had accounts to
         // administer — the mock app had four hardcoded logins. Every one of them is reachable
-        // from a form a person is filling in, so each has a translation in all three locale
+        // from a form a person is filling in, so each has a translation in all four locale
         // files under `users.errors.*`, and the modals look them up by code.
         "email-required",
         "duplicate-email",
@@ -61,7 +61,7 @@ public sealed class ErrorCodeContractTests
         // Contracts. The browser threw sentences here ("Contract X not found") rather than codes,
         // because in one tab an id could not go stale and an enum could not be anything but one
         // of its own values. Over HTTP both can, so each gets a code the form can act on.
-        // Translated under `contracts.errors.*` in all three locale files.
+        // Translated under `contracts.errors.*` in all four locale files.
         "contract-not-found",
         "contract-item-not-found",
         "invalid-status",
@@ -71,7 +71,7 @@ public sealed class ErrorCodeContractTests
         // Trade documents. Two of these guard things a single browser could not get wrong and a
         // database can: a line another record already points at, and a discount outside the range
         // its column CHECKs. Each is reachable from a form somebody is filling in, so each is
-        // translated — `tradeInvoices.lineInUse`, `tradeInvoices.invalidDiscount` — in all three
+        // translated — `tradeInvoices.lineInUse`, `tradeInvoices.invalidDiscount` — in all four
         // locale files.
         "line-in-use",
         "invalid-discount",

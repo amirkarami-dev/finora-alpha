@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { CheckCircleTwoTone, CloseCircleOutlined, EditOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Money } from '@/components/common/Money';
 import { StatusTag } from '@/components/common/StatusTag';
@@ -76,7 +77,10 @@ export default function ContractDetailPage() {
       key: 'originalMt',
       width: 120,
       align: 'right',
-      render: (_, r) => formatMt(overviewById.get(r.id)?.originalMt ?? r.quantityMt),
+      render: (_, r) => {
+        const originalMt = overviewById.get(r.id)?.originalMt;
+        return originalMt === undefined ? <Text type="secondary">—</Text> : formatMt(originalMt);
+      },
     },
     {
       title: t('contracts.changesMt'),
@@ -286,7 +290,7 @@ export default function ContractDetailPage() {
             pagination={false}
             dataSource={contract.items
               .flatMap((i) => i.changes.map((c) => ({ ...c, product: i.product })))
-              .sort((a, b) => b.at.localeCompare(a.at))}
+              .sort((a, b) => dayjs(b.at).valueOf() - dayjs(a.at).valueOf())}
             columns={[
               { title: t('contracts.historyWhen'), dataIndex: 'at', width: 160, render: (v: string) => formatDate(v, 'DD MMM YYYY HH:mm') },
               { title: t('items.product'), dataIndex: 'product', width: 200, render: (v: string) => <Text strong>{v}</Text> },
@@ -303,7 +307,9 @@ export default function ContractDetailPage() {
                 key: 'beforeAfter',
                 width: 180,
                 align: 'right',
-                render: (_: unknown, r: ItemChange) => `${formatMt(r.beforeMt)} → ${formatMt(r.afterMt)}`,
+                render: (_: unknown, r: ItemChange) => (
+                  <span dir="ltr">{`${formatMt(r.beforeMt)} → ${formatMt(r.afterMt)}`}</span>
+                ),
               },
               { title: t('contracts.changeNote'), dataIndex: 'note' },
             ]}

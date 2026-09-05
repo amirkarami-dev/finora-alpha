@@ -130,7 +130,8 @@ Warehouse documents, stock, cost of sales, allocations, claims and reports keep 
   `tradeInvoices.overContractHint` — "{{mt}} MT more than the contract" — followed by a router
   `Link` to the contract page (`ROUTES.contracts + '/' + contractId`) with text
   `tradeInvoices.openContract`. The `qty-exceeds-remaining` branches in the catch blocks go
-  away; `qtyExceedsContract.ts` is deleted.
+  away; `qtyExceedsContract.ts` is deleted. Goods lines with nothing left on them are still
+  listed, sorted last — they can only be ticked by hand, and "Insert all" skips them.
 - **Invoice detail** line table: a warning icon with the same hint on every line whose quantity
   is over (computed with `checkContractQty` against the contract, this document excluded), and a
   one-line `Alert type="warning"` above the table with the link when any line is over.
@@ -138,8 +139,8 @@ Warehouse documents, stock, cost of sales, allocations, claims and reports keep 
   "Lines above the contract: N" with the same link; the button text is unchanged. The
   `qty-exceeds-remaining` branch goes away.
 - **Contract detail** (`ContractDetailPage`):
-  - goods table gains columns **Original (MT)**, **Changes (MT)** (signed, blank when 0) and
-    **Over contract (MT)** (blank when 0), next to the existing Quantity and Remaining;
+  - goods table gains columns **Original (MT)**, **Changes (MT)** (signed, an em dash when 0)
+    and **Over contract (MT)** (an em dash when 0), next to the existing Quantity and Remaining;
   - a **Change quantity** button per row (same visibility as the edit button) opening
     `ChangeQuantityModal`: `InputNumber` for `deltaMt` (precision 6, may be negative, not 0),
     a read-only "New quantity" line that follows the box, a required `TextArea` note (max

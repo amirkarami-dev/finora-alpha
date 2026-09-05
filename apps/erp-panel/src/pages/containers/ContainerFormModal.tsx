@@ -96,25 +96,22 @@ export function ContainerFormModal({ open, onClose, container }: ContainerFormMo
    * The grouping is not decoration: a container carries one contract's goods LINE, and two
    * contracts can both sell "Copper Cathode", so the contract is what tells them apart.
    *
-   * The filtering is the point. Unfiltered, this listed every contract ever created — closed
-   * ones included — and every goods line, including the ones with nothing left to ship. On the
-   * sample dataset that is 49 contracts and 120 lines of which 65 are unusable, which is why it
-   * read as a list of contracts rather than a list of goods.
+   * The contract filter is the point — a closed or on-hold contract is not something you ship
+   * against today, so only its ACTIVE contracts' lines are offered (plus whatever the container
+   * already holds, kept via `alreadyOnContainer` below even if the contract has since closed).
+   * Lines with nothing left to ship stay in the list: a confirmed priced document can put a good
+   * over its contract quantity (spec), and that extra metal still needs a container. The
+   * remaining-MT hint on each option just reads 0 for those.
    */
   const goodsGroups = useMemo(
     () =>
       (contracts ?? [])
         .map((c) => ({
           contract: c,
-          items: c.items.filter((i) => {
-            if (alreadyOnContainer.has(i.id)) return true;
-            // A closed or on-hold contract is not something you ship against today.
-            if (c.status !== 'ACTIVE') return false;
-            return (remainingByItem.get(i.id) ?? i.remainingMt) > 0;
-          }),
+          items: c.items.filter((i) => alreadyOnContainer.has(i.id) || c.status === 'ACTIVE'),
         }))
         .filter((g) => g.items.length > 0),
-    [contracts, remainingByItem, alreadyOnContainer],
+    [contracts, alreadyOnContainer],
   );
 
   const initialValues: Partial<ContainerFormValues> = container

@@ -20,7 +20,7 @@ internal static class DiagnosticEndpoints
         var group = app.MapGroup("/test").WithTags("Diagnostics").ExcludeFromDescription();
 
         group.MapGet("/domain-error", IResult () => throw new DomainException(
-            "qty-exceeds-remaining",
+            "diagnostic-domain-error",
             new Dictionary<string, object?>
             {
                 ["available"] = 55m,

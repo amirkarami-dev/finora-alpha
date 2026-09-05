@@ -12,7 +12,7 @@ namespace Finora.Api.Infrastructure;
 /// <para>
 /// The SPA reads <c>problem.extensions.code</c> as the bare machine code and copies every other
 /// extension onto the thrown <c>Error</c>, so a component that today does
-/// <c>catch (e) {'{'} if (e.message === 'qty-exceeds-remaining') show(e.available) {'}'}</c> keeps
+/// <c>catch (e) {'{'} if (e.message === 'payment-total-mismatch') show(e.headerUSD) {'}'}</c> keeps
 /// working untouched. That is the whole reason the payload is flattened into extensions rather
 /// than nested under a <c>details</c> object.
 /// </para>

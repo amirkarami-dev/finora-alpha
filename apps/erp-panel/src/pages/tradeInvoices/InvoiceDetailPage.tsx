@@ -134,7 +134,10 @@ export default function InvoiceDetailPage() {
 
   const { invoice, contract, customerName, refInvoice, successor, chain, payments, totalUSD, paidUSD, remainingUSD } =
     data;
-  const overByItem = overContractByItem(invoice, remainingExcludingThis);
+  // A cancelled document claims nothing, so it can never be "over" its contract line — skip the
+  // computation rather than let a stale `remainingExcludingThis` produce a phantom warning.
+  const overByItem =
+    invoice.status === 'CANCELLED' ? new Map<string, number>() : overContractByItem(invoice, remainingExcludingThis);
   const side = invoiceSide(invoice.invoiceType);
   const isDraft = invoice.status === 'DRAFT';
   const isConfirmed = invoice.status === 'CONFIRMED';

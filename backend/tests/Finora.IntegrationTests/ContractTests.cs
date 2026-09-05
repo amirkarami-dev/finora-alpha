@@ -192,8 +192,12 @@ public sealed class ContractTests(ApiFixture fixture)
         updated.EnsureSuccessStatusCode();
 
         var after = await updated.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal(0, after.GetProperty("entity").GetProperty("items")[0]
-            .GetProperty("partners").GetArrayLength());
+        var item = after.GetProperty("entity").GetProperty("items")[0];
+        Assert.Equal(0, item.GetProperty("partners").GetArrayLength());
+
+        // The plain PUT is not the quantity-change endpoint — it writes no history row, even
+        // though this edit resends the same quantity (spec: only POST .../changes does).
+        Assert.Equal(0, item.GetProperty("changes").GetArrayLength());
     }
 
     [Fact]

@@ -1836,8 +1836,8 @@ export interface ContractRemainingRow {
 /** Per contract item: quantityMt minus CONFIRMED claims of `side` (one per chain, via
  *  `confirmedClaimsByItem` — see its docstring for why a raw chain-leaf filter is wrong),
  *  optionally excluding one invoice's own chain (the doc currently being edited) (spec §5/§8).
- *  Rounded with `roundMt`, matching `checkContractQty`'s guard — a 2dp `round()` here used to
- *  round UP, so the UI hint / input `max` could exceed the API ceiling and be rejected outright. */
+ *  Rounded with `roundMt` (2dp `round()` used to round UP, so the UI hint / input `max` could
+ *  drift above the true remaining figure by a cent of an MT). */
 export async function getContractRemaining(
   contractId: string,
   side: InvoiceSide,
@@ -1952,7 +1952,7 @@ export interface InvoiceItemInput {
   description?: string;
 }
 
-/** Copies the pricing snapshot from the contract item and validates remaining qty (spec §2/§5). */
+/** Copies the pricing snapshot from the contract item (spec §2/§5). */
 export async function addInvoiceItems(
   invoiceId: string,
   items: InvoiceItemInput[],
