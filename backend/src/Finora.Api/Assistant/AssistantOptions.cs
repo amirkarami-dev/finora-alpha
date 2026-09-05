@@ -6,8 +6,8 @@ public sealed class AssistantOptions
 {
     public const string Section = "Assistant";
 
-    public string BaseUrl { get; set; } = "https://ai.liara.ir/api/6a9ab0caefdce39fec0da290/v1";
-    public string Model { get; set; } = "google/gemini-2.5-flash";
+    public string BaseUrl { get; set; } = "https://api.gapgpt.app/v1";
+    public string Model { get; set; } = "gemini-2.5-flash";
     public string ApiKey { get; set; } = "";
     public int TimeoutSeconds { get; set; } = 60;
     public int RequestsPerHour { get; set; } = 60;

@@ -131,7 +131,9 @@ Neither is committed. Both are mode 600.
 ```
 POSTGRES_PASSWORD=…      # the postgres superuser password
 POSTGRES_NETWORK=postgres
-ASSISTANT_API_KEY=…      # Liara AI key for the assistant; empty = assistant off
+ASSISTANT_API_KEY=…      # GapGPT key for the assistant; empty = assistant off
+ASSISTANT_BASE_URL=…     # optional; default https://api.gapgpt.app/v1 (OpenAI-compatible)
+ASSISTANT_MODEL=…        # optional; default gemini-2.5-flash
 ```
 
 `POSTGRES_NETWORK` names the Docker network the `postgres` container sits on, and it differs per

@@ -86,6 +86,8 @@ services:
       # never committed; an empty key keeps the assistant switched off (it answers
       # "assistant-unavailable") without affecting anything else.
       Assistant__ApiKey: "${ASSISTANT_API_KEY:-}"
+      Assistant__BaseUrl: "${ASSISTANT_BASE_URL:-https://api.gapgpt.app/v1}"
+      Assistant__Model: "${ASSISTANT_MODEL:-gemini-2.5-flash}"
     volumes:
       # Data-protection keys, which encrypt the session cookie. Without a volume they live in the
       # container and a redeploy signs every user out.
@@ -163,6 +165,8 @@ services:
       # never committed; an empty key keeps the assistant switched off (it answers
       # "assistant-unavailable") without affecting anything else.
       Assistant__ApiKey: "${ASSISTANT_API_KEY:-}"
+      Assistant__BaseUrl: "${ASSISTANT_BASE_URL:-https://api.gapgpt.app/v1}"
+      Assistant__Model: "${ASSISTANT_MODEL:-gemini-2.5-flash}"
     volumes:
       # Its own keys. Sessions cannot cross anyway — the cookie is host-scoped — but two tenants
       # sharing a signing key is a coupling with no upside.
